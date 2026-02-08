@@ -1,0 +1,36 @@
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== Virtual Environments =====
+venv/
+.env/
+.env.*
+
+# ===== Databases =====
+*.db
+*.sqlite
+*.sqlite3
+
+# ===== Logs =====
+*.log
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE =====
+.vscode/
+.idea/
+
+# ===== Build / cache =====
+build/
+dist/
+*.spec
+
+# ===== Audio temp (на будущее) =====
+*.wav
+*.ogg
+*.mp3
