@@ -128,7 +128,13 @@ def handle_client(conn, addr):
                 resp = {"status":"error","message":"Неверный пароль"}
             else:
                 online_users.add(login)  # добавляем в online_users
-                resp = {"status":"ok","login":login,"nickname":user["nickname"],"online":True}
+                resp = {
+                    "status": "ok",
+                    "login": login,
+                    "nickname": user["nickname"],
+                    "avatar": user.get("avatar", "") or "",
+                    "online": True
+                }
 
         elif action == "logout":
             login = data.get("login")

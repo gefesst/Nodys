@@ -4,14 +4,14 @@ from PySide6.QtWidgets import (
     QScrollArea, QFrame, QLineEdit, QPushButton, QSizePolicy
 )
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from network import NetworkThread
 from user_context import UserContext
 import time
 
 # -------------------- Friend Item --------------------
 class ChatFriendItem(QFrame):
-    def __init__(self, nickname, avatar_path="", on_click=None):
+    def __init__(self, login, nickname, avatar_path="", on_click=None):
         super().__init__()
         self.setFixedHeight(56)
         self.setStyleSheet("""
@@ -32,7 +32,7 @@ class ChatFriendItem(QFrame):
             pix_loaded = True
         else:
             for ext in (".png", ".jpg", ".jpeg"):
-                path = os.path.join("avatars", f"{nickname}{ext}")
+                path = os.path.join("avatars", f"{login}{ext}")
                 if os.path.exists(path):
                     pix = QPixmap(path)
                     pix_loaded = True
@@ -74,35 +74,17 @@ class MessageBubble(QFrame):
             layout.addWidget(label)
             layout.addStretch()
 
-# -------------------- Auto-refresh Thread --------------------
-class AutoMessageThread(QThread):
-    new_messages = Signal(dict)
-
-    def __init__(self, from_user, to_user):
-        super().__init__()
-        self.from_user = from_user
-        self.to_user = to_user
-        self.running = True
-
-    def run(self):
-        while self.running:
-            data = {"action":"get_messages","from_user":self.from_user,"to_user":self.to_user}
-            thread = NetworkThread("127.0.0.1", 5555, data)
-            thread.finished.connect(lambda resp: self.new_messages.emit(resp))
-            thread.run()  # синхронный вызов внутри потока
-            time.sleep(2)
-
-    def stop(self):
-        self.running = False
-
 # -------------------- Chats Page --------------------
 class ChatsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.ctx = UserContext()
         self.active_friend = None
-        self.auto_thread = None
         self.send_thread = None
+
+        self.msg_timer = QTimer(self)
+        self.msg_timer.setInterval(2000)  # каждые 2 секунды
+        self.msg_timer.timeout.connect(self.load_messages)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(10,10,10,10)
@@ -181,9 +163,15 @@ class ChatsPage(QWidget):
             if item and item.widget():
                 item.widget().deleteLater()
         for friend in resp.get("friends", []):
-            avatar_path = friend.get("avatar","")
-            item = ChatFriendItem(friend["nickname"], avatar_path, lambda f=friend: self.open_chat(f))
+            avatar_path = friend.get("avatar", "")
+            item = ChatFriendItem(
+                friend["login"],                 
+                friend["nickname"],
+                avatar_path,
+                lambda f=friend: self.open_chat(f)
+            )
             self.friends_layout.insertWidget(self.friends_layout.count()-1, item)
+
 
     # ------------------ Открыть чат ------------------
     def open_chat(self, friend):
@@ -191,22 +179,24 @@ class ChatsPage(QWidget):
         self.chat_header.setText(friend["nickname"])
         self.load_messages()
 
-        # Запуск одного автообновляющегося потока
-        if self.auto_thread:
-            self.auto_thread.stop()
-            self.auto_thread.wait()
-        self.auto_thread = AutoMessageThread(self.ctx.login, friend["login"])
-        self.auto_thread.new_messages.connect(self.display_messages)
-        self.auto_thread.start()
+        # запускаем автообновление через QTimer
+        if not self.msg_timer.isActive():
+            self.msg_timer.start()
 
     # ------------------ Загрузка сообщений ------------------
     def load_messages(self):
         if not self.active_friend:
             return
+
+        # если прошлый запрос ещё идёт — пропускаем тик таймера
+        if hasattr(self, "msg_thread") and self.msg_thread.isRunning():
+            return
+
         data = {"action":"get_messages","from_user":self.ctx.login,"to_user":self.active_friend["login"]}
-        self.msg_thread = NetworkThread("127.0.0.1",5555,data)
+        self.msg_thread = NetworkThread("127.0.0.1", 5555, data)
         self.msg_thread.finished.connect(self.display_messages)
         self.msg_thread.start()
+
 
     # ------------------ Отображение сообщений ------------------
     def display_messages(self, resp):

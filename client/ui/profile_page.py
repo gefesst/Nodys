@@ -9,7 +9,8 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 
 from network import NetworkThread
-from config import clear_config
+from config import clear_config, load_config, save_config
+from user_context import UserContext
 
 
 class ProfilePage(QWidget):
@@ -189,7 +190,24 @@ class ProfilePage(QWidget):
     def handle_save(self, resp):
         if resp.get("status") == "ok":
             QMessageBox.information(self, "Готово", "Профиль обновлён")
-            self.nickname = self.nickname_edit.text()
+
+            new_nickname = self.nickname_edit.text().strip()
+            self.nickname = new_nickname
+
+            # 1) обновляем контекст
+            ctx = UserContext()
+            ctx.nickname = new_nickname
+            ctx.avatar_path = self.avatar_path
+
+            # 2) обновляем config.json (чтобы автологин был актуальным)
+            cfg = load_config()
+            if cfg.get("login") == self.login:
+                cfg["logged_in"] = True
+                cfg["login"] = self.login
+                cfg["nickname"] = new_nickname
+                cfg["avatar"] = self.avatar_path
+                save_config(cfg)
+
         else:
             clear_config()
             QMessageBox.warning(self, "Ошибка", "Сессия устарела, войдите снова")

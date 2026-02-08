@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
 from network import NetworkThread
 from user_context import UserContext
+from config import save_config
 
 
 class AuthWindow(QWidget):
@@ -63,6 +64,13 @@ class AuthWindow(QWidget):
             nickname=resp["nickname"],
             avatar_path=resp.get("avatar", "")
         )
+
+        save_config({
+            "logged_in": True,
+            "login": resp["login"],
+            "nickname": resp.get("nickname", ""),
+            "avatar": resp.get("avatar", "")
+        })
 
         from ui.main_window import MainWindow
         self.main_window = MainWindow()

@@ -20,6 +20,7 @@ from PySide6.QtCore import QTimer
 class FriendItem(QFrame):
     def __init__(
         self,
+        login,
         nickname,
         avatar_path="",
         online=False,
@@ -54,7 +55,7 @@ class FriendItem(QFrame):
             avatar_loaded = True
         else:
             for ext in (".png", ".jpg", ".jpeg"):
-                local_path = os.path.join("avatars", f"{nickname}{ext}")
+                local_path = os.path.join("avatars", f"{login}{ext}")
                 if os.path.exists(local_path):
                     pix = QPixmap(local_path)
                     avatar_loaded = True
@@ -227,6 +228,7 @@ class FriendsPage(QWidget):
 
         for login in requests:
             item = FriendItem(
+                login=login,
                 nickname=login,
                 request_from=login,
                 on_accept=self.accept_request,
@@ -258,17 +260,6 @@ class FriendsPage(QWidget):
     # ===================== FRIENDS ===================
     # ==================================================
 
-    def load_friends(self):
-        self.clear_friends_only()
-
-        data = {
-            "action": "get_friends",
-            "login": self.ctx.login
-        }
-        self.friends_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.friends_thread.finished.connect(self.handle_friends)
-        self.friends_thread.start()
-
     def handle_friends(self, resp):
         friends = resp.get("friends", [])
         if not friends:
@@ -280,10 +271,12 @@ class FriendsPage(QWidget):
 
         for friend in friends:
             item = FriendItem(
+                login=friend["login"],
                 nickname=friend["nickname"],
                 avatar_path=friend.get("avatar", ""),
                 online=friend.get("online", False)
             )
+
             item.setProperty("is_friend", True)
             self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
