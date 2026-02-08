@@ -1,85 +1,63 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
-from network import NetworkThread
-from user_context import UserContext
-from config import save_config
+
+from utils.thread_safe_mixin import ThreadSafeMixin
 
 
-class AuthWindow(QWidget):
-    def __init__(self):
+class AuthWindow(QWidget, ThreadSafeMixin):
+    def __init__(self, on_login_success=None, controller=None):
         super().__init__()
-        self.setWindowTitle("Авторизация")
-        self.setFixedSize(300, 200)
+        self.on_login_success = on_login_success
+        self.controller = controller
 
-        self.ctx = UserContext()
-        self.thread = None
+        self._threads = []
+        self._alive = True
+
+        self.setWindowTitle("Авторизация")
+        self.setFixedSize(320, 220)
 
         layout = QVBoxLayout(self)
 
-        self.login_edit = QLineEdit()
-        self.login_edit.setPlaceholderText("Логин")
+        self.login = QLineEdit()
+        self.login.setPlaceholderText("Логин")
 
-        self.password_edit = QLineEdit()
-        self.password_edit.setPlaceholderText("Пароль")
-        self.password_edit.setEchoMode(QLineEdit.Password)
+        self.password = QLineEdit()
+        self.password.setPlaceholderText("Пароль")
+        self.password.setEchoMode(QLineEdit.Password)
 
-        self.btn_login = QPushButton("Войти")
-        self.btn_register = QPushButton("Регистрация")
+        btn_login = QPushButton("Войти")
+        btn_register = QPushButton("Регистрация")
 
-        self.btn_login.clicked.connect(self.login_user)
-        self.btn_register.clicked.connect(self.open_register)
+        btn_login.clicked.connect(self.login_user)
+        btn_register.clicked.connect(self.open_register)
 
-        layout.addWidget(self.login_edit)
-        layout.addWidget(self.password_edit)
-        layout.addWidget(self.btn_login)
-        layout.addWidget(self.btn_register)
-
-    # ---------------- Login ----------------
+        layout.addWidget(self.login)
+        layout.addWidget(self.password)
+        layout.addWidget(btn_login)
+        layout.addWidget(btn_register)
 
     def login_user(self):
-        login = self.login_edit.text().strip()
-        password = self.password_edit.text().strip()
-
-        if not login or not password:
-            QMessageBox.warning(self, "Ошибка", "Введите логин и пароль")
-            return
-
         data = {
             "action": "login",
-            "login": login,
-            "password": password
+            "login": self.login.text().strip(),
+            "password": self.password.text()
         }
+        self.start_request(data, self.handle_login_response)
 
-        self.thread = NetworkThread("127.0.0.1", 5555, data)
-        self.thread.finished.connect(self.handle_login_response)
-        self.thread.start()
-
-    def handle_login_response(self, resp: dict):
-        if resp.get("status") != "ok":
-            QMessageBox.warning(self, "Ошибка", resp.get("message", "Ошибка входа"))
-            return
-
-        # Сохраняем пользователя в контекст
-        self.ctx.set_user(
-            login=resp["login"],
-            nickname=resp["nickname"],
-            avatar_path=resp.get("avatar", "")
-        )
-
-        save_config({
-            "logged_in": True,
-            "login": resp["login"],
-            "nickname": resp.get("nickname", ""),
-            "avatar": resp.get("avatar", "")
-        })
-
-        from ui.main_window import MainWindow
-        self.main_window = MainWindow()
-        self.main_window.show()
-        self.close()
-
-    # ---------------- Register ----------------
+    def handle_login_response(self, resp):
+        if resp.get("status") == "ok":
+            login = resp.get("login", "")
+            nickname = resp.get("nickname", "")
+            if callable(self.on_login_success):
+                self.on_login_success(login, nickname)
+        else:
+            QMessageBox.warning(self, "Ошибка", resp.get("message", "Неверный логин или пароль"))
 
     def open_register(self):
         from register_window import RegisterWindow
-        self.register_window = RegisterWindow()
-        self.register_window.show()
+        self.reg = RegisterWindow()
+        self.reg.show()
+
+    def closeEvent(self, event):
+        self._alive = False
+        self.shutdown_requests(wait_ms=3000)
+        super().closeEvent(event)

@@ -1,48 +1,52 @@
+import os
+
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QSizePolicy, QStackedWidget, QLabel
+    QSizePolicy, QStackedWidget
 )
-
 from PySide6.QtGui import QIcon
+
 from ui.channels_page import ChannelsPage
 from ui.profile_page import ProfilePage
 from ui.friends_page import FriendsPage
 from ui.chats_page import ChatsPage
+
 from user_context import UserContext
-from auth_window import AuthWindow
-import os
+from network import NetworkThread
 
 
 class MainWindow(QWidget):
-    def __init__(self):
+    def __init__(self, controller=None):
         super().__init__()
-
+        self.controller = controller
         self.ctx = UserContext()
+
         self.is_logging_out = False
+        self.close_thread = None
+
         self.setWindowTitle("Nodys")
         self.setMinimumSize(900, 600)
         self.setStyleSheet("background-color:#2f3136; color:white;")
 
-        # Получаем путь к иконке относительно этого файла
-        current_dir = os.path.dirname(os.path.abspath(__file__))  # client/ui
-        parent_dir = os.path.dirname(current_dir)                  # client
-        icon_path = os.path.join(parent_dir, "icons", "app_icon.png")
-
-        self.setWindowIcon(QIcon(icon_path))
+        # Иконка приложения (если есть)
+        current_dir = os.path.dirname(os.path.abspath(__file__))   # client/ui
+        client_dir = os.path.dirname(current_dir)                  # client
+        icon_path = os.path.join(client_dir, "icons", "app_icon.png")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         # ---------------- Stack ----------------
         self.stack = QStackedWidget(self)
 
-        # Вкладки
-        self.friends_page = FriendsPage(self)
-        self.chats_page = ChatsPage(self)
-        self.channels_page = ChannelsPage(self)   
-        self.profile_page = ProfilePage(self.ctx.login, self.ctx.nickname, self)
+        self.friends_page = FriendsPage(self)      # index 0
+        self.chats_page = ChatsPage(self)          # index 1
+        self.channels_page = ChannelsPage(self)    # index 2
+        self.profile_page = ProfilePage(self.ctx.login, self.ctx.nickname, self)  # index 3
 
-        self.stack.addWidget(self.friends_page)   # index 0
-        self.stack.addWidget(self.chats_page)     # index 1
-        self.stack.addWidget(self.channels_page)  # index 2
-        self.stack.addWidget(self.profile_page)   # index 3
+        self.stack.addWidget(self.friends_page)
+        self.stack.addWidget(self.chats_page)
+        self.stack.addWidget(self.channels_page)
+        self.stack.addWidget(self.profile_page)
 
         # ---------------- Sidebar ----------------
         sidebar = QWidget()
@@ -50,8 +54,6 @@ class MainWindow(QWidget):
         menu_layout = QVBoxLayout(sidebar)
         menu_layout.setContentsMargins(10, 10, 10, 10)
         menu_layout.setSpacing(10)
-
-        self.buttons = {}
 
         def make_button(text, callback):
             btn = QPushButton(text)
@@ -70,10 +72,9 @@ class MainWindow(QWidget):
             btn.clicked.connect(callback)
             return btn
 
-        # Добавляем кнопки
-        menu_layout.addWidget(make_button("Друзья", lambda: self.stack.setCurrentIndex(0)))
-        menu_layout.addWidget(make_button("Чаты", lambda: self.stack.setCurrentIndex(1)))
-        menu_layout.addWidget(make_button("Каналы", lambda: self.stack.setCurrentIndex(2)))
+        menu_layout.addWidget(make_button("Друзья", self.show_friends))
+        menu_layout.addWidget(make_button("Чаты", self.show_chats))
+        menu_layout.addWidget(make_button("Каналы", self.show_channels))
         menu_layout.addWidget(make_button("Мой профиль", self.show_profile))
         menu_layout.addStretch()
 
@@ -83,34 +84,93 @@ class MainWindow(QWidget):
         root.addWidget(sidebar, 1)
         root.addWidget(self.stack, 4)
 
-    # ---------------- show profile ----------------
+        # Стартовая вкладка
+        self.show_friends()
+
+    # ==================================================
+    # ================== Навигация ======================
+    # ==================================================
+
+    def show_friends(self):
+        # Чаты не нужны — стопаем их таймеры
+        self.chats_page.stop_auto_update()
+
+        self.stack.setCurrentIndex(0)
+        if hasattr(self.friends_page, "refresh"):
+            self.friends_page.refresh()
+
+    def show_chats(self):
+        self.stack.setCurrentIndex(1)
+
+        # Загружаем друзей чатов и запускаем автопул
+        if hasattr(self.chats_page, "load_friends"):
+            self.chats_page.load_friends()
+        self.chats_page.start_auto_update()
+
+    def show_channels(self):
+        self.chats_page.stop_auto_update()
+        self.stack.setCurrentIndex(2)
+
     def show_profile(self):
+        self.chats_page.stop_auto_update()
         self.stack.setCurrentIndex(3)
-        # Обновляем онлайн статус профиля
+
+        # Обновляем онлайн-статус профиля
         data = {"action": "status", "login": self.ctx.login}
-        from network import NetworkThread
         self.status_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.status_thread.finished.connect(
-            lambda resp: self.profile_page.update_status(resp.get("online", False))
-        )
+
+        def on_status(resp):
+            self.profile_page.update_status(resp.get("online", False))
+
+        self.status_thread.finished.connect(on_status)
         self.status_thread.start()
 
-    # ---------------- show login ----------------
-    def show_login(self):
-        self.is_logging_out = True
-        self.ctx.clear()
-        self.auth_window = AuthWindow()
-        self.auth_window.show()
-        self.hide()
+    # ==================================================
+    # ============== Переход к авторизации =============
+    # ==================================================
 
-    # ---------------- close event ----------------
+    def show_login(self):
+        """
+        Вызывается из ProfilePage после logout.
+        Возвращаемся на окно авторизации через controller.
+        """
+        self.is_logging_out = True
+
+        # Остановить автообновления страниц
+        self.chats_page.stop_auto_update()
+        try:
+            if hasattr(self.friends_page, "timer"):
+                self.friends_page.timer.stop()
+        except Exception:
+            pass
+
+        self.ctx.clear()
+
+        if self.controller is not None:
+            self.hide()
+            self.controller.show_auth()
+
+    # ==================================================
+    # ================== Закрытие окна =================
+    # ==================================================
+
     def closeEvent(self, event):
-        from network import NetworkThread
+        # При закрытии приложения останавливаем автотаймеры
+        self.chats_page.stop_auto_update()
+        try:
+            if hasattr(self.friends_page, "timer"):
+                self.friends_page.timer.stop()
+        except Exception:
+            pass
+
+        # Отправим logout только если реально закрываем приложение
         if not self.is_logging_out and self.ctx.login:
-            close_thread = NetworkThread(
+            self.close_thread = NetworkThread(
                 "127.0.0.1",
                 5555,
                 {"action": "logout", "login": self.ctx.login}
             )
-            close_thread.start()
+            self.close_thread.start()
+            self.close_thread.wait(800)
+
         event.accept()

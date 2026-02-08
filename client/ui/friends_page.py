@@ -2,20 +2,14 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QFrame,
-    QLineEdit, QDialog
+    QPushButton, QScrollArea, QFrame, QLineEdit, QDialog
 )
 from PySide6.QtGui import QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
-from network import NetworkThread
 from user_context import UserContext
-from PySide6.QtCore import QTimer
+from utils.thread_safe_mixin import ThreadSafeMixin
 
-
-# ==================================================
-# =================== FriendItem ===================
-# ==================================================
 
 class FriendItem(QFrame):
     def __init__(
@@ -29,7 +23,6 @@ class FriendItem(QFrame):
         on_decline=None
     ):
         super().__init__()
-
         self.setFixedHeight(56)
         self.setStyleSheet("""
             QFrame {
@@ -45,109 +38,80 @@ class FriendItem(QFrame):
         layout.setContentsMargins(10, 5, 10, 5)
         layout.setSpacing(10)
 
-        # Avatar
         avatar = QLabel()
         avatar.setFixedSize(40, 40)
         avatar.setStyleSheet("background-color:#202225; border-radius:20px;")
-        avatar_loaded = False
+
+        pix = None
         if avatar_path and os.path.exists(avatar_path):
             pix = QPixmap(avatar_path)
-            avatar_loaded = True
         else:
             for ext in (".png", ".jpg", ".jpeg"):
-                local_path = os.path.join("avatars", f"{login}{ext}")
-                if os.path.exists(local_path):
-                    pix = QPixmap(local_path)
-                    avatar_loaded = True
+                p = os.path.join("avatars", f"{login}{ext}")
+                if os.path.exists(p):
+                    pix = QPixmap(p)
                     break
 
-        if avatar_loaded:
-            avatar.setPixmap(
-                pix.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            )
+        if pix is not None and not pix.isNull():
+            avatar.setPixmap(pix.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
         layout.addWidget(avatar)
 
-        # Online indicator (только для друзей)
         if request_from is None:
             status = QLabel(avatar)
             status.setFixedSize(10, 10)
             status.move(28, 28)
             status.setStyleSheet(
-                "border-radius:5px; background-color:{};"
-                .format("#43b581" if online else "#747f8d")
+                f"border-radius:5px; background-color:{'#43b581' if online else '#747f8d'};"
             )
             status.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-        # Nickname
         name = QLabel(nickname)
         name.setStyleSheet("color:white; font-weight:500;")
         layout.addWidget(name)
-
         layout.addStretch()
 
-        # Buttons for requests
-        if request_from:
-            accept = QPushButton("Принять")
-            accept.setStyleSheet("""
-                QPushButton {
-                    background-color:#43b581;
-                    border-radius:6px;
-                    padding:4px 10px;
-                }
-            """)
-            accept.clicked.connect(lambda: on_accept(request_from))
-            layout.addWidget(accept)
+        if request_from is not None:
+            btn_accept = QPushButton("Принять")
+            btn_accept.setStyleSheet("QPushButton { background:#43b581; border-radius:6px; padding:4px 10px; }")
+            btn_accept.clicked.connect(lambda: on_accept(request_from))
+            layout.addWidget(btn_accept)
 
-            decline = QPushButton("Отклонить")
-            decline.setStyleSheet("""
-                QPushButton {
-                    background-color:#f04747;
-                    border-radius:6px;
-                    padding:4px 10px;
-                }
-            """)
-            decline.clicked.connect(lambda: on_decline(request_from))
-            layout.addWidget(decline)
+            btn_decline = QPushButton("Отклонить")
+            btn_decline.setStyleSheet("QPushButton { background:#f04747; border-radius:6px; padding:4px 10px; }")
+            btn_decline.clicked.connect(lambda: on_decline(request_from))
+            layout.addWidget(btn_decline)
 
 
-# ==================================================
-# ================== FriendsPage ===================
-# ==================================================
-
-class FriendsPage(QWidget):
+class FriendsPage(QWidget, ThreadSafeMixin):
     def __init__(self, parent=None):
         super().__init__(parent)
-
         self.ctx = UserContext()
+
+        self._threads = []
+        self._alive = True
+        self._loading_friends = False
+        self._loading_requests = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(12)
 
-        # Header
-        header = QHBoxLayout()
+        head = QHBoxLayout()
         title = QLabel("Друзья")
         title.setStyleSheet("font-size:18px; font-weight:bold;")
-        header.addWidget(title)
-        header.addStretch()
+        head.addWidget(title)
+        head.addStretch()
 
         add_btn = QPushButton("Добавить друга")
         add_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#5865F2;
-                border-radius:6px;
-                padding:6px 10px;
-            }
-            QPushButton:hover {
-                background-color:#4752c4;
-            }
+            QPushButton { background-color:#5865F2; border-radius:6px; padding:6px 10px; }
+            QPushButton:hover { background-color:#4752c4; }
         """)
         add_btn.clicked.connect(self.show_add_friend_dialog)
-        header.addWidget(add_btn)
+        head.addWidget(add_btn)
+        root.addLayout(head)
 
-        root.addLayout(header)
-
-        # Scroll
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setStyleSheet("border:none;")
@@ -162,60 +126,36 @@ class FriendsPage(QWidget):
 
         self.setStyleSheet("background-color:#36393f; color:white;")
 
-        self.refresh()
-
-        # авто-обновление онлайна
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.load_friends)
-        self.timer.start(5000)  # каждые 5 секунд
-    
-    def clear_friends_only(self):
-        for i in reversed(range(self.list_layout.count())):
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start(5000)
+
+    def clear_list(self):
+        for i in reversed(range(self.list_layout.count() - 1)):  # оставляем stretch
             item = self.list_layout.itemAt(i)
-            if not item or not item.widget():
-                continue
-
-            widget = item.widget()
-            if isinstance(widget, FriendItem) and widget.property("is_friend"):
-                widget.deleteLater()
-
-    def clear_friends_header(self):
-        for i in reversed(range(self.list_layout.count())):
-            item = self.list_layout.itemAt(i)
-            if not item or not item.widget():
-                continue
-            widget = item.widget()
-            if isinstance(widget, QLabel) and widget.text() == "Друзья":
-                widget.deleteLater()
-
-
-    # ==================================================
-    # =================== REFRESH =====================
-    # ==================================================
+            if item and item.widget():
+                item.widget().deleteLater()
 
     def refresh(self):
         self.clear_list()
         self.load_requests()
         self.load_friends()
 
-    def clear_list(self):
-        for i in reversed(range(self.list_layout.count() - 1)):
-            item = self.list_layout.itemAt(i)
-            if item and item.widget():
-                item.widget().deleteLater()
-
-    # ==================================================
-    # ================= FRIEND REQUESTS ===============
-    # ==================================================
-
+    # ---------- requests ----------
     def load_requests(self):
-        data = {
-            "action": "get_friend_requests",
-            "login": self.ctx.login
-        }
-        self.req_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.req_thread.finished.connect(self.handle_requests)
-        self.req_thread.start()
+        if self._loading_requests:
+            return
+        self._loading_requests = True
+
+        data = {"action": "get_friend_requests", "login": self.ctx.login}
+
+        def cb(resp):
+            try:
+                self.handle_requests(resp)
+            finally:
+                self._loading_requests = False
+
+        self.start_request(data, cb)
 
     def handle_requests(self, resp):
         requests = resp.get("requests", [])
@@ -242,9 +182,7 @@ class FriendsPage(QWidget):
             "login": self.ctx.login,
             "from_user": from_user
         }
-        self.action_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.action_thread.finished.connect(lambda _: self.refresh())
-        self.action_thread.start()
+        self.start_request(data, lambda _: self.refresh())
 
     def decline_request(self, from_user):
         data = {
@@ -252,13 +190,23 @@ class FriendsPage(QWidget):
             "login": self.ctx.login,
             "from_user": from_user
         }
-        self.action_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.action_thread.finished.connect(lambda _: self.refresh())
-        self.action_thread.start()
+        self.start_request(data, lambda _: self.refresh())
 
-    # ==================================================
-    # ===================== FRIENDS ===================
-    # ==================================================
+    # ---------- friends ----------
+    def load_friends(self):
+        if self._loading_friends:
+            return
+        self._loading_friends = True
+
+        data = {"action": "get_friends", "login": self.ctx.login}
+
+        def cb(resp):
+            try:
+                self.handle_friends(resp)
+            finally:
+                self._loading_friends = False
+
+        self.start_request(data, cb)
 
     def handle_friends(self, resp):
         friends = resp.get("friends", [])
@@ -276,33 +224,13 @@ class FriendsPage(QWidget):
                 avatar_path=friend.get("avatar", ""),
                 online=friend.get("online", False)
             )
-
-            item.setProperty("is_friend", True)
             self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
-    def load_friends(self):
-        # Убираем старый заголовок, чтобы не дублировался
-        self.clear_friends_header()
-    
-        self.clear_friends_only()  # удаляем старые карточки друзей
-
-        data = {
-            "action": "get_friends",
-            "login": self.ctx.login
-        }
-        self.friends_thread = NetworkThread("127.0.0.1", 5555, data)
-        self.friends_thread.finished.connect(self.handle_friends)
-        self.friends_thread.start()
-
-
-    # ==================================================
-    # ================= ADD FRIEND ====================
-    # ==================================================
-
+    # ---------- add friend ----------
     def show_add_friend_dialog(self):
         dialog = QDialog(self)
         dialog.setWindowTitle("Добавить друга")
-        dialog.setFixedSize(300, 200)
+        dialog.setFixedSize(320, 220)
 
         layout = QVBoxLayout(dialog)
 
@@ -321,36 +249,29 @@ class FriendsPage(QWidget):
         btn_send.setEnabled(False)
         layout.addWidget(btn_send)
 
-        found_user_login = {"login": None}
+        found = {"login": None}
 
-        # ---------- поиск пользователя ----------
         def find_user():
             login = login_input.text().strip()
             if not login:
                 return
 
-            data = {
-                "action": "find_user",
-                "login": login
-            }
+            data = {"action": "find_user", "login": login}
 
-            self.find_thread = NetworkThread("127.0.0.1", 5555, data)
-
-            def handle(resp):
+            def on_found(resp):
                 if resp.get("status") == "ok":
-                    found_user_login["login"] = resp["login"]
-                    info.setText(f"Найден пользователь: {resp['nickname']}")
+                    found["login"] = resp["login"]
+                    info.setText(f"Найден: {resp.get('nickname', resp['login'])} ({resp['login']})")
                     btn_send.setEnabled(True)
                 else:
+                    found["login"] = None
                     info.setText(resp.get("message", "Пользователь не найден"))
                     btn_send.setEnabled(False)
 
-            self.find_thread.finished.connect(handle)
-            self.find_thread.start()
+            self.start_request(data, on_found)
 
-        # ---------- отправка запроса ----------
-        def send_request():
-            to_user = found_user_login["login"]
+        def send_req():
+            to_user = found["login"]
             if not to_user:
                 return
 
@@ -360,21 +281,21 @@ class FriendsPage(QWidget):
                 "to_user": to_user
             }
 
-            self.send_thread = NetworkThread("127.0.0.1", 5555, data)
-
-            def handle(resp):
+            def on_sent(resp):
                 if resp.get("status") == "ok":
-                    info.setText("Запрос дружбы отправлен")
+                    info.setText("Запрос отправлен")
                     btn_send.setEnabled(False)
-                    btn_find.setEnabled(False)
                 else:
                     info.setText(resp.get("message", "Ошибка отправки"))
 
-            self.send_thread.finished.connect(handle)
-            self.send_thread.start()
+            self.start_request(data, on_sent)
 
         btn_find.clicked.connect(find_user)
-        btn_send.clicked.connect(send_request)
-
+        btn_send.clicked.connect(send_req)
         dialog.exec()
 
+    def closeEvent(self, event):
+        self._alive = False
+        self.timer.stop()
+        self.shutdown_requests(wait_ms=3000)
+        super().closeEvent(event)
