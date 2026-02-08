@@ -1,5 +1,4 @@
 import sys
-import json
 import traceback
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QObject
@@ -7,8 +6,8 @@ from PySide6.QtCore import QObject
 from auth_window import AuthWindow
 from ui.main_window import MainWindow
 from user_context import UserContext
+from config import load_config
 
-CONFIG_FILE = "config.json"
 APP_CONTROLLER = None
 
 
@@ -18,14 +17,6 @@ def excepthook(exc_type, exc, tb):
 
 
 sys.excepthook = excepthook
-
-
-def load_config():
-    try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
 
 
 class AppController(QObject):
@@ -62,6 +53,16 @@ class AppController(QObject):
             self.auth_window.hide()
 
     def logout_to_auth(self):
+        # Полный сброс main-сессии
+        if self.main_window is not None:
+            self.main_window.hide()
+            self.main_window.deleteLater()
+            self.main_window = None
+
+        from user_context import UserContext
+        ctx = UserContext()
+        ctx.clear()
+
         self.show_auth()
 
     def quit_app(self):
@@ -72,7 +73,7 @@ def main():
     global APP_CONTROLLER
 
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
+    app.setQuitOnLastWindowClosed(True)
 
     APP_CONTROLLER = AppController(app)
 

@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QMessageBox
 
 from utils.thread_safe_mixin import ThreadSafeMixin
+from config import load_config, save_config
 
 
 class AuthWindow(QWidget, ThreadSafeMixin):
@@ -47,6 +48,15 @@ class AuthWindow(QWidget, ThreadSafeMixin):
         if resp.get("status") == "ok":
             login = resp.get("login", "")
             nickname = resp.get("nickname", "")
+            avatar = resp.get("avatar", "") or ""
+
+            # Сохраняем актуальные данные для автологина
+            cfg = load_config()
+            cfg["login"] = login
+            cfg["nickname"] = nickname
+            cfg["avatar"] = avatar
+            save_config(cfg)
+
             if callable(self.on_login_success):
                 self.on_login_success(login, nickname)
         else:

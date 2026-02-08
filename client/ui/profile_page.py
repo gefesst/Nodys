@@ -1,4 +1,5 @@
 import os
+import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
@@ -25,6 +26,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         self._build_ui()
         self._load_initial_avatar()
 
+    # ---------------- UI ----------------
     def _build_ui(self):
         self.layout = QVBoxLayout(self)
         self.layout.setSpacing(14)
@@ -114,22 +116,64 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             }
         """
 
+    # ---------------- Avatar helpers ----------------
+    def _avatars_dir(self):
+        # client/ui/profile_page.py -> client
+        client_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        avatars_dir = os.path.join(client_dir, "avatars")
+        os.makedirs(avatars_dir, exist_ok=True)
+        return avatars_dir
+
+    def _normalize_avatar(self, source_path: str) -> str:
+        """
+        Копирует выбранный файл в client/avatars/<login>.<ext>
+        Возвращает относительный путь: avatars/<login>.<ext>
+        """
+        if not source_path or not os.path.exists(source_path):
+            return ""
+
+        ext = os.path.splitext(source_path)[1].lower()
+        if ext not in (".png", ".jpg", ".jpeg"):
+            ext = ".jpg"
+
+        dst_name = f"{self.login}{ext}"
+        dst_abs = os.path.join(self._avatars_dir(), dst_name)
+
+        try:
+            shutil.copy2(source_path, dst_abs)
+        except Exception:
+            return ""
+
+        return os.path.join("avatars", dst_name).replace("\\", "/")
+
+    def _to_abs_avatar_path(self, path: str) -> str:
+        if not path:
+            return ""
+        if os.path.isabs(path):
+            return path
+
+        client_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(client_dir, path)
+
     def _load_initial_avatar(self):
         cfg = load_config()
         self.avatar_path = cfg.get("avatar", "") or ""
 
+        # fallback: ищем локальный avatars/<login>.*
         if not self.avatar_path:
             for ext in (".png", ".jpg", ".jpeg"):
-                p = os.path.join("avatars", f"{self.login}{ext}")
-                if os.path.exists(p):
-                    self.avatar_path = p
+                rel = f"avatars/{self.login}{ext}"
+                abs_p = self._to_abs_avatar_path(rel)
+                if os.path.exists(abs_p):
+                    self.avatar_path = rel
                     break
 
         self._apply_avatar(self.avatar_path)
 
     def _apply_avatar(self, path: str):
-        if path and os.path.exists(path):
-            pix = QPixmap(path)
+        abs_path = self._to_abs_avatar_path(path)
+        if abs_path and os.path.exists(abs_path):
+            pix = QPixmap(abs_path)
             if not pix.isNull():
                 self.avatar_label.setPixmap(
                     pix.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation)
@@ -140,21 +184,32 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     def choose_avatar(self):
         path, _ = QFileDialog.getOpenFileName(self, "Выберите аватар", "", "Images (*.png *.jpg *.jpeg)")
         if path:
+            # Пока только предпросмотр; физически копируем при Save
             self.avatar_path = path
             self._apply_avatar(path)
 
+    # ---------------- Profile ----------------
     def save_changes(self):
         nickname = self.nickname_edit.text().strip()
         if not nickname:
             QMessageBox.warning(self, "Ошибка", "Никнейм не может быть пустым")
             return
 
+        avatar_for_server = self.avatar_path
+
+        # Если путь абсолютный (из FileDialog) — нормализуем в client/avatars
+        if self.avatar_path and os.path.isabs(self.avatar_path):
+            normalized = self._normalize_avatar(self.avatar_path)
+            if normalized:
+                avatar_for_server = normalized
+                self.avatar_path = normalized
+
         data = {
             "action": "update_profile",
             "login": self.login,
             "nickname": nickname,
             "password": self.password_edit.text().strip(),
-            "avatar": self.avatar_path
+            "avatar": avatar_for_server
         }
 
         self.start_request(data, self.handle_save)
@@ -162,11 +217,15 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     def handle_save(self, resp):
         if resp.get("status") == "ok":
             self.nickname = self.nickname_edit.text().strip()
+
             cfg = load_config()
             cfg["login"] = self.login
             cfg["nickname"] = self.nickname
             cfg["avatar"] = self.avatar_path or cfg.get("avatar", "")
             save_config(cfg)
+
+            # Обновим отображение после нормализации
+            self._apply_avatar(self.avatar_path)
 
             QMessageBox.information(self, "Готово", "Профиль обновлён")
             self.password_edit.clear()

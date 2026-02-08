@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QSizePolicy, QStackedWidget
+    QSizePolicy, QStackedWidget, QApplication
 )
 from PySide6.QtGui import QIcon
 
@@ -23,6 +23,7 @@ class MainWindow(QWidget):
 
         self.is_logging_out = False
         self.close_thread = None
+        self._is_closing = False
 
         self.setWindowTitle("Nodys")
         self.setMinimumSize(900, 600)
@@ -92,17 +93,13 @@ class MainWindow(QWidget):
     # ==================================================
 
     def show_friends(self):
-        # Чаты не нужны — стопаем их таймеры
         self.chats_page.stop_auto_update()
-
         self.stack.setCurrentIndex(0)
         if hasattr(self.friends_page, "refresh"):
             self.friends_page.refresh()
 
     def show_chats(self):
         self.stack.setCurrentIndex(1)
-
-        # Загружаем друзей чатов и запускаем автопул
         if hasattr(self.chats_page, "load_friends"):
             self.chats_page.load_friends()
         self.chats_page.start_auto_update()
@@ -132,45 +129,84 @@ class MainWindow(QWidget):
     def show_login(self):
         """
         Вызывается из ProfilePage после logout.
-        Возвращаемся на окно авторизации через controller.
+        Это НЕ закрытие приложения, а смена сессии.
         """
         self.is_logging_out = True
 
-        # Остановить автообновления страниц
-        self.chats_page.stop_auto_update()
+        # Остановить автообновления
+        try:
+            self.chats_page.stop_auto_update()
+        except Exception:
+            pass
         try:
             if hasattr(self.friends_page, "timer"):
                 self.friends_page.timer.stop()
         except Exception:
             pass
 
+        # Корректно остановить запросы страниц
+        for page in (self.friends_page, self.chats_page, self.profile_page):
+            try:
+                page._alive = False
+                if hasattr(page, "shutdown_requests"):
+                    page.shutdown_requests(wait_ms=1000)
+            except Exception:
+                pass
+
         self.ctx.clear()
 
         if self.controller is not None:
-            self.hide()
-            self.controller.show_auth()
+            self.controller.logout_to_auth()
 
     # ==================================================
     # ================== Закрытие окна =================
     # ==================================================
 
     def closeEvent(self, event):
-        # При закрытии приложения останавливаем автотаймеры
-        self.chats_page.stop_auto_update()
+        # Защита от повторного входа в closeEvent
+        if self._is_closing:
+            event.accept()
+            return
+        self._is_closing = True
+
+        # Если это logout-переход (show_login), не выходим из приложения
+        if self.is_logging_out:
+            event.accept()
+            return
+
+        # Это именно закрытие приложения на крестик
+        try:
+            self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+
         try:
             if hasattr(self.friends_page, "timer"):
                 self.friends_page.timer.stop()
         except Exception:
             pass
 
-        # Отправим logout только если реально закрываем приложение
-        if not self.is_logging_out and self.ctx.login:
-            self.close_thread = NetworkThread(
-                "127.0.0.1",
-                5555,
-                {"action": "logout", "login": self.ctx.login}
-            )
-            self.close_thread.start()
-            self.close_thread.wait(800)
+        # Остановить фоновые запросы страниц
+        for page in (self.friends_page, self.chats_page, self.profile_page):
+            try:
+                page._alive = False
+                if hasattr(page, "shutdown_requests"):
+                    page.shutdown_requests(wait_ms=1000)
+            except Exception:
+                pass
+
+        # Снять online-статус на сервере (коротко, без долгой блокировки)
+        try:
+            if self.ctx.login:
+                t = NetworkThread("127.0.0.1", 5555, {"action": "logout", "login": self.ctx.login})
+                t.start()
+                t.wait(500)
+        except Exception:
+            pass
+
+        # Полное завершение процесса приложения
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
 
         event.accept()
