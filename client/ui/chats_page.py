@@ -1,5 +1,3 @@
-import os
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QScrollArea, QFrame, QLineEdit, QPushButton, QSizePolicy
@@ -46,7 +44,7 @@ class ChatFriendItem(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Левая полоска активного элемента
+        # Левая полоска выбранного элемента
         self.active_bar = QFrame()
         self.active_bar.setFixedWidth(4)
         self.active_bar.setStyleSheet(
@@ -56,27 +54,24 @@ class ChatFriendItem(QFrame):
         )
         root.addWidget(self.active_bar)
 
-        # Контент
         content = QWidget()
         row = QHBoxLayout(content)
         row.setContentsMargins(12, 8, 12, 8)
         row.setSpacing(10)
 
-        # Аватар (круглый cover)
+        # Круглый аватар + online dot
         avatar = AvatarLabel(size=44)
         avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
         avatar.set_online(online, ring_color="#2f3136")
         row.addWidget(avatar)
 
-        # Текстовый блок (имя + статус)
+        # Текст
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
         text_col.setSpacing(1)
 
         name = QLabel(nickname)
         name.setStyleSheet("color:white; font-size:14px; font-weight:600; border:none;")
-        name.setMaximumWidth(180)
-        name.setWordWrap(False)
         text_col.addWidget(name)
 
         sub = QLabel("в сети" if online else "не в сети")
@@ -86,7 +81,7 @@ class ChatFriendItem(QFrame):
         row.addLayout(text_col, 1)
         row.addStretch()
 
-        # Unread badge
+        # badge непрочитанных
         if unread_count > 0:
             badge = QLabel(str(unread_count))
             badge.setAlignment(Qt.AlignCenter)
@@ -174,9 +169,11 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         super().__init__(parent)
         self.ctx = UserContext()
 
+        # Для ThreadSafeMixin
         self._threads = []
         self._alive = True
 
+        # Состояние
         self.active_friend = None
         self._loading_friends = False
         self._loading_messages = False
@@ -187,11 +184,12 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.unread_total = 0
         self.on_unread_total_changed = None
 
+        # UI
         root = QHBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(15)
 
-        # left: friends list
+        # Левая панель друзей
         self.friends_container = QWidget()
         self.friends_layout = QVBoxLayout(self.friends_container)
         self.friends_layout.setSpacing(6)
@@ -203,7 +201,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.friends_scroll.setStyleSheet("border:none;")
         root.addWidget(self.friends_scroll, 1)
 
-        # right: chat area
+        # Правая панель чата
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(0, 0, 0, 0)
@@ -257,7 +255,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         self.setStyleSheet("background-color:#36393f; color:white;")
 
-        # timers
+        # Таймеры
         self.msg_timer = QTimer(self)
         self.msg_timer.setInterval(2000)
         self.msg_timer.timeout.connect(self.load_messages)
@@ -266,16 +264,20 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.friends_timer.setInterval(3000)
         self.friends_timer.timeout.connect(self._friends_tick)
 
-        # initial load
-        self.load_unread_counts()
-
-    # ----------------- lifecycle -----------------
+    # ==================================================
+    # ================= Lifecycle ======================
+    # ==================================================
 
     def start_auto_update(self):
+        if not self._alive:
+            return
+
         if not self.friends_timer.isActive():
             self.friends_timer.start()
+
         if self.active_friend and not self.msg_timer.isActive():
             self.msg_timer.start()
+
         self.load_unread_counts()
 
     def stop_auto_update(self):
@@ -284,13 +286,36 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if self.friends_timer.isActive():
             self.friends_timer.stop()
 
+    def reset_for_user(self):
+        """
+        Полный сброс состояния при перелогине/смене пользователя.
+        """
+        self.stop_auto_update()
+
+        self.active_friend = None
+        self._loading_friends = False
+        self._loading_messages = False
+        self._sending = False
+        self._loading_unread = False
+
+        self.unread_counts = {}
+        self.unread_total = 0
+
+        self.chat_header.setText("Выберите друга")
+        self.input_edit.clear()
+
+        self._clear_friends()
+        self._clear_messages()
+
     def closeEvent(self, event):
         self._alive = False
         self.stop_auto_update()
         self.shutdown_requests(wait_ms=3000)
         super().closeEvent(event)
 
-    # ----------------- helpers -----------------
+    # ==================================================
+    # ================= Helpers ========================
+    # ==================================================
 
     def _friends_tick(self):
         self.load_unread_counts()
@@ -332,19 +357,22 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         except Exception:
             return ""
 
-    # ----------------- unread -----------------
+    # ==================================================
+    # ================= Unread =========================
+    # ==================================================
 
     def load_unread_counts(self):
-        if self._loading_unread:
+        if not self._alive or self._loading_unread or not self.ctx.login:
             return
-        self._loading_unread = True
 
+        self._loading_unread = True
         data = {"action": "get_unread_counts", "login": self.ctx.login}
 
         def cb(resp):
             try:
                 if resp.get("status") != "ok":
                     return
+
                 self.unread_counts = resp.get("counts", {}) or {}
                 self.unread_total = int(resp.get("total", 0) or 0)
 
@@ -358,6 +386,9 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def mark_chat_read(self, friend_login: str):
+        if not self.ctx.login:
+            return
+
         data = {
             "action": "mark_chat_read",
             "login": self.ctx.login,
@@ -369,13 +400,15 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         self.start_request(data, cb)
 
-    # ----------------- friends list -----------------
+    # ==================================================
+    # ================= Friends list ===================
+    # ==================================================
 
     def load_friends(self):
-        if self._loading_friends:
+        if not self._alive or self._loading_friends or not self.ctx.login:
             return
-        self._loading_friends = True
 
+        self._loading_friends = True
         data = {"action": "get_friends", "login": self.ctx.login}
 
         def cb(resp):
@@ -395,12 +428,19 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         self._clear_friends()
 
+        # Если активный собеседник ещё существует, обновим его данные
         if current_login:
-            for f in friends:
-                if f["login"] == current_login:
-                    self.active_friend = f
-                    self.chat_header.setText(f["nickname"])
-                    break
+            found = next((f for f in friends if f["login"] == current_login), None)
+            if found:
+                self.active_friend = found
+                self.chat_header.setText(found["nickname"])
+            else:
+                # собеседник исчез из списка (например, удалили дружбу)
+                self.active_friend = None
+                self.chat_header.setText("Выберите друга")
+                self._clear_messages()
+                if self.msg_timer.isActive():
+                    self.msg_timer.stop()
 
         def sort_key(f):
             return (0 if f.get("online", False) else 1, f.get("nickname", "").lower())
@@ -444,24 +484,34 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             empty.setStyleSheet("color:#b9bbbe; padding:8px;")
             self.friends_layout.insertWidget(self.friends_layout.count() - 1, empty)
 
-    # ----------------- chat -----------------
+    # ==================================================
+    # ================= Chat logic =====================
+    # ==================================================
 
     def open_chat(self, friend):
+        if not friend or not friend.get("login"):
+            return
+
         self.active_friend = friend
-        self.chat_header.setText(friend["nickname"])
+        self.chat_header.setText(friend.get("nickname", friend["login"]))
 
         self.mark_chat_read(friend["login"])
-        self.load_friends()
+        self.load_friends()   # чтобы сразу убрать badge у активного
         self.load_messages()
 
         if not self.msg_timer.isActive():
             self.msg_timer.start()
 
     def load_messages(self):
-        if not self.active_friend or self._loading_messages:
+        if (
+            not self._alive
+            or not self.ctx.login
+            or not self.active_friend
+            or self._loading_messages
+        ):
             return
-        self._loading_messages = True
 
+        self._loading_messages = True
         data = {
             "action": "get_messages",
             "from_user": self.ctx.login,
@@ -503,7 +553,12 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         sb.setValue(sb.maximum())
 
     def send_message(self):
-        if not self.active_friend or self._sending:
+        if (
+            not self._alive
+            or not self.ctx.login
+            or not self.active_friend
+            or self._sending
+        ):
             return
 
         text = self.input_edit.text().strip()

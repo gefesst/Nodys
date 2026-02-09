@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from config import load_config, save_config, clear_config
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
+from user_context import UserContext
 
 
 class ProfilePage(QWidget, ThreadSafeMixin):
@@ -271,10 +272,18 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         data = {"action": "logout", "login": self.login}
         self.start_request(data, self.on_logout_finished)
 
+    from user_context import UserContext
+
     def on_logout_finished(self, _resp):
         clear_config()
+        UserContext().clear()
         if self.parent_window:
-            self.parent_window.show_login()
+            # для single-window контроллера
+            if hasattr(self.parent_window, "controller") and self.parent_window.controller:
+                self.parent_window.controller.logout_to_auth()
+            else:
+                self.parent_window.show_login()
+
 
     # ==================================================
     # ==================== Lifecycle ===================

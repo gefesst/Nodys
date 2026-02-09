@@ -113,18 +113,30 @@ class MainWindow(QWidget):
     # ==================================================
 
     def show_friends(self):
-        self.chats_page.stop_auto_update()
-        self.stack.setCurrentIndex(0)
-        if hasattr(self.friends_page, "refresh"):
+        self.stack.setCurrentWidget(self.friends_page)
+        try:
+            self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+        try:
             self.friends_page.refresh()
+            if hasattr(self.friends_page, "timer") and not self.friends_page.timer.isActive():
+                self.friends_page.timer.start(5000)
+        except Exception:
+            pass
+
 
     def show_chats(self):
-        self.stack.setCurrentIndex(1)
-        if hasattr(self.chats_page, "load_friends"):
-            self.chats_page.load_friends()
-        self.chats_page.start_auto_update()
-        # на всякий случай поддернем unread сразу при входе во вкладку
-        self.chats_page.load_unread_counts()
+        self.stack.setCurrentWidget(self.chats_page)
+        try:
+            if hasattr(self.friends_page, "timer") and self.friends_page.timer.isActive():
+                self.friends_page.timer.stop()
+        except Exception:
+            pass
+        try:
+            self.chats_page.start_auto_update()
+        except Exception:
+            pass
 
     def show_channels(self):
         self.chats_page.stop_auto_update()
@@ -230,3 +242,89 @@ class MainWindow(QWidget):
             app.quit()
 
         event.accept()
+
+    def reload_from_context(self, full_reset=False):
+        """
+        Подтягивает актуального пользователя из UserContext
+        и перезапускает страницы после логина/перелогина.
+        """
+        from user_context import UserContext
+        self.ctx = UserContext()
+
+        # Обновляем профиль
+        try:
+            self.profile_page.login = self.ctx.login
+            self.profile_page.nickname = self.ctx.nickname
+            self.profile_page.nickname_edit.setText(self.ctx.nickname)
+            self.profile_page.avatar_path = self.ctx.avatar or ""
+            self.profile_page._apply_avatar(self.profile_page.avatar_path)
+        except Exception:
+            pass
+
+        # Передаем новый контекст дочерним страницам
+        try:
+            self.friends_page.ctx = self.ctx
+        except Exception:
+            pass
+
+        try:
+            self.chats_page.ctx = self.ctx
+        except Exception:
+            pass
+
+        if full_reset:
+            # Friends page reset
+            try:
+                self.friends_page.clear_list()
+                self.friends_page._loading_friends = False
+                self.friends_page._loading_requests = False
+                self.friends_page._found_user = None
+                self.friends_page.refresh()
+                if hasattr(self.friends_page, "timer") and not self.friends_page.timer.isActive():
+                    self.friends_page.timer.start(5000)
+            except Exception:
+                pass
+
+            # Chats page reset
+            try:
+                self.chats_page.stop_auto_update()
+                self.chats_page.active_friend = None
+                self.chats_page._loading_friends = False
+                self.chats_page._loading_messages = False
+                self.chats_page._sending = False
+                self.chats_page._loading_unread = False
+                self.chats_page.unread_counts = {}
+                self.chats_page.unread_total = 0
+                self.chats_page.chat_header.setText("Выберите друга")
+                self.chats_page._clear_friends()
+                self.chats_page._clear_messages()
+                self.chats_page.start_auto_update()  # подтянет unread + friends
+            except Exception:
+                pass
+
+        # По умолчанию открываем друзей
+        self.show_friends()
+
+
+
+    def prepare_to_close_app(self):
+        """
+        Вызывается контейнером AppWindow при закрытии приложения.
+        """
+        try:
+            self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+        try:
+            if hasattr(self.friends_page, "timer"):
+                self.friends_page.timer.stop()
+        except Exception:
+            pass
+
+        for page in (self.friends_page, self.chats_page, self.profile_page):
+            try:
+                page._alive = False
+                if hasattr(page, "shutdown_requests"):
+                    page.shutdown_requests(wait_ms=1200)
+            except Exception:
+                pass
