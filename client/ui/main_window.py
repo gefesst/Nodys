@@ -22,7 +22,6 @@ class MainWindow(QWidget):
         self.ctx = UserContext()
 
         self.is_logging_out = False
-        self.close_thread = None
         self._is_closing = False
 
         self.setWindowTitle("Nodys")
@@ -43,6 +42,9 @@ class MainWindow(QWidget):
         self.chats_page = ChatsPage(self)          # index 1
         self.channels_page = ChannelsPage(self)    # index 2
         self.profile_page = ProfilePage(self.ctx.login, self.ctx.nickname, self)  # index 3
+
+        # Подписка на обновление общего unread из ChatsPage
+        self.chats_page.on_unread_total_changed = self.update_chats_badge
 
         self.stack.addWidget(self.friends_page)
         self.stack.addWidget(self.chats_page)
@@ -73,10 +75,15 @@ class MainWindow(QWidget):
             btn.clicked.connect(callback)
             return btn
 
-        menu_layout.addWidget(make_button("Друзья", self.show_friends))
-        menu_layout.addWidget(make_button("Чаты", self.show_chats))
-        menu_layout.addWidget(make_button("Каналы", self.show_channels))
-        menu_layout.addWidget(make_button("Мой профиль", self.show_profile))
+        self.btn_friends = make_button("Друзья", self.show_friends)
+        self.btn_chats = make_button("Чаты", self.show_chats)
+        self.btn_channels = make_button("Каналы", self.show_channels)
+        self.btn_profile = make_button("Мой профиль", self.show_profile)
+
+        menu_layout.addWidget(self.btn_friends)
+        menu_layout.addWidget(self.btn_chats)
+        menu_layout.addWidget(self.btn_channels)
+        menu_layout.addWidget(self.btn_profile)
         menu_layout.addStretch()
 
         # ---------------- Root layout ----------------
@@ -87,6 +94,19 @@ class MainWindow(QWidget):
 
         # Стартовая вкладка
         self.show_friends()
+
+        # И сразу подгрузим unread, чтобы кнопка "Чаты" была актуальной
+        self.chats_page.load_unread_counts()
+
+    # ==================================================
+    # ================== Бейдж "Чаты" ==================
+    # ==================================================
+
+    def update_chats_badge(self, total: int):
+        if total > 0:
+            self.btn_chats.setText(f"Чаты ({total})")
+        else:
+            self.btn_chats.setText("Чаты")
 
     # ==================================================
     # ================== Навигация ======================
@@ -103,6 +123,8 @@ class MainWindow(QWidget):
         if hasattr(self.chats_page, "load_friends"):
             self.chats_page.load_friends()
         self.chats_page.start_auto_update()
+        # на всякий случай поддернем unread сразу при входе во вкладку
+        self.chats_page.load_unread_counts()
 
     def show_channels(self):
         self.chats_page.stop_auto_update()
@@ -163,18 +185,17 @@ class MainWindow(QWidget):
     # ==================================================
 
     def closeEvent(self, event):
-        # Защита от повторного входа в closeEvent
         if self._is_closing:
             event.accept()
             return
         self._is_closing = True
 
-        # Если это logout-переход (show_login), не выходим из приложения
+        # Если это logout-переход на auth — не выходим из приложения
         if self.is_logging_out:
             event.accept()
             return
 
-        # Это именно закрытие приложения на крестик
+        # Это закрытие приложения на крестик
         try:
             self.chats_page.stop_auto_update()
         except Exception:
@@ -195,7 +216,7 @@ class MainWindow(QWidget):
             except Exception:
                 pass
 
-        # Снять online-статус на сервере (коротко, без долгой блокировки)
+        # Снять online-статус на сервере (коротко)
         try:
             if self.ctx.login:
                 t = NetworkThread("127.0.0.1", 5555, {"action": "logout", "login": self.ctx.login})
@@ -204,7 +225,6 @@ class MainWindow(QWidget):
         except Exception:
             pass
 
-        # Полное завершение процесса приложения
         app = QApplication.instance()
         if app is not None:
             app.quit()

@@ -1,14 +1,12 @@
-import os
-
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit, QDialog
 )
-from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QTimer
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
+from ui.avatar_widget import AvatarLabel
 
 
 class FriendItem(QFrame):
@@ -23,7 +21,7 @@ class FriendItem(QFrame):
         on_decline=None
     ):
         super().__init__()
-        self.setFixedHeight(56)
+        self.setFixedHeight(64)
         self.setStyleSheet("""
             QFrame {
                 background-color:#2f3136;
@@ -35,36 +33,13 @@ class FriendItem(QFrame):
         """)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(10)
 
-        avatar = QLabel()
-        avatar.setFixedSize(40, 40)
-        avatar.setStyleSheet("background-color:#202225; border-radius:20px;")
-
-        pix = None
-        if avatar_path and os.path.exists(avatar_path):
-            pix = QPixmap(avatar_path)
-        else:
-            for ext in (".png", ".jpg", ".jpeg"):
-                p = os.path.join("avatars", f"{login}{ext}")
-                if os.path.exists(p):
-                    pix = QPixmap(p)
-                    break
-
-        if pix is not None and not pix.isNull():
-            avatar.setPixmap(pix.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-
+        avatar = AvatarLabel(size=44)
+        avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
+        avatar.set_online(online if request_from is None else None, ring_color="#2f3136")
         layout.addWidget(avatar)
-
-        if request_from is None:
-            status = QLabel(avatar)
-            status.setFixedSize(10, 10)
-            status.move(28, 28)
-            status.setStyleSheet(
-                f"border-radius:5px; background-color:{'#43b581' if online else '#747f8d'};"
-            )
-            status.setAttribute(Qt.WA_TransparentForMouseEvents)
 
         name = QLabel(nickname)
         name.setStyleSheet("color:white; font-weight:500;")
@@ -131,7 +106,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.timer.start(5000)
 
     def clear_list(self):
-        for i in reversed(range(self.list_layout.count() - 1)):  # оставляем stretch
+        for i in reversed(range(self.list_layout.count() - 1)):
             item = self.list_layout.itemAt(i)
             if item and item.widget():
                 item.widget().deleteLater()

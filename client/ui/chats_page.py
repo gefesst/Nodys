@@ -4,76 +4,123 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QScrollArea, QFrame, QLineEdit, QPushButton, QSizePolicy
 )
-from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt, QTimer
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
+from ui.avatar_widget import AvatarLabel
 
 
 class ChatFriendItem(QFrame):
-    def __init__(self, login, nickname, avatar_path="", on_click=None, is_active=False, online=False):
+    def __init__(
+        self,
+        login,
+        nickname,
+        avatar_path="",
+        on_click=None,
+        is_active=False,
+        online=False,
+        unread_count=0
+    ):
         super().__init__()
 
-        border = "border:2px solid #5865F2;" if is_active else "border:1px solid transparent;"
-        self.setFixedHeight(56)
-        self.setStyleSheet(f"""
-            QFrame {{
+        self.setFixedHeight(64)
+        self.setObjectName("ChatFriendItem")
+        self.setProperty("active", is_active)
+
+        self.setStyleSheet("""
+            QFrame#ChatFriendItem {
                 background-color:#2f3136;
-                border-radius:8px;
-                {border}
-            }}
-            QFrame:hover {{
+                border:none;
+                border-radius:10px;
+            }
+            QFrame#ChatFriendItem[active="true"] {
                 background-color:#3a3d42;
-            }}
+            }
+            QFrame#ChatFriendItem:hover {
+                background-color:#3a3d42;
+            }
         """)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 5, 10, 5)
-        layout.setSpacing(10)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        avatar = QLabel()
-        avatar.setFixedSize(40, 40)
-        avatar.setStyleSheet("background-color:#202225; border-radius:20px;")
-
-        pix = None
-        if avatar_path and os.path.exists(avatar_path):
-            pix = QPixmap(avatar_path)
-        else:
-            for ext in (".png", ".jpg", ".jpeg"):
-                p = os.path.join("avatars", f"{login}{ext}")
-                if os.path.exists(p):
-                    pix = QPixmap(p)
-                    break
-
-        if pix is not None and not pix.isNull():
-            avatar.setPixmap(pix.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        layout.addWidget(avatar)
-
-        status = QLabel(avatar)
-        status.setFixedSize(10, 10)
-        status.move(28, 28)
-        status.setStyleSheet(
-            f"border-radius:5px; background-color:{'#43b581' if online else '#747f8d'};"
+        # Левая полоска активного элемента
+        self.active_bar = QFrame()
+        self.active_bar.setFixedWidth(4)
+        self.active_bar.setStyleSheet(
+            "background-color:#5865F2; border-top-left-radius:10px; border-bottom-left-radius:10px;"
+            if is_active else
+            "background-color:transparent; border:none;"
         )
-        status.setAttribute(Qt.WA_TransparentForMouseEvents)
+        root.addWidget(self.active_bar)
+
+        # Контент
+        content = QWidget()
+        row = QHBoxLayout(content)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(10)
+
+        # Аватар (круглый cover)
+        avatar = AvatarLabel(size=44)
+        avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
+        avatar.set_online(online, ring_color="#2f3136")
+        row.addWidget(avatar)
+
+        # Текстовый блок (имя + статус)
+        text_col = QVBoxLayout()
+        text_col.setContentsMargins(0, 0, 0, 0)
+        text_col.setSpacing(1)
 
         name = QLabel(nickname)
-        name.setStyleSheet("color:white; font-weight:500;")
-        layout.addWidget(name)
-        layout.addStretch()
+        name.setStyleSheet("color:white; font-size:14px; font-weight:600; border:none;")
+        name.setMaximumWidth(180)
+        name.setWordWrap(False)
+        text_col.addWidget(name)
+
+        sub = QLabel("в сети" if online else "не в сети")
+        sub.setStyleSheet("color:#b9bbbe; font-size:11px; border:none;")
+        text_col.addWidget(sub)
+
+        row.addLayout(text_col, 1)
+        row.addStretch()
+
+        # Unread badge
+        if unread_count > 0:
+            badge = QLabel(str(unread_count))
+            badge.setAlignment(Qt.AlignCenter)
+            badge.setStyleSheet("""
+                QLabel {
+                    background-color:#f04747;
+                    color:white;
+                    border:none;
+                    border-radius:10px;
+                    min-width:20px;
+                    padding:2px 6px;
+                    font-size:11px;
+                    font-weight:700;
+                }
+            """)
+            row.addWidget(badge, alignment=Qt.AlignVCenter)
+
+        root.addWidget(content, 1)
 
         if on_click:
             self.mousePressEvent = lambda event: on_click()
+            content.mousePressEvent = lambda event: on_click()
 
 
 class MessageBubble(QFrame):
-    def __init__(self, text, is_outgoing=False):
+    def __init__(self, text, is_outgoing=False, time_text="", status_text=""):
         super().__init__()
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
+
+        container = QVBoxLayout()
+        container.setSpacing(2)
 
         label = QLabel(text)
         label.setWordWrap(True)
@@ -86,11 +133,39 @@ class MessageBubble(QFrame):
             }}
         """)
 
+        meta_layout = QHBoxLayout()
+        meta_layout.setContentsMargins(0, 0, 0, 0)
+        meta_layout.setSpacing(6)
+
+        time_label = QLabel(time_text)
+        time_label.setStyleSheet("color:#b9bbbe; font-size:10px;")
+
+        status_label = QLabel(status_text)
+        status_label.setStyleSheet("color:#b9bbbe; font-size:10px;")
+
+        if is_outgoing:
+            meta_layout.addStretch()
+            meta_layout.addWidget(time_label)
+            if status_text:
+                meta_layout.addWidget(status_label)
+        else:
+            meta_layout.addWidget(time_label)
+            meta_layout.addStretch()
+
+        meta_widget = QWidget()
+        meta_widget.setLayout(meta_layout)
+
+        container.addWidget(label)
+        container.addWidget(meta_widget)
+
+        wrapper = QWidget()
+        wrapper.setLayout(container)
+
         if is_outgoing:
             lay.addStretch()
-            lay.addWidget(label)
+            lay.addWidget(wrapper)
         else:
-            lay.addWidget(label)
+            lay.addWidget(wrapper)
             lay.addStretch()
 
 
@@ -106,12 +181,17 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self._loading_friends = False
         self._loading_messages = False
         self._sending = False
+        self._loading_unread = False
+
+        self.unread_counts = {}
+        self.unread_total = 0
+        self.on_unread_total_changed = None
 
         root = QHBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(15)
 
-        # left
+        # left: friends list
         self.friends_container = QWidget()
         self.friends_layout = QVBoxLayout(self.friends_container)
         self.friends_layout.setSpacing(6)
@@ -123,7 +203,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.friends_scroll.setStyleSheet("border:none;")
         root.addWidget(self.friends_scroll, 1)
 
-        # right
+        # right: chat area
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(0, 0, 0, 0)
@@ -154,6 +234,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                 padding:6px;
             }
         """)
+        self.input_edit.returnPressed.connect(self.send_message)
         input_lay.addWidget(self.input_edit)
 
         self.send_btn = QPushButton("Отправить")
@@ -176,21 +257,26 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         self.setStyleSheet("background-color:#36393f; color:white;")
 
+        # timers
         self.msg_timer = QTimer(self)
         self.msg_timer.setInterval(2000)
         self.msg_timer.timeout.connect(self.load_messages)
 
         self.friends_timer = QTimer(self)
         self.friends_timer.setInterval(3000)
-        self.friends_timer.timeout.connect(self.load_friends)
+        self.friends_timer.timeout.connect(self._friends_tick)
 
-        self.load_friends()
+        # initial load
+        self.load_unread_counts()
+
+    # ----------------- lifecycle -----------------
 
     def start_auto_update(self):
         if not self.friends_timer.isActive():
             self.friends_timer.start()
         if self.active_friend and not self.msg_timer.isActive():
             self.msg_timer.start()
+        self.load_unread_counts()
 
     def stop_auto_update(self):
         if self.msg_timer.isActive():
@@ -198,17 +284,92 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if self.friends_timer.isActive():
             self.friends_timer.stop()
 
+    def closeEvent(self, event):
+        self._alive = False
+        self.stop_auto_update()
+        self.shutdown_requests(wait_ms=3000)
+        super().closeEvent(event)
+
+    # ----------------- helpers -----------------
+
+    def _friends_tick(self):
+        self.load_unread_counts()
+
     def _clear_friends(self):
         for i in reversed(range(self.friends_layout.count() - 1)):
             item = self.friends_layout.itemAt(i)
-            if item and item.widget():
-                item.widget().deleteLater()
+            if item is None:
+                continue
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+
+    def _add_section_header(self, text: str):
+        header = QLabel(text)
+        header.setStyleSheet("""
+            QLabel {
+                color:#b9bbbe;
+                font-size:11px;
+                font-weight:700;
+                text-transform: uppercase;
+                padding:6px 4px 2px 4px;
+            }
+        """)
+        self.friends_layout.insertWidget(self.friends_layout.count() - 1, header)
 
     def _clear_messages(self):
         for i in reversed(range(self.messages_layout.count() - 1)):
             item = self.messages_layout.itemAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
+
+    @staticmethod
+    def _format_time(dt_str: str) -> str:
+        if not dt_str:
+            return ""
+        try:
+            return dt_str[11:16]
+        except Exception:
+            return ""
+
+    # ----------------- unread -----------------
+
+    def load_unread_counts(self):
+        if self._loading_unread:
+            return
+        self._loading_unread = True
+
+        data = {"action": "get_unread_counts", "login": self.ctx.login}
+
+        def cb(resp):
+            try:
+                if resp.get("status") != "ok":
+                    return
+                self.unread_counts = resp.get("counts", {}) or {}
+                self.unread_total = int(resp.get("total", 0) or 0)
+
+                if callable(self.on_unread_total_changed):
+                    self.on_unread_total_changed(self.unread_total)
+
+                self.load_friends()
+            finally:
+                self._loading_unread = False
+
+        self.start_request(data, cb)
+
+    def mark_chat_read(self, friend_login: str):
+        data = {
+            "action": "mark_chat_read",
+            "login": self.ctx.login,
+            "friend_login": friend_login
+        }
+
+        def cb(_resp):
+            self.load_unread_counts()
+
+        self.start_request(data, cb)
+
+    # ----------------- friends list -----------------
 
     def load_friends(self):
         if self._loading_friends:
@@ -241,22 +402,58 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                     self.chat_header.setText(f["nickname"])
                     break
 
-        for friend in friends:
-            item = ChatFriendItem(
-                login=friend["login"],
-                nickname=friend["nickname"],
-                avatar_path=friend.get("avatar", ""),
-                online=friend.get("online", False),
-                is_active=(friend["login"] == current_login),
-                on_click=lambda f=friend: self.open_chat(f)
-            )
-            self.friends_layout.insertWidget(self.friends_layout.count() - 1, item)
+        def sort_key(f):
+            return (0 if f.get("online", False) else 1, f.get("nickname", "").lower())
+
+        friends_sorted = sorted(friends, key=sort_key)
+        online_friends = [f for f in friends_sorted if f.get("online", False)]
+        offline_friends = [f for f in friends_sorted if not f.get("online", False)]
+
+        if online_friends:
+            self._add_section_header(f"В сети — {len(online_friends)}")
+            for friend in online_friends:
+                count = int(self.unread_counts.get(friend["login"], 0))
+                item = ChatFriendItem(
+                    login=friend["login"],
+                    nickname=friend["nickname"],
+                    avatar_path=friend.get("avatar", ""),
+                    online=True,
+                    is_active=(friend["login"] == current_login),
+                    unread_count=count,
+                    on_click=lambda f=friend: self.open_chat(f)
+                )
+                self.friends_layout.insertWidget(self.friends_layout.count() - 1, item)
+
+        if offline_friends:
+            self._add_section_header(f"Не в сети — {len(offline_friends)}")
+            for friend in offline_friends:
+                count = int(self.unread_counts.get(friend["login"], 0))
+                item = ChatFriendItem(
+                    login=friend["login"],
+                    nickname=friend["nickname"],
+                    avatar_path=friend.get("avatar", ""),
+                    online=False,
+                    is_active=(friend["login"] == current_login),
+                    unread_count=count,
+                    on_click=lambda f=friend: self.open_chat(f)
+                )
+                self.friends_layout.insertWidget(self.friends_layout.count() - 1, item)
+
+        if not friends:
+            empty = QLabel("У тебя пока нет друзей для чата")
+            empty.setStyleSheet("color:#b9bbbe; padding:8px;")
+            self.friends_layout.insertWidget(self.friends_layout.count() - 1, empty)
+
+    # ----------------- chat -----------------
 
     def open_chat(self, friend):
         self.active_friend = friend
         self.chat_header.setText(friend["nickname"])
-        self.load_friends()   # чтобы подсветить выбранного
+
+        self.mark_chat_read(friend["login"])
+        self.load_friends()
         self.load_messages()
+
         if not self.msg_timer.isActive():
             self.msg_timer.start()
 
@@ -284,10 +481,22 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             return
 
         self._clear_messages()
+
         for msg in resp.get("messages", []):
             text = msg.get("text", msg.get("message", ""))
             is_outgoing = (msg.get("from_user") == self.ctx.login)
-            bubble = MessageBubble(text, is_outgoing)
+            time_text = self._format_time(msg.get("created_at", ""))
+
+            status_text = ""
+            if is_outgoing:
+                status_text = "✓✓" if bool(msg.get("is_read", False)) else "✓"
+
+            bubble = MessageBubble(
+                text=text,
+                is_outgoing=is_outgoing,
+                time_text=time_text,
+                status_text=status_text
+            )
             self.messages_layout.insertWidget(self.messages_layout.count() - 1, bubble)
 
         sb = self.messages_scroll.verticalScrollBar()
@@ -309,17 +518,12 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             "message": text
         }
 
-        def cb(_):
+        def cb(_resp):
             try:
                 self.load_messages()
+                self.load_unread_counts()
             finally:
                 self._sending = False
 
         self.start_request(data, cb)
         self.input_edit.clear()
-
-    def closeEvent(self, event):
-        self._alive = False
-        self.stop_auto_update()
-        self.shutdown_requests(wait_ms=3000)
-        super().closeEvent(event)
