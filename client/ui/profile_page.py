@@ -3,7 +3,7 @@ import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QMessageBox
+    QPushButton, QFileDialog, QMessageBox, QFrame
 )
 from PySide6.QtCore import Qt
 
@@ -37,96 +37,74 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def _build_ui(self):
         self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(14)
-        self.layout.setContentsMargins(30, 30, 30, 30)
+        self.layout.setSpacing(12)
+        self.layout.setContentsMargins(18, 18, 18, 18)
 
-        self.setStyleSheet("background-color:#36393f; color:white; border-radius:10px;")
+        self.setObjectName("ProfilePage")
+
+        # Внешняя карточка
+        self.card = QFrame()
+        self.card.setObjectName("ProfileCard")
+        card_l = QVBoxLayout(self.card)
+        card_l.setSpacing(12)
+        card_l.setContentsMargins(20, 20, 20, 20)
 
         # Аватар
         self.avatar_label = AvatarLabel(size=110)
-        self.layout.addWidget(self.avatar_label, alignment=Qt.AlignHCenter)
+        card_l.addWidget(self.avatar_label, alignment=Qt.AlignHCenter)
 
         # Статус
         self.status_label = QLabel("● Offline")
-        self.status_label.setStyleSheet("color:#f04747; font-weight:bold;")
+        self.status_label.setObjectName("ProfileStatusOffline")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.layout.addWidget(self.status_label)
-
-        # Ник
-        self.nickname_edit = QLineEdit(self.nickname)
-        self.nickname_edit.setPlaceholderText("Никнейм")
-        self.nickname_edit.setStyleSheet(self.lineedit_style())
-        self.layout.addWidget(self.nickname_edit)
+        card_l.addWidget(self.status_label)
 
         # Логин
-        self.login_label = QLabel(f"Логин: {self.login}")
-        self.login_label.setStyleSheet("color:#b9bbbe;")
-        self.layout.addWidget(self.login_label)
+        self.login_title = QLabel("Логин")
+        self.login_title.setObjectName("FieldTitle")
+        card_l.addWidget(self.login_title)
+
+        self.login_label = QLabel(self.login)
+        self.login_label.setObjectName("ProfileLogin")
+        card_l.addWidget(self.login_label)
+
+        # Никнейм
+        self.nick_title = QLabel("Никнейм")
+        self.nick_title.setObjectName("FieldTitle")
+        card_l.addWidget(self.nick_title)
+
+        self.nickname_edit = QLineEdit(self.nickname)
+        self.nickname_edit.setPlaceholderText("Никнейм")
+        card_l.addWidget(self.nickname_edit)
 
         # Пароль
+        self.pass_title = QLabel("Изменение пароля")
+        self.pass_title.setObjectName("FieldTitle")
+        card_l.addWidget(self.pass_title)
+
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.Password)
         self.password_edit.setPlaceholderText("Новый пароль (необязательно)")
-        self.password_edit.setStyleSheet(self.lineedit_style())
-        self.layout.addWidget(self.password_edit)
+        card_l.addWidget(self.password_edit)
 
         # Кнопки
         btn_avatar = QPushButton("Изменить аватар")
-        btn_avatar.setStyleSheet(self.button_style())
+        btn_avatar.setObjectName("ProfilePrimaryButton")
         btn_avatar.clicked.connect(self.choose_avatar)
-        self.layout.addWidget(btn_avatar)
+        card_l.addWidget(btn_avatar)
 
         btn_save = QPushButton("Сохранить изменения")
-        btn_save.setStyleSheet(self.button_style())
+        btn_save.setObjectName("ProfilePrimaryButton")
         btn_save.clicked.connect(self.save_changes)
-        self.layout.addWidget(btn_save)
+        card_l.addWidget(btn_save)
 
         btn_logout = QPushButton("Выйти из аккаунта")
-        btn_logout.setStyleSheet(self.button_style(danger=True))
+        btn_logout.setObjectName("ProfileDangerButton")
         btn_logout.clicked.connect(self.logout)
-        self.layout.addWidget(btn_logout)
+        card_l.addWidget(btn_logout)
 
+        self.layout.addWidget(self.card)
         self.layout.addStretch()
-
-    def lineedit_style(self):
-        return """
-            QLineEdit {
-                background-color:#202225;
-                border:1px solid #2f3136;
-                border-radius:6px;
-                padding:8px;
-                color:white;
-            }
-            QLineEdit:focus {
-                border:1px solid #5865F2;
-            }
-        """
-
-    def button_style(self, danger=False):
-        if danger:
-            return """
-                QPushButton {
-                    background-color:#f04747;
-                    border-radius:6px;
-                    padding:8px;
-                    color:white;
-                }
-                QPushButton:hover {
-                    background-color:#d83c3c;
-                }
-            """
-        return """
-            QPushButton {
-                background-color:#3c3f45;
-                border-radius:6px;
-                padding:8px;
-                color:white;
-            }
-            QPushButton:hover {
-                background-color:#5865F2;
-            }
-        """
-
     # ==================================================
     # ================== Avatar logic ==================
     # ==================================================
@@ -176,6 +154,29 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             nickname=self.nickname_edit.text().strip() or self.nickname
         )
 
+
+    def set_user_data(self, login, nickname, avatar=""):
+        """
+        Обновляет страницу профиля после перелогина без пересоздания страницы.
+        """
+        self.login = login or ""
+        self.nickname = nickname or ""
+        self.avatar_path = avatar or ""
+
+        try:
+            self.login_label.setText(self.login or "—")
+        except Exception:
+            pass
+        try:
+            self.nickname_edit.setText(self.nickname)
+            self.login_label.setText(self.login or "—")
+        except Exception:
+            pass
+        try:
+            self._apply_avatar(self.avatar_path)
+        except Exception:
+            pass
+
     def _load_initial_profile_data(self):
         """
         Источник приоритета:
@@ -184,10 +185,16 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         """
         cfg = load_config()
 
+        # Логин из контекста приоритетный, но если пустой — берем из config
+        if (not self.login) and cfg.get("login"):
+            self.login = cfg.get("login", "")
+        self.login_label.setText(self.login or "—")
+
         # Ник из контекста окна приоритетный, но если пустой — берем из config
         if not self.nickname and cfg.get("nickname"):
             self.nickname = cfg.get("nickname", "")
             self.nickname_edit.setText(self.nickname)
+            self.login_label.setText(self.login or "—")
 
         self.avatar_path = cfg.get("avatar", "") or ""
 
@@ -263,16 +270,16 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     def update_status(self, online: bool):
         if online:
             self.status_label.setText("● Online")
-            self.status_label.setStyleSheet("color:#43b581; font-weight:bold;")
+            self.status_label.setObjectName("ProfileStatusOnline")
+            self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
         else:
             self.status_label.setText("● Offline")
-            self.status_label.setStyleSheet("color:#f04747; font-weight:bold;")
+            self.status_label.setObjectName("ProfileStatusOffline")
+            self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
 
     def logout(self):
         data = {"action": "logout", "login": self.login}
         self.start_request(data, self.on_logout_finished)
-
-    from user_context import UserContext
 
     def on_logout_finished(self, _resp):
         clear_config()

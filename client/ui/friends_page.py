@@ -2,7 +2,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QTimer
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -21,16 +21,9 @@ class FriendItem(QFrame):
         on_decline=None
     ):
         super().__init__()
+        self.setObjectName("FriendItem")
+        self.setProperty("request", request_from is not None)
         self.setFixedHeight(64)
-        self.setStyleSheet("""
-            QFrame {
-                background-color:#2f3136;
-                border-radius:10px;
-            }
-            QFrame:hover {
-                background-color:#3a3d42;
-            }
-        """)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -38,7 +31,7 @@ class FriendItem(QFrame):
 
         avatar = AvatarLabel(size=44)
         avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
-        avatar.set_online(online if request_from is None else None, ring_color="#2f3136")
+        avatar.set_online(online if request_from is None else None, ring_color="#2b2d31")
         layout.addWidget(avatar)
 
         text_col = QVBoxLayout()
@@ -46,11 +39,11 @@ class FriendItem(QFrame):
         text_col.setSpacing(1)
 
         name = QLabel(nickname)
-        name.setStyleSheet("color:white; font-size:14px; font-weight:600;")
+        name.setObjectName("FriendItemName")
         text_col.addWidget(name)
 
         sub = QLabel(login if request_from is None else f"Запрос от: {login}")
-        sub.setStyleSheet("color:#b9bbbe; font-size:11px;")
+        sub.setObjectName("FriendItemSub")
         text_col.addWidget(sub)
 
         layout.addLayout(text_col)
@@ -58,19 +51,15 @@ class FriendItem(QFrame):
 
         if request_from is not None:
             btn_accept = QPushButton("Принять")
-            btn_accept.setStyleSheet("""
-                QPushButton { background:#43b581; border-radius:6px; padding:5px 10px; color:white; }
-                QPushButton:hover { background:#3ca374; }
-            """)
-            btn_accept.clicked.connect(lambda: on_accept(request_from))
+            btn_accept.setObjectName("AcceptButton")
+            if on_accept:
+                btn_accept.clicked.connect(lambda: on_accept(request_from))
             layout.addWidget(btn_accept)
 
             btn_decline = QPushButton("Отклонить")
-            btn_decline.setStyleSheet("""
-                QPushButton { background:#f04747; border-radius:6px; padding:5px 10px; color:white; }
-                QPushButton:hover { background:#d83c3c; }
-            """)
-            btn_decline.clicked.connect(lambda: on_decline(request_from))
+            btn_decline.setObjectName("DeclineButton")
+            if on_decline:
+                btn_decline.clicked.connect(lambda: on_decline(request_from))
             layout.addWidget(btn_decline)
 
 
@@ -79,70 +68,53 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         super().__init__(parent)
         self.ctx = UserContext()
 
-        # Для ThreadSafeMixin
+        # ThreadSafeMixin state
         self._threads = []
         self._alive = True
 
+        # state flags
         self._loading_friends = False
         self._loading_requests = False
         self._finding_user = False
         self._sending_request = False
         self._found_user = None
 
+        self.setObjectName("FriendsPage")
+
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(12)
 
-        # ---------- Header ----------
-        head = QHBoxLayout()
+        # ---------- Top bar card ----------
+        topbar = QFrame()
+        topbar.setObjectName("FriendsTopBar")
+        head = QHBoxLayout(topbar)
+        head.setContentsMargins(12, 10, 12, 10)
+        head.setSpacing(10)
+
         title = QLabel("Друзья")
-        title.setStyleSheet("font-size:18px; font-weight:700; color:white;")
+        title.setObjectName("FriendsTitle")
         head.addWidget(title)
         head.addStretch()
 
         self.add_btn = QPushButton("Добавить друга")
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#5865F2;
-                color:white;
-                border-radius:8px;
-                padding:8px 12px;
-                font-weight:600;
-            }
-            QPushButton:hover {
-                background-color:#4752c4;
-            }
-        """)
+        self.add_btn.setObjectName("AddFriendButton")
         self.add_btn.clicked.connect(self.toggle_add_friend_panel)
         head.addWidget(self.add_btn)
 
-        root.addLayout(head)
+        root.addWidget(topbar)
 
         # ---------- Inline add panel ----------
         self.add_panel = QFrame()
+        self.add_panel.setObjectName("AddFriendPanel")
         self.add_panel.setVisible(False)
-        self.add_panel.setStyleSheet("""
-            QFrame {
-                background-color:#2f3136;
-                border-radius:10px;
-            }
-            QLineEdit {
-                background-color:#202225;
-                border:1px solid #40444b;
-                border-radius:8px;
-                padding:8px;
-                color:white;
-            }
-            QLabel {
-                color:#b9bbbe;
-            }
-        """)
+
         panel_lay = QVBoxLayout(self.add_panel)
         panel_lay.setContentsMargins(12, 12, 12, 12)
         panel_lay.setSpacing(8)
 
         panel_title = QLabel("Добавить друга по логину")
-        panel_title.setStyleSheet("color:white; font-weight:600; font-size:13px;")
+        panel_title.setObjectName("AddPanelTitle")
         panel_lay.addWidget(panel_title)
 
         row = QHBoxLayout()
@@ -151,20 +123,13 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         row.addWidget(self.login_input)
 
         self.find_btn = QPushButton("Найти")
-        self.find_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#3c3f45;
-                color:white;
-                border-radius:8px;
-                padding:8px 12px;
-            }
-            QPushButton:hover { background-color:#4a4e57; }
-        """)
+        self.find_btn.setObjectName("FindUserButton")
         self.find_btn.clicked.connect(self.find_user_inline)
         row.addWidget(self.find_btn)
         panel_lay.addLayout(row)
 
         self.find_result = QLabel("")
+        self.find_result.setObjectName("AddPanelHint")
         self.find_result.setWordWrap(True)
         panel_lay.addWidget(self.find_result)
 
@@ -172,45 +137,29 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         panel_actions.addStretch()
 
         self.send_request_btn = QPushButton("Отправить запрос")
+        self.send_request_btn.setObjectName("SendRequestButton")
         self.send_request_btn.setEnabled(False)
-        self.send_request_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#5865F2;
-                color:white;
-                border-radius:8px;
-                padding:8px 12px;
-                font-weight:600;
-            }
-            QPushButton:hover { background-color:#4752c4; }
-            QPushButton:disabled {
-                background-color:#3a3d42;
-                color:#8e9297;
-            }
-        """)
         self.send_request_btn.clicked.connect(self.send_request_inline)
         panel_actions.addWidget(self.send_request_btn)
 
         self.close_add_panel_btn = QPushButton("Скрыть")
-        self.close_add_panel_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#3c3f45;
-                color:white;
-                border-radius:8px;
-                padding:8px 12px;
-            }
-            QPushButton:hover { background-color:#4a4e57; }
-        """)
+        self.close_add_panel_btn.setObjectName("HideAddPanelButton")
         self.close_add_panel_btn.clicked.connect(self.hide_add_friend_panel)
         panel_actions.addWidget(self.close_add_panel_btn)
 
         panel_lay.addLayout(panel_actions)
-
         root.addWidget(self.add_panel)
 
-        # ---------- List ----------
+        # ---------- Main content card ----------
+        body_card = QFrame()
+        body_card.setObjectName("FriendsContentCard")
+        body_lay = QVBoxLayout(body_card)
+        body_lay.setContentsMargins(10, 10, 10, 10)
+        body_lay.setSpacing(8)
+
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
-        self.scroll.setStyleSheet("border:none; background:transparent;")
+        self.scroll.setObjectName("FriendsScrollArea")
 
         self.container = QWidget()
         self.list_layout = QVBoxLayout(self.container)
@@ -218,11 +167,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.list_layout.addStretch()
 
         self.scroll.setWidget(self.container)
-        root.addWidget(self.scroll, 1)
+        body_lay.addWidget(self.scroll)
+        root.addWidget(body_card, 1)
 
-        self.setStyleSheet("background-color:#36393f; color:white;")
-
-        # Auto refresh
+        # timer
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(5000)
@@ -230,19 +178,14 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.refresh()
 
     # ==================================================
-    # ================= Lifecycle ======================
+    # lifecycle
     # ==================================================
-
     def reset_for_user(self):
-        """
-        Полный reset при перелогине/смене пользователя.
-        """
         self._loading_friends = False
         self._loading_requests = False
         self._finding_user = False
         self._sending_request = False
         self._found_user = None
-
         self.clear_list()
         self.hide_add_friend_panel()
 
@@ -254,14 +197,12 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         super().closeEvent(event)
 
     # ==================================================
-    # ================= UI helpers =====================
+    # UI helpers
     # ==================================================
-
     def toggle_add_friend_panel(self):
         visible = not self.add_panel.isVisible()
         self.add_panel.setVisible(visible)
         self.add_btn.setText("Скрыть добавление" if visible else "Добавить друга")
-
         if not visible:
             self._reset_add_panel_state()
 
@@ -277,7 +218,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self._found_user = None
 
     def clear_list(self):
-        # удаляем всё кроме stretch
         for i in reversed(range(self.list_layout.count() - 1)):
             item = self.list_layout.itemAt(i)
             if item and item.widget():
@@ -285,21 +225,12 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
     def _add_section_header(self, text: str):
         header = QLabel(text)
-        header.setStyleSheet("""
-            QLabel {
-                color:#b9bbbe;
-                font-size:11px;
-                font-weight:700;
-                text-transform: uppercase;
-                padding:4px 2px;
-            }
-        """)
+        header.setObjectName("SectionHeader")
         self.list_layout.insertWidget(self.list_layout.count() - 1, header)
 
     # ==================================================
-    # ================= Refresh ========================
+    # refresh
     # ==================================================
-
     def refresh(self):
         if not self._alive or not self.ctx.login:
             return
@@ -308,9 +239,8 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.load_friends()
 
     # ==================================================
-    # ================ Friend requests =================
+    # requests
     # ==================================================
-
     def load_requests(self):
         if not self._alive or self._loading_requests or not self.ctx.login:
             return
@@ -327,16 +257,19 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_requests(self, resp):
+        if resp.get("status") != "ok":
+            return
+
         requests = resp.get("requests", [])
         if not requests:
             return
 
-        self._add_section_header(f"Запросы дружбы — {len(requests)}")
+        self._add_section_header(f"Заявки в друзья — {len(requests)}")
 
         for req_login in requests:
             item = FriendItem(
                 login=req_login,
-                nickname=req_login,  # Можно заменить, если сервер будет возвращать nickname по заявке
+                nickname=req_login,
                 request_from=req_login,
                 on_accept=self.accept_request,
                 on_decline=self.decline_request
@@ -344,25 +277,16 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
     def accept_request(self, from_user):
-        data = {
-            "action": "accept_friend_request",
-            "login": self.ctx.login,
-            "from_user": from_user
-        }
+        data = {"action": "accept_friend_request", "login": self.ctx.login, "from_user": from_user}
         self.start_request(data, lambda _resp: self.refresh())
 
     def decline_request(self, from_user):
-        data = {
-            "action": "decline_friend_request",
-            "login": self.ctx.login,
-            "from_user": from_user
-        }
+        data = {"action": "decline_friend_request", "login": self.ctx.login, "from_user": from_user}
         self.start_request(data, lambda _resp: self.refresh())
 
     # ==================================================
-    # =================== Friends ======================
+    # friends
     # ==================================================
-
     def load_friends(self):
         if not self._alive or self._loading_friends or not self.ctx.login:
             return
@@ -379,10 +303,13 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_friends(self, resp):
+        if resp.get("status") != "ok":
+            return
+
         friends = resp.get("friends", [])
         if not friends:
             empty = QLabel("У тебя пока нет друзей")
-            empty.setStyleSheet("color:#8e9297; padding:8px;")
+            empty.setObjectName("EmptyHint")
             self.list_layout.insertWidget(self.list_layout.count() - 1, empty)
             return
 
@@ -417,9 +344,8 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                 self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
     # ==================================================
-    # ============== Inline add friend =================
+    # add friend inline
     # ==================================================
-
     def find_user_inline(self):
         if self._finding_user or not self._alive:
             return

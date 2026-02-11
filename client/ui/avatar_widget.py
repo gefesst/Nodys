@@ -17,7 +17,7 @@ class AvatarLabel(QLabel):
 
         self.setFixedSize(size, size)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("border:none; background:transparent;")
+        self.setStyleSheet("border:2px solid #5865F2; border-radius:%dpx; background:transparent;" % (size//2))
 
         self._dot = QLabel(self)
         self._dot.hide()
@@ -31,7 +31,9 @@ class AvatarLabel(QLabel):
         if pix is None or pix.isNull():
             pix = self._make_initials_avatar(nickname or login or "U")
 
-        self.setPixmap(self._to_circle(pix, self.size_px))
+        # Делаем внутреннее изображение немного меньше, чтобы обводка была хорошо видна
+        inner = max(8, self.size_px - 8)
+        self.setPixmap(self._to_circle(pix, inner))
 
     def set_online(self, online: bool | None, ring_color: str | None = None):
         """

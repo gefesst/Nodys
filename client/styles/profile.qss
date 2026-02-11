@@ -1,0 +1,20 @@
+
+QWidget#ProfilePage { background: transparent; }
+QFrame#ProfileCard {
+    background-color:#2b2d31;
+    border:1px solid #3a3d42;
+    border-radius:14px;
+}
+QLabel#ProfileLogin { color:#d7d9dd; font-size:13px; }
+QLabel#FieldTitle { color:#b9bbbe; font-size:12px; font-weight:700; margin-top:2px; }
+QLabel#ProfileStatusOnline { color:#43b581; font-weight:700; }
+QLabel#ProfileStatusOffline { color:#f04747; font-weight:700; }
+
+QPushButton#ProfilePrimaryButton {
+    background-color:#5865F2; color:white; font-weight:700; min-height:38px; border-radius:10px;
+}
+QPushButton#ProfilePrimaryButton:hover { background-color:#4752c4; }
+QPushButton#ProfileDangerButton {
+    background-color:#f04747; color:white; font-weight:700; min-height:38px; border-radius:10px;
+}
+QPushButton#ProfileDangerButton:hover { background-color:#d83c3c; }

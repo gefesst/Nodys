@@ -1,0 +1,86 @@
+QWidget#FriendsPage {
+    background: #36393f;
+}
+
+QFrame#FriendsTopBar,
+QFrame#FriendsContentCard,
+QFrame#AddFriendPanel {
+    background: #2b2d31;
+    border: 1px solid #3a3d42;
+    border-radius: 14px;
+}
+
+QLabel#FriendsTitle {
+    font-size: 18px;
+    font-weight: 800;
+    color: white;
+}
+
+QPushButton#AddFriendButton,
+QPushButton#FindUserButton,
+QPushButton#SendRequestButton,
+QPushButton#HideAddPanelButton {
+    background: #5865F2;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 12px;
+    min-height: 36px;
+    font-weight: 700;
+}
+
+QPushButton#HideAddPanelButton { background: #4f545c; }
+QPushButton#AddFriendButton:hover,
+QPushButton#FindUserButton:hover,
+QPushButton#SendRequestButton:hover { background: #4752c4; }
+QPushButton#HideAddPanelButton:hover { background: #5d6269; }
+
+QLineEdit {
+    background: #202225;
+    color: white;
+    border: 1px solid #3a3d42;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+QLabel#SectionHeader {
+    color: #b9bbbe;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 6px 4px;
+    text-transform: uppercase;
+}
+
+QFrame#FriendItem {
+    background: #313338;
+    border: none;
+    border-radius: 12px;
+    min-height: 64px;
+    max-height: 64px;
+}
+QFrame#FriendItem:hover {
+    background: #3a3d42;
+}
+
+QLabel#FriendItemName { color: white; font-size: 14px; font-weight: 700; }
+QLabel#FriendItemSub { color: #b9bbbe; font-size: 11px; }
+
+QPushButton#AcceptButton {
+    background: #43b581;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
+}
+QPushButton#AcceptButton:hover { background: #3aa06f; }
+
+QPushButton#DeclineButton {
+    background: #f04747;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 700;
+}
+QPushButton#DeclineButton:hover { background: #d83c3c; }

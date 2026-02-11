@@ -26,19 +26,6 @@ class ChatFriendItem(QFrame):
         self.setObjectName("ChatFriendItem")
         self.setProperty("active", is_active)
 
-        self.setStyleSheet("""
-            QFrame#ChatFriendItem {
-                background-color:#2f3136;
-                border:none;
-                border-radius:10px;
-            }
-            QFrame#ChatFriendItem[active="true"] {
-                background-color:#3a3d42;
-            }
-            QFrame#ChatFriendItem:hover {
-                background-color:#3a3d42;
-            }
-        """)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -47,11 +34,8 @@ class ChatFriendItem(QFrame):
         # Левая полоска выбранного элемента
         self.active_bar = QFrame()
         self.active_bar.setFixedWidth(4)
-        self.active_bar.setStyleSheet(
-            "background-color:#5865F2; border-top-left-radius:10px; border-bottom-left-radius:10px;"
-            if is_active else
-            "background-color:transparent; border:none;"
-        )
+        self.active_bar.setObjectName("ChatActiveBar")
+        self.active_bar.setProperty("active", is_active)
         root.addWidget(self.active_bar)
 
         content = QWidget()
@@ -71,11 +55,11 @@ class ChatFriendItem(QFrame):
         text_col.setSpacing(1)
 
         name = QLabel(nickname)
-        name.setStyleSheet("color:white; font-size:14px; font-weight:600; border:none;")
+        name.setObjectName("ChatFriendName")
         text_col.addWidget(name)
 
         sub = QLabel("в сети" if online else "не в сети")
-        sub.setStyleSheet("color:#b9bbbe; font-size:11px; border:none;")
+        sub.setObjectName("ChatFriendSub")
         text_col.addWidget(sub)
 
         row.addLayout(text_col, 1)
@@ -84,19 +68,8 @@ class ChatFriendItem(QFrame):
         # badge непрочитанных
         if unread_count > 0:
             badge = QLabel(str(unread_count))
+            badge.setObjectName("UnreadBadge")
             badge.setAlignment(Qt.AlignCenter)
-            badge.setStyleSheet("""
-                QLabel {
-                    background-color:#f04747;
-                    color:white;
-                    border:none;
-                    border-radius:10px;
-                    min-width:20px;
-                    padding:2px 6px;
-                    font-size:11px;
-                    font-weight:700;
-                }
-            """)
             row.addWidget(badge, alignment=Qt.AlignVCenter)
 
         root.addWidget(content, 1)
@@ -185,11 +158,16 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.on_unread_total_changed = None
 
         # UI
+        self.setObjectName("ChatsPage")
         root = QHBoxLayout(self)
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(15)
 
         # Левая панель друзей
+        friends_card = QFrame()
+        friends_card.setObjectName("ChatsFriendsCard")
+        friends_card_l = QVBoxLayout(friends_card)
+        friends_card_l.setContentsMargins(8,8,8,8)
         self.friends_container = QWidget()
         self.friends_layout = QVBoxLayout(self.friends_container)
         self.friends_layout.setSpacing(6)
@@ -198,17 +176,21 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.friends_scroll = QScrollArea()
         self.friends_scroll.setWidgetResizable(True)
         self.friends_scroll.setWidget(self.friends_container)
-        self.friends_scroll.setStyleSheet("border:none;")
-        root.addWidget(self.friends_scroll, 1)
+        friends_card_l.addWidget(self.friends_scroll)
+        root.addWidget(friends_card, 1)
 
         # Правая панель чата
+        chat_card = QFrame()
+        chat_card.setObjectName("ChatsDialogCard")
+        chat_card_l = QVBoxLayout(chat_card)
+        chat_card_l.setContentsMargins(10,10,10,10)
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setContentsMargins(0, 0, 0, 0)
         self.chat_layout.setSpacing(5)
 
         self.chat_header = QLabel("Выберите друга")
-        self.chat_header.setStyleSheet("font-weight:bold; color:white; font-size:16px;")
+        self.chat_header.setObjectName("ChatHeader")
         self.chat_layout.addWidget(self.chat_header)
 
         self.messages_container = QWidget()
@@ -218,42 +200,24 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.messages_scroll = QScrollArea()
         self.messages_scroll.setWidgetResizable(True)
         self.messages_scroll.setWidget(self.messages_container)
-        self.messages_scroll.setStyleSheet("border:none; background-color:#36393f;")
         self.chat_layout.addWidget(self.messages_scroll)
 
         input_lay = QHBoxLayout()
         self.input_edit = QLineEdit()
+        self.input_edit.setObjectName("ChatInput")
         self.input_edit.setPlaceholderText("Введите сообщение...")
-        self.input_edit.setStyleSheet("""
-            QLineEdit {
-                background-color:#202225;
-                color:white;
-                border-radius:6px;
-                padding:6px;
-            }
-        """)
         self.input_edit.returnPressed.connect(self.send_message)
         input_lay.addWidget(self.input_edit)
 
         self.send_btn = QPushButton("Отправить")
-        self.send_btn.setStyleSheet("""
-            QPushButton {
-                background-color:#5865F2;
-                color:white;
-                border-radius:6px;
-                padding:6px 10px;
-            }
-            QPushButton:hover {
-                background-color:#4752c4;
-            }
-        """)
+        self.send_btn.setObjectName("ChatSendButton")
         self.send_btn.clicked.connect(self.send_message)
         input_lay.addWidget(self.send_btn)
 
         self.chat_layout.addLayout(input_lay)
-        root.addWidget(self.chat_container, 3)
+        chat_card_l.addWidget(self.chat_container)
+        root.addWidget(chat_card, 3)
 
-        self.setStyleSheet("background-color:#36393f; color:white;")
 
         # Таймеры
         self.msg_timer = QTimer(self)

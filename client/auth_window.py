@@ -14,12 +14,14 @@ class AuthWindow(QWidget):
 
         self.thread = None
 
+        self.setObjectName("AuthPage")
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(60, 60, 60, 60)
         layout.setSpacing(12)
 
         title = QLabel("Вход в Nodys")
-        title.setStyleSheet("font-size:22px; font-weight:700; color:white;")
+        title.setObjectName("AuthTitle")
         layout.addWidget(title)
 
         self.login = QLineEdit()
@@ -32,6 +34,7 @@ class AuthWindow(QWidget):
         layout.addWidget(self.password)
 
         self.btn_login = QPushButton("Войти")
+        self.btn_login.setObjectName("PrimaryButton")
         self.btn_register = QPushButton("Регистрация")
 
         self.btn_login.clicked.connect(self.login_user)
@@ -40,18 +43,6 @@ class AuthWindow(QWidget):
         layout.addWidget(self.btn_login)
         layout.addWidget(self.btn_register)
         layout.addStretch()
-
-        self.setStyleSheet("""
-            QWidget { background-color:#36393f; color:white; }
-            QLineEdit {
-                background-color:#202225; border:1px solid #2f3136; border-radius:8px;
-                padding:10px; color:white;
-            }
-            QPushButton {
-                background-color:#5865F2; border:none; border-radius:8px; padding:10px; color:white;
-            }
-            QPushButton:hover { background-color:#4752c4; }
-        """)
 
     def login_user(self):
         data = {

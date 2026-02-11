@@ -10,13 +10,14 @@ class RegisterWindow(QWidget):
         self.on_back = None
 
         self.thread = None
+        self.setObjectName("RegisterPage")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(60, 60, 60, 60)
         layout.setSpacing(12)
 
         title = QLabel("Регистрация")
-        title.setStyleSheet("font-size:22px; font-weight:700; color:white;")
+        title.setObjectName("RegisterTitle")
         layout.addWidget(title)
 
         self.login = QLineEdit()
@@ -33,6 +34,7 @@ class RegisterWindow(QWidget):
         layout.addWidget(self.nickname)
 
         self.btn_register = QPushButton("Создать аккаунт")
+        self.btn_register.setObjectName("PrimaryButton")
         self.btn_back = QPushButton("Назад ко входу")
 
         self.btn_register.clicked.connect(self.register_user)
@@ -41,18 +43,6 @@ class RegisterWindow(QWidget):
         layout.addWidget(self.btn_register)
         layout.addWidget(self.btn_back)
         layout.addStretch()
-
-        self.setStyleSheet("""
-            QWidget { background-color:#36393f; color:white; }
-            QLineEdit {
-                background-color:#202225; border:1px solid #2f3136; border-radius:8px;
-                padding:10px; color:white;
-            }
-            QPushButton {
-                background-color:#5865F2; border:none; border-radius:8px; padding:10px; color:white;
-            }
-            QPushButton:hover { background-color:#4752c4; }
-        """)
 
     def register_user(self):
         data = {
@@ -70,12 +60,7 @@ class RegisterWindow(QWidget):
     def handle_register_response(self, resp):
         if resp.get("status") == "ok":
             QMessageBox.information(self, "Готово", "Аккаунт успешно создан")
-
-            # Очистим поля
-            self.login.clear()
-            self.password.clear()
-            self.nickname.clear()
-
+            self.login.clear(); self.password.clear(); self.nickname.clear()
             if callable(self.on_registered):
                 self.on_registered()
         else:

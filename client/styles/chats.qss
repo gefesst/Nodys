@@ -1,0 +1,77 @@
+QWidget#ChatsPage {
+    background: #36393f;
+}
+
+QFrame#ChatsFriendsCard,
+QFrame#ChatsDialogCard,
+QLabel#ChatHeader {
+    background: #2b2d31;
+    border: 1px solid #3a3d42;
+    border-radius: 14px;
+}
+
+QLabel#ChatHeader {
+    color: white;
+    font-size: 16px;
+    font-weight: 800;
+    padding: 10px 12px;
+}
+
+QFrame#ChatFriendItem {
+    background: #313338;
+    border: none;                 /* убрана обводка карточки друга */
+    border-radius: 12px;
+    min-height: 64px;
+    max-height: 64px;
+}
+QFrame#ChatFriendItem:hover {
+    background: #3a3d42;
+}
+QFrame#ChatFriendItem[active="true"] {
+    background: #3a3d42;
+}
+
+QFrame#ChatActiveBar {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+QFrame#ChatActiveBar[active="true"] {
+    background: #5865F2;         /* только одна закругленная полоска */
+    border: none;
+    border-top-left-radius: 10px;
+    border-bottom-left-radius: 10px;
+}
+
+QLabel#ChatFriendName { color: white; font-size: 14px; font-weight: 700; background: transparent; border: none; }
+QLabel#ChatFriendSub { color: #b9bbbe; font-size: 11px; background: transparent; border: none; }
+
+QLabel#UnreadBadge {
+    background: #f04747;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+QLineEdit#ChatInput {
+    background: #202225;
+    color: white;
+    border: 1px solid #3a3d42;
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+QPushButton#ChatSendButton {
+    background: #5865F2;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-weight: 700;
+}
+QPushButton#ChatSendButton:hover { background: #4752c4; }

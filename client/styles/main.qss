@@ -1,0 +1,14 @@
+QWidget#MainWindowRoot { background-color:#2f3136; }
+QWidget#Sidebar { background-color:#202225; border-radius:10px; }
+QPushButton#NavButton { background-color:#2f3136; border-radius:10px; min-height:44px; text-align:left; padding-left:12px; }
+QPushButton#NavButton:hover { background-color:#5865F2; }
+
+QWidget#Sidebar { max-width: 180px; min-width: 150px; }
+QPushButton#NavButton { min-height:40px; font-weight:800; qproperty-iconSize: 0px; text-align:center; padding-left:0px; }
+QPushButton#NavButton[active="true"] { background:#5865F2; }
+
+QFrame#UserMiniCard{
+    background:#2f3136; border:1px solid #3a3d42; border-radius:10px;
+}
+QLabel#UserMiniNick { font-weight:800; font-size:12px; color:white; }
+QLabel#UserMiniLogin { color:#b9bbbe; font-size:11px; }

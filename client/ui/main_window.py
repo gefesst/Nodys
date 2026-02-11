@@ -2,7 +2,7 @@ import os
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QSizePolicy, QStackedWidget, QApplication
+    QSizePolicy, QStackedWidget, QApplication, QLabel, QFrame
 )
 from PySide6.QtGui import QIcon
 
@@ -10,6 +10,7 @@ from ui.channels_page import ChannelsPage
 from ui.profile_page import ProfilePage
 from ui.friends_page import FriendsPage
 from ui.chats_page import ChatsPage
+from ui.avatar_widget import AvatarLabel
 
 from user_context import UserContext
 from network import NetworkThread
@@ -26,7 +27,7 @@ class MainWindow(QWidget):
 
         self.setWindowTitle("Nodys")
         self.setMinimumSize(900, 600)
-        self.setStyleSheet("background-color:#2f3136; color:white;")
+        self.setObjectName("MainWindowRoot")
 
         # Иконка приложения (если есть)
         current_dir = os.path.dirname(os.path.abspath(__file__))   # client/ui
@@ -53,25 +54,38 @@ class MainWindow(QWidget):
 
         # ---------------- Sidebar ----------------
         sidebar = QWidget()
-        sidebar.setStyleSheet("background-color:#202225;")
+        sidebar.setObjectName("Sidebar")
         menu_layout = QVBoxLayout(sidebar)
         menu_layout.setContentsMargins(10, 10, 10, 10)
         menu_layout.setSpacing(10)
+
+        # Мини-карточка пользователя
+        self.user_card = QFrame()
+        self.user_card.setObjectName("UserMiniCard")
+        uc_l = QHBoxLayout(self.user_card)
+        uc_l.setContentsMargins(8, 8, 8, 8)
+        uc_l.setSpacing(8)
+        self.user_avatar = AvatarLabel(size=34)
+        self.user_avatar.set_avatar(path=getattr(self.ctx, "avatar", ""), login=self.ctx.login, nickname=self.ctx.nickname)
+        self.user_avatar.set_online(None if not self.ctx.login else False, ring_color="#2f3136")
+        uc_l.addWidget(self.user_avatar)
+        txt_col = QVBoxLayout()
+        txt_col.setContentsMargins(0,0,0,0)
+        txt_col.setSpacing(0)
+        self.user_nick_lbl = QLabel(self.ctx.nickname or "Гость")
+        self.user_nick_lbl.setObjectName("UserMiniNick")
+        self.user_login_lbl = QLabel(self.ctx.login or "")
+        self.user_login_lbl.setObjectName("UserMiniLogin")
+        txt_col.addWidget(self.user_nick_lbl)
+        txt_col.addWidget(self.user_login_lbl)
+        uc_l.addLayout(txt_col)
+        menu_layout.addWidget(self.user_card)
 
         def make_button(text, callback):
             btn = QPushButton(text)
             btn.setFixedHeight(50)
             btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color:#2f3136;
-                    border-radius:10px;
-                    color:white;
-                }
-                QPushButton:hover {
-                    background-color:#5865F2;
-                }
-            """)
+            btn.setObjectName("NavButton")
             btn.clicked.connect(callback)
             return btn
 
@@ -112,7 +126,14 @@ class MainWindow(QWidget):
     # ================== Навигация ======================
     # ==================================================
 
+    def set_active_nav(self, active_btn):
+        for b in (self.btn_friends, self.btn_chats, self.btn_channels, self.btn_profile):
+            b.setProperty("active", b is active_btn)
+            b.style().unpolish(b); b.style().polish(b)
+
+
     def show_friends(self):
+        self.set_active_nav(self.btn_friends)
         self.stack.setCurrentWidget(self.friends_page)
         try:
             self.chats_page.stop_auto_update()
@@ -127,6 +148,7 @@ class MainWindow(QWidget):
 
 
     def show_chats(self):
+        self.set_active_nav(self.btn_chats)
         self.stack.setCurrentWidget(self.chats_page)
         try:
             if hasattr(self.friends_page, "timer") and self.friends_page.timer.isActive():
@@ -139,10 +161,12 @@ class MainWindow(QWidget):
             pass
 
     def show_channels(self):
+        self.set_active_nav(self.btn_channels)
         self.chats_page.stop_auto_update()
         self.stack.setCurrentIndex(2)
 
     def show_profile(self):
+        self.set_active_nav(self.btn_profile)
         self.chats_page.stop_auto_update()
         self.stack.setCurrentIndex(3)
 
@@ -256,8 +280,15 @@ class MainWindow(QWidget):
             self.profile_page.login = self.ctx.login
             self.profile_page.nickname = self.ctx.nickname
             self.profile_page.nickname_edit.setText(self.ctx.nickname)
+            if hasattr(self.profile_page, "login_label"):
+                self.profile_page.login_label.setText(self.ctx.login or "—")
             self.profile_page.avatar_path = self.ctx.avatar or ""
             self.profile_page._apply_avatar(self.profile_page.avatar_path)
+            if hasattr(self.profile_page, "set_user_data"):
+                self.profile_page.set_user_data(self.ctx.login, self.ctx.nickname, getattr(self.ctx, "avatar", ""))
+            self.user_nick_lbl.setText(self.ctx.nickname or "Гость")
+            self.user_login_lbl.setText(self.ctx.login or "")
+            self.user_avatar.set_avatar(path=getattr(self.ctx, "avatar", ""), login=self.ctx.login, nickname=self.ctx.nickname)
         except Exception:
             pass
 

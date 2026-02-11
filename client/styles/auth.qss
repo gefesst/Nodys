@@ -1,0 +1,4 @@
+QWidget#AuthPage, QWidget#RegisterPage { background-color:#36393f; }
+QLabel#AuthTitle, QLabel#RegisterTitle { font-size:22px; font-weight:700; }
+QPushButton#PrimaryButton { background-color:#5865F2; font-weight:600; }
+QPushButton#PrimaryButton:hover { background-color:#4752c4; }
