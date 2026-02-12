@@ -1,0 +1,125 @@
+
+QDialog#ActiveCallWindow {
+    background: #1f2126;
+}
+QFrame#CallCard {
+    background: #2b2d31;
+    border: 1px solid #3a3d42;
+    border-radius: 16px;
+}
+QLabel#CallTitle { color:#ffffff; font-size:20px; font-weight:700; }
+QLabel#CallTimer { color:#b9bbbe; font-size:16px; font-weight:700; }
+QLabel#CallPeerName { color:#ffffff; font-size:18px; font-weight:700; }
+QLabel#CallPeerLogin { color:#b9bbbe; font-size:13px; }
+QLabel#CallState { color:#8ea1e1; font-size:12px; font-weight:700; }
+QLabel#CallSpeaking { color:#cdd0d5; font-size:12px; font-weight:600; }
+QLabel#CallQuality { color:#aab2ff; font-size:12px; font-weight:700; }
+QLabel#CallQualityBars { color:#8ea1e1; font-size:16px; font-weight:700; letter-spacing:2px; }
+
+/* Круглые кнопки */
+QPushButton#CallRoundEndButton, QPushButton#CallRoundControlButton {
+    min-width:56px; max-width:56px; min-height:56px; max-height:56px;
+    border-radius: 28px;
+    font-size: 20px;
+    font-weight: 700;
+    border: 1px solid #4b4f56;
+}
+QPushButton#CallRoundEndButton {
+    background:#ed4245; color:white; border-color:#cf383b;
+}
+QPushButton#CallRoundEndButton:hover { background:#d83a3e; }
+
+QPushButton#CallRoundControlButton {
+    background:#3a3d42; color:white;
+}
+QPushButton#CallRoundControlButton:hover { background:#454954; }
+QPushButton#CallRoundControlButton[off="true"] {
+    background:#5865f2; border-color:#6b76ff;
+}
+
+/* Градиентная подсветка говорящего */
+AvatarLabel[speaking="idle"] {
+    background:#202225;
+    border:2px solid #3a3d42;
+    border-radius:62px;
+}
+AvatarLabel[speaking="peer"] {
+    background:qradialgradient(cx:0.5, cy:0.5, radius:0.72,
+        stop:0 #202225, stop:0.78 #202225, stop:1 rgba(67,181,129,150));
+    border:2px solid #43b581;
+    border-radius:62px;
+}
+AvatarLabel[speaking="me"] {
+    background:qradialgradient(cx:0.5, cy:0.5, radius:0.72,
+        stop:0 #202225, stop:0.78 #202225, stop:1 rgba(88,101,242,150));
+    border:2px solid #5865F2;
+    border-radius:62px;
+}
+
+
+/* --- extra polish states --- */
+QWidget#CallWindow {
+    background-color: #202225;
+}
+
+QFrame#CallCard {
+    background-color: #2b2d31;
+    border: 1px solid #3a3d42;
+    border-radius: 16px;
+}
+
+QFrame#AvatarWrap {
+    border: 2px solid #5865F2;
+    border-radius: 62px;
+    padding: 6px;
+}
+
+QFrame#AvatarWrap[talkState="idle"] {
+    border-color: #5865F2;
+}
+QFrame#AvatarWrap[talkState="me"] {
+    border-color: #4ea1ff;
+}
+QFrame#AvatarWrap[talkState="peer"] {
+    border-color: #43b581;
+}
+QFrame#AvatarWrap[talkState="both"] {
+    border-color: #f1c40f;
+}
+
+QPushButton#CallRoundBtn {
+    min-width: 56px;
+    max-width: 56px;
+    min-height: 56px;
+    max-height: 56px;
+    border-radius: 28px;
+    font-size: 20px;
+    font-weight: 700;
+    border: 1px solid #3a3d42;
+    background-color: #313338;
+    color: #ffffff;
+}
+QPushButton#CallRoundBtn:hover {
+    background-color: #3b3e45;
+}
+QPushButton#EndCallBtn {
+    background-color: #da373c;
+    border-color: #a52b2f;
+}
+QPushButton#EndCallBtn:hover {
+    background-color: #c72f34;
+}
+
+QLabel#CallStatus {
+    color: #dcddde;
+    font-size: 14px;
+    font-weight: 700;
+}
+QLabel#CallTimer {
+    color: #b5bac1;
+    font-size: 12px;
+}
+QLabel#CallQuality {
+    color: #b5bac1;
+    font-size: 12px;
+}

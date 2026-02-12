@@ -84,3 +84,6 @@ QPushButton#DeclineButton {
     font-weight: 700;
 }
 QPushButton#DeclineButton:hover { background: #d83c3c; }
+
+QPushButton#FriendCallButton { background:#43b581; color:white; border:none; border-radius:17px; font-size:14px; font-weight:700; }
+QPushButton#FriendCallButton:hover { background:#3ca374; }

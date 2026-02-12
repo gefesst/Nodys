@@ -18,7 +18,8 @@ class FriendItem(QFrame):
         online=False,
         request_from=None,
         on_accept=None,
-        on_decline=None
+        on_decline=None,
+        on_call=None
     ):
         super().__init__()
         self.setObjectName("FriendItem")
@@ -48,6 +49,15 @@ class FriendItem(QFrame):
 
         layout.addLayout(text_col)
         layout.addStretch()
+
+
+        if request_from is None:
+            self.call_btn = QPushButton("📞")
+            self.call_btn.setObjectName("FriendCallButton")
+            self.call_btn.setFixedSize(34, 34)
+            if on_call:
+                self.call_btn.clicked.connect(lambda: on_call(login))
+            layout.addWidget(self.call_btn)
 
         if request_from is not None:
             btn_accept = QPushButton("Принять")
@@ -328,7 +338,8 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                     login=friend["login"],
                     nickname=friend["nickname"],
                     avatar_path=friend.get("avatar", ""),
-                    online=True
+                    online=True,
+                    on_call=self.call_friend
                 )
                 self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
@@ -339,7 +350,8 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                     login=friend["login"],
                     nickname=friend["nickname"],
                     avatar_path=friend.get("avatar", ""),
-                    online=False
+                    online=False,
+                    on_call=self.call_friend
                 )
                 self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
@@ -420,5 +432,18 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                     self.send_request_btn.setEnabled(True)
             finally:
                 self._sending_request = False
+
+        self.start_request(data, cb)
+
+
+    def call_friend(self, friend_login: str):
+        data = {"action": "call_user", "from_user": self.ctx.login, "to_user": friend_login}
+
+        def cb(resp):
+            from PySide6.QtWidgets import QMessageBox
+            if resp.get("status") == "ok":
+                QMessageBox.information(self, "Вызов", f"Вызов отправлен пользователю {friend_login}")
+            else:
+                QMessageBox.warning(self, "Вызов", resp.get("message", "Не удалось начать вызов"))
 
         self.start_request(data, cb)

@@ -1,8 +1,9 @@
+from PySide6.QtCore import QTimer
 import os
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QSizePolicy, QStackedWidget, QApplication, QLabel, QFrame
+    QSizePolicy, QStackedWidget, QApplication, QLabel, QFrame, QMessageBox
 )
 from PySide6.QtGui import QIcon
 
@@ -11,9 +12,12 @@ from ui.profile_page import ProfilePage
 from ui.friends_page import FriendsPage
 from ui.chats_page import ChatsPage
 from ui.avatar_widget import AvatarLabel
+from ui.incoming_call_dialog import IncomingCallDialog
+from ui.call_window import ActiveCallWindow
 
 from user_context import UserContext
 from network import NetworkThread
+from voice_client import VoiceClient
 
 
 class MainWindow(QWidget):
@@ -112,6 +116,15 @@ class MainWindow(QWidget):
         # И сразу подгрузим unread, чтобы кнопка "Чаты" была актуальной
         self.chats_page.load_unread_counts()
 
+        # Call signaling poll
+        self.current_call_user = None
+        self.voice_client = None
+        self.call_poll_thread = None
+        self.call_window = None
+        self.call_events_timer = QTimer(self)
+        self.call_events_timer.timeout.connect(self.poll_call_events)
+        self.call_events_timer.start(1000)
+
     # ==================================================
     # ================== Бейдж "Чаты" ==================
     # ==================================================
@@ -135,8 +148,25 @@ class MainWindow(QWidget):
     def show_friends(self):
         self.set_active_nav(self.btn_friends)
         self.stack.setCurrentWidget(self.friends_page)
+
+        # ВАЖНО: polling входящих звонков должен работать на любых вкладках,
+        # поэтому НЕ останавливаем call_events_timer в "Друзьях".
+        try:
+            if hasattr(self, "call_events_timer") and not self.call_events_timer.isActive():
+                self.call_events_timer.start(1000)
+        except Exception:
+            pass
+
         try:
             self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+
+        try:
+            if self.voice_client:
+                self.voice_client.stop()
+                self.voice_client = None
+            self._close_call_window()
         except Exception:
             pass
         try:
@@ -156,6 +186,11 @@ class MainWindow(QWidget):
         except Exception:
             pass
         try:
+            if hasattr(self, "call_events_timer") and not self.call_events_timer.isActive():
+                self.call_events_timer.start(1000)
+        except Exception:
+            pass
+        try:
             self.chats_page.start_auto_update()
         except Exception:
             pass
@@ -164,11 +199,21 @@ class MainWindow(QWidget):
         self.set_active_nav(self.btn_channels)
         self.chats_page.stop_auto_update()
         self.stack.setCurrentIndex(2)
+        try:
+            if hasattr(self, "call_events_timer") and not self.call_events_timer.isActive():
+                self.call_events_timer.start(1000)
+        except Exception:
+            pass
 
     def show_profile(self):
         self.set_active_nav(self.btn_profile)
         self.chats_page.stop_auto_update()
         self.stack.setCurrentIndex(3)
+        try:
+            if hasattr(self, "call_events_timer") and not self.call_events_timer.isActive():
+                self.call_events_timer.start(1000)
+        except Exception:
+            pass
 
         # Обновляем онлайн-статус профиля
         data = {"action": "status", "login": self.ctx.login}
@@ -193,7 +238,21 @@ class MainWindow(QWidget):
 
         # Остановить автообновления
         try:
+            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
+                self.call_events_timer.stop()
+        except Exception:
+            pass
+
+        try:
             self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+
+        try:
+            if self.voice_client:
+                self.voice_client.stop()
+                self.voice_client = None
+            self._close_call_window()
         except Exception:
             pass
         try:
@@ -220,6 +279,139 @@ class MainWindow(QWidget):
     # ================== Закрытие окна =================
     # ==================================================
 
+
+    def poll_call_events(self):
+        if not getattr(self.ctx, "login", None):
+            return
+        if self.call_poll_thread and self.call_poll_thread.isRunning():
+            return
+        self.call_poll_thread = NetworkThread(
+            "127.0.0.1", 5555,
+            {"action": "poll_events", "login": self.ctx.login}
+        )
+        self.call_poll_thread.finished.connect(self.handle_call_events)
+        self.call_poll_thread.start()
+
+    def handle_call_events(self, resp):
+        if resp.get("status") != "ok":
+            return
+        for ev in resp.get("events", []):
+            et = ev.get("type")
+            if et == "incoming_call":
+                from_user = ev.get("from_user")
+                dlg = IncomingCallDialog(
+                    self.ctx.login, from_user, parent=self,
+                    on_result=self._on_incoming_result
+                )
+                dlg.exec()
+
+            elif et == "call_accepted":
+                by_user = ev.get("by_user")
+                self.current_call_user = by_user
+                self._start_voice_for_peer(by_user)
+                self._open_call_window(by_user)
+
+            elif et == "call_started":
+                with_user = ev.get("with_user")
+                self.current_call_user = with_user
+                self._start_voice_for_peer(with_user)
+                self._open_call_window(with_user)
+
+            elif et == "call_declined":
+                by_user = ev.get("by_user")
+                self.current_call_user = None
+                self._close_call_window()
+                try:
+                    if self.voice_client:
+                        self.voice_client.stop()
+                        self.voice_client = None
+                except Exception:
+                    pass
+                QMessageBox.information(self, "Звонок", f"{by_user} отклонил вызов")
+
+            elif et == "call_ended":
+                with_user = ev.get("with_user")
+                self.current_call_user = None
+                self._close_call_window()
+                try:
+                    if self.voice_client:
+                        self.voice_client.stop()
+                        self.voice_client = None
+                except Exception:
+                    pass
+                QMessageBox.information(self, "Звонок", f"Звонок с {with_user} завершён")
+
+    def _on_incoming_result(self, result, resp):
+        # Хук на будущее (например, открыть экран активного звонка)
+        pass
+
+    def _start_voice_for_peer(self, peer_login: str):
+        try:
+            if self.voice_client:
+                self.voice_client.stop()
+            self.voice_client = VoiceClient(login=self.ctx.login)
+            self.voice_client.start(peer_login=peer_login)
+        except Exception as e:
+            QMessageBox.warning(self, "Аудио", f"Не удалось запустить аудио: {e}")
+
+    def _open_call_window(self, peer_login: str):
+        def on_end_call():
+            try:
+                t = NetworkThread("127.0.0.1", 5555, {
+                    "action": "end_call",
+                    "login": self.ctx.login,
+                    "with_user": peer_login
+                })
+                t.start()
+            except Exception:
+                pass
+
+        def on_mic_toggle(enabled: bool):
+            if self.voice_client:
+                self.voice_client.set_mic_enabled(enabled)
+
+        def on_sound_toggle(enabled: bool):
+            if self.voice_client:
+                self.voice_client.set_sound_enabled(enabled)
+
+        if self.call_window and self.call_window.isVisible():
+            self.call_window._ending = True
+            self.call_window.close()
+
+        self.call_window = ActiveCallWindow(
+            my_login=self.ctx.login,
+            peer_login=peer_login,
+            peer_nickname=peer_login,
+            peer_avatar="",
+            on_end=on_end_call,
+            on_mic_toggle=on_mic_toggle,
+            on_sound_toggle=on_sound_toggle,
+            activity_provider=(lambda: self.voice_client.get_activity() if self.voice_client else {}),
+            parent=self,
+        )
+        self.call_window.show()
+
+        # обновим имя/аватар из сервера
+        info_t = NetworkThread("127.0.0.1", 5555, {"action": "find_user", "login": peer_login})
+        def _apply_info(resp):
+            if resp.get("status") == "ok" and self.call_window:
+                nick = resp.get("nickname") or peer_login
+                avatar = resp.get("avatar") or ""
+                self.call_window.name_lbl.setText(nick)
+                self.call_window.login_lbl.setText(peer_login)
+                self.call_window.avatar.set_avatar(path=avatar, login=peer_login, nickname=nick)
+        info_t.finished.connect(_apply_info)
+        info_t.start()
+
+    def _close_call_window(self):
+        try:
+            if self.call_window:
+                self.call_window._ending = True
+                self.call_window.close()
+        except Exception:
+            pass
+        self.call_window = None
+
     def closeEvent(self, event):
         if self._is_closing:
             event.accept()
@@ -233,7 +425,20 @@ class MainWindow(QWidget):
 
         # Это закрытие приложения на крестик
         try:
+            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
+                self.call_events_timer.stop()
+        except Exception:
+            pass
+
+        try:
             self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+
+        try:
+            if self.voice_client:
+                self.voice_client.stop()
+                self.voice_client = None
         except Exception:
             pass
 
@@ -343,7 +548,20 @@ class MainWindow(QWidget):
         Вызывается контейнером AppWindow при закрытии приложения.
         """
         try:
+            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
+                self.call_events_timer.stop()
+        except Exception:
+            pass
+
+        try:
             self.chats_page.stop_auto_update()
+        except Exception:
+            pass
+
+        try:
+            if self.voice_client:
+                self.voice_client.stop()
+                self.voice_client = None
         except Exception:
             pass
         try:
@@ -359,3 +577,4 @@ class MainWindow(QWidget):
                     page.shutdown_requests(wait_ms=1200)
             except Exception:
                 pass
+
