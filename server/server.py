@@ -8,6 +8,9 @@ DB_FILE = "users.db"
 CHAT_DB_FILE = "voice_chat.db"
 online_users = set()
 
+pending_events = {}
+active_calls = {}
+
 # ---------------- INIT DB ----------------
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -107,6 +110,27 @@ def update_user(login, nickname, password=None, avatar=None):
     conn.commit()
     conn.close()
 
+
+def push_event(user_login, event: dict):
+    if not user_login:
+        return
+    if user_login not in pending_events:
+        pending_events[user_login] = []
+    pending_events[user_login].append(event)
+
+def find_call_pair(user_a, user_b):
+    if (user_a, user_b) in active_calls:
+        return (user_a, user_b)
+    if (user_b, user_a) in active_calls:
+        return (user_b, user_a)
+    return None
+
+def is_user_in_call(login):
+    for (a, b), data in active_calls.items():
+        if login in (a, b) and data.get("status") in ("ringing", "active"):
+            return True
+    return False
+
 # ----------------- Server -----------------
 def handle_client(conn, addr):
     try:
@@ -148,6 +172,14 @@ def handle_client(conn, addr):
         elif action == "logout":
             login = data.get("login")
             online_users.discard(login)
+            to_remove = []
+            for (a, b), info in active_calls.items():
+                if login in (a, b):
+                    other = b if a == login else a
+                    push_event(other, {"type": "call_ended", "with_user": login})
+                    to_remove.append((a, b))
+            for key in to_remove:
+                active_calls.pop(key, None)
             resp = {"status": "ok"}
 
         elif action == "update_profile":
@@ -351,6 +383,71 @@ def handle_client(conn, addr):
                 resp = {"status": "error", "message": str(e)}
             finally:
                 conn_db.close()
+
+
+        # ----------------- CALLS -----------------
+        elif action == "call_user":
+            from_user = data.get("from_user")
+            to_user = data.get("to_user")
+            if not from_user or not to_user:
+                resp = {"status": "error", "message": "Некорректные данные вызова"}
+            elif from_user == to_user:
+                resp = {"status": "error", "message": "Нельзя позвонить самому себе"}
+            elif to_user not in online_users:
+                resp = {"status": "error", "message": "Пользователь не в сети"}
+            elif is_user_in_call(from_user):
+                resp = {"status": "error", "message": "Вы уже в звонке"}
+            elif is_user_in_call(to_user):
+                resp = {"status": "error", "message": "Пользователь уже в звонке"}
+            else:
+                active_calls[(from_user, to_user)] = {"status": "ringing"}
+                push_event(to_user, {"type": "incoming_call", "from_user": from_user})
+                resp = {"status": "ok"}
+
+        elif action == "poll_events":
+            login = data.get("login")
+            if not login:
+                resp = {"status": "error", "message": "login обязателен"}
+            else:
+                events = pending_events.get(login, [])
+                pending_events[login] = []
+                resp = {"status": "ok", "events": events}
+
+        elif action == "accept_call":
+            user = data.get("login")
+            from_user = data.get("from_user")
+            pair = find_call_pair(from_user, user)
+            if not pair:
+                resp = {"status": "error", "message": "Вызов не найден"}
+            else:
+                active_calls[pair]["status"] = "active"
+                push_event(from_user, {"type": "call_accepted", "by_user": user})
+                push_event(user, {"type": "call_started", "with_user": from_user})
+                resp = {"status": "ok"}
+
+        elif action == "decline_call":
+            user = data.get("login")
+            from_user = data.get("from_user")
+            pair = find_call_pair(from_user, user)
+            if not pair:
+                resp = {"status": "error", "message": "Вызов не найден"}
+            else:
+                active_calls.pop(pair, None)
+                push_event(from_user, {"type": "call_declined", "by_user": user})
+                push_event(user, {"type": "call_ended", "with_user": from_user})
+                resp = {"status": "ok"}
+
+        elif action == "end_call":
+            user = data.get("login")
+            with_user = data.get("with_user")
+            pair = find_call_pair(user, with_user)
+            if not pair:
+                resp = {"status": "error", "message": "Активный звонок не найден"}
+            else:
+                active_calls.pop(pair, None)
+                push_event(with_user, {"type": "call_ended", "with_user": user})
+                push_event(user, {"type": "call_ended", "with_user": with_user})
+                resp = {"status": "ok"}
 
         else:
             resp = {"status": "error", "message": "Неизвестная команда"}
