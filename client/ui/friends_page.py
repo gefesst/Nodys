@@ -50,7 +50,6 @@ class FriendItem(QFrame):
         layout.addLayout(text_col)
         layout.addStretch()
 
-
         if request_from is None:
             self.call_btn = QPushButton("📞")
             self.call_btn.setObjectName("FriendCallButton")
@@ -88,6 +87,13 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self._finding_user = False
         self._sending_request = False
         self._found_user = None
+
+        # cached server state for smooth updates
+        self._friends_data = []
+        self._requests_data = []
+        self._render_key = None
+        self._has_loaded_friends_once = False
+        self._has_loaded_requests_once = False
 
         self.setObjectName("FriendsPage")
 
@@ -180,10 +186,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         body_lay.addWidget(self.scroll)
         root.addWidget(body_card, 1)
 
-        # timer
+        # timer: чаще, но без перерисовки "в ноль" при каждом тике
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
-        self.timer.start(5000)
+        self.timer.start(2500)
 
         self.refresh()
 
@@ -191,11 +197,19 @@ class FriendsPage(QWidget, ThreadSafeMixin):
     # lifecycle
     # ==================================================
     def reset_for_user(self):
+        self._alive = True
         self._loading_friends = False
         self._loading_requests = False
         self._finding_user = False
         self._sending_request = False
         self._found_user = None
+
+        self._friends_data = []
+        self._requests_data = []
+        self._render_key = None
+        self._has_loaded_friends_once = False
+        self._has_loaded_requests_once = False
+
         self.clear_list()
         self.hide_add_friend_panel()
 
@@ -238,13 +252,88 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         header.setObjectName("SectionHeader")
         self.list_layout.insertWidget(self.list_layout.count() - 1, header)
 
+    def _state_key(self):
+        req_key = tuple(sorted(self._requests_data))
+        fr_key = tuple(sorted(
+            (
+                f.get("login", ""),
+                f.get("nickname", ""),
+                f.get("avatar", "") or "",
+                bool(f.get("online", False)),
+            )
+            for f in self._friends_data
+        ))
+        return req_key, fr_key
+
+    def _render_if_needed(self, force: bool = False):
+        # Чтобы не мигать "пустым" списком на старте, ждём обе загрузки
+        if not self._has_loaded_friends_once or not self._has_loaded_requests_once:
+            return
+
+        key = self._state_key()
+        if (not force) and key == self._render_key:
+            return
+        self._render_key = key
+
+        self.clear_list()
+
+        # Requests
+        if self._requests_data:
+            self._add_section_header(f"Заявки в друзья — {len(self._requests_data)}")
+            for req_login in self._requests_data:
+                item = FriendItem(
+                    login=req_login,
+                    nickname=req_login,
+                    request_from=req_login,
+                    on_accept=self.accept_request,
+                    on_decline=self.decline_request
+                )
+                self.list_layout.insertWidget(self.list_layout.count() - 1, item)
+
+        # Friends
+        friends = sorted(
+            self._friends_data,
+            key=lambda f: (0 if f.get("online", False) else 1, f.get("nickname", "").lower())
+        )
+        online_friends = [f for f in friends if f.get("online", False)]
+        offline_friends = [f for f in friends if not f.get("online", False)]
+
+        if online_friends:
+            self._add_section_header(f"В сети — {len(online_friends)}")
+            for friend in online_friends:
+                item = FriendItem(
+                    login=friend.get("login", ""),
+                    nickname=friend.get("nickname", friend.get("login", "")),
+                    avatar_path=friend.get("avatar", ""),
+                    online=True,
+                    on_call=self.call_friend,
+                )
+                self.list_layout.insertWidget(self.list_layout.count() - 1, item)
+
+        if offline_friends:
+            self._add_section_header(f"Не в сети — {len(offline_friends)}")
+            for friend in offline_friends:
+                item = FriendItem(
+                    login=friend.get("login", ""),
+                    nickname=friend.get("nickname", friend.get("login", "")),
+                    avatar_path=friend.get("avatar", ""),
+                    online=False,
+                    on_call=self.call_friend,
+                )
+                self.list_layout.insertWidget(self.list_layout.count() - 1, item)
+
+        if not friends:
+            empty = QLabel("У тебя пока нет друзей")
+            empty.setObjectName("EmptyHint")
+            self.list_layout.insertWidget(self.list_layout.count() - 1, empty)
+
     # ==================================================
     # refresh
     # ==================================================
     def refresh(self):
         if not self._alive or not self.ctx.login:
             return
-        self.clear_list()
+        # Не очищаем UI заранее — только обновляем кэш и перерисовываем при изменениях
         self.load_requests()
         self.load_friends()
 
@@ -267,32 +356,35 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_requests(self, resp):
-        if resp.get("status") != "ok":
-            return
-
-        requests = resp.get("requests", [])
-        if not requests:
-            return
-
-        self._add_section_header(f"Заявки в друзья — {len(requests)}")
-
-        for req_login in requests:
-            item = FriendItem(
-                login=req_login,
-                nickname=req_login,
-                request_from=req_login,
-                on_accept=self.accept_request,
-                on_decline=self.decline_request
-            )
-            self.list_layout.insertWidget(self.list_layout.count() - 1, item)
+        if resp.get("status") == "ok":
+            self._requests_data = list(resp.get("requests", []) or [])
+        # даже при ошибке считаем попытку завершённой, чтобы UI мог рендериться
+        self._has_loaded_requests_once = True
+        self._render_if_needed()
 
     def accept_request(self, from_user):
         data = {"action": "accept_friend_request", "login": self.ctx.login, "from_user": from_user}
-        self.start_request(data, lambda _resp: self.refresh())
+
+        def cb(resp):
+            if resp.get("status") == "ok":
+                # Мгновенно убираем заявку из UI, затем фоново сверяем с сервером.
+                self._requests_data = [u for u in self._requests_data if u != from_user]
+                self._render_if_needed(force=True)
+                self.load_friends()
+            self.load_requests()
+
+        self.start_request(data, cb)
 
     def decline_request(self, from_user):
         data = {"action": "decline_friend_request", "login": self.ctx.login, "from_user": from_user}
-        self.start_request(data, lambda _resp: self.refresh())
+
+        def cb(resp):
+            if resp.get("status") == "ok":
+                self._requests_data = [u for u in self._requests_data if u != from_user]
+                self._render_if_needed(force=True)
+            self.load_requests()
+
+        self.start_request(data, cb)
 
     # ==================================================
     # friends
@@ -313,47 +405,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_friends(self, resp):
-        if resp.get("status") != "ok":
-            return
-
-        friends = resp.get("friends", [])
-        if not friends:
-            empty = QLabel("У тебя пока нет друзей")
-            empty.setObjectName("EmptyHint")
-            self.list_layout.insertWidget(self.list_layout.count() - 1, empty)
-            return
-
-        friends_sorted = sorted(
-            friends,
-            key=lambda f: (0 if f.get("online", False) else 1, f.get("nickname", "").lower())
-        )
-
-        online_friends = [f for f in friends_sorted if f.get("online", False)]
-        offline_friends = [f for f in friends_sorted if not f.get("online", False)]
-
-        if online_friends:
-            self._add_section_header(f"В сети — {len(online_friends)}")
-            for friend in online_friends:
-                item = FriendItem(
-                    login=friend["login"],
-                    nickname=friend["nickname"],
-                    avatar_path=friend.get("avatar", ""),
-                    online=True,
-                    on_call=self.call_friend
-                )
-                self.list_layout.insertWidget(self.list_layout.count() - 1, item)
-
-        if offline_friends:
-            self._add_section_header(f"Не в сети — {len(offline_friends)}")
-            for friend in offline_friends:
-                item = FriendItem(
-                    login=friend["login"],
-                    nickname=friend["nickname"],
-                    avatar_path=friend.get("avatar", ""),
-                    online=False,
-                    on_call=self.call_friend
-                )
-                self.list_layout.insertWidget(self.list_layout.count() - 1, item)
+        if resp.get("status") == "ok":
+            self._friends_data = list(resp.get("friends", []) or [])
+        self._has_loaded_friends_once = True
+        self._render_if_needed()
 
     # ==================================================
     # add friend inline
@@ -434,7 +489,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                 self._sending_request = False
 
         self.start_request(data, cb)
-
 
     def call_friend(self, friend_login: str):
         data = {"action": "call_user", "from_user": self.ctx.login, "to_user": friend_login}

@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
 from network import NetworkThread
+from settings import get_api_endpoint
 
 
 class RegisterWindow(QWidget):
@@ -53,7 +54,8 @@ class RegisterWindow(QWidget):
             "avatar": ""
         }
 
-        self.thread = NetworkThread("127.0.0.1", 5555, data)
+        host, port = get_api_endpoint()
+        self.thread = NetworkThread(host, port, data)
         self.thread.finished.connect(self.handle_register_response)
         self.thread.start()
 

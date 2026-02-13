@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLab
 from network import NetworkThread
 from config import save_config
 from user_context import UserContext
+from settings import get_api_endpoint
 
 
 class AuthWindow(QWidget):
@@ -51,7 +52,8 @@ class AuthWindow(QWidget):
             "password": self.password.text()
         }
 
-        self.thread = NetworkThread("127.0.0.1", 5555, data)
+        host, port = get_api_endpoint()
+        self.thread = NetworkThread(host, port, data)
         self.thread.finished.connect(self.handle_login_response)
         self.thread.start()
 
@@ -60,9 +62,11 @@ class AuthWindow(QWidget):
             login = resp.get("login", "")
             nickname = resp.get("nickname", "")
             avatar = resp.get("avatar", "")
+            token = resp.get("token", "")
+            expires_at = resp.get("expires_at", "")
 
-            self.ctx.set_user(login=login, nickname=nickname, avatar=avatar)
-            save_config({"login": login, "nickname": nickname, "avatar": avatar})
+            self.ctx.set_user(login=login, nickname=nickname, avatar=avatar, session_token=token, token_expires_at=expires_at)
+            save_config({"login": login, "nickname": nickname, "avatar": avatar, "token": token, "token_expires_at": expires_at})
 
             self.password.clear()
 

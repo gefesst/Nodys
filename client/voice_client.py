@@ -7,8 +7,9 @@ import sounddevice as sd
 
 
 class VoiceClient:
-    def __init__(self, login, host="127.0.0.1", port=5556):
+    def __init__(self, login, token: str = "", host="127.0.0.1", port=5556):
         self.login = login
+        self.token = token or ""
         self.host = host
         self.port = port
         self.running = False
@@ -127,7 +128,10 @@ class VoiceClient:
             self.play_q.queue.clear()
 
     def _join(self):
-        msg = f"J|{self.login}".encode("utf-8")
+        if self.token:
+            msg = f"J|{self.login}|{self.token}".encode("utf-8")
+        else:
+            msg = f"J|{self.login}".encode("utf-8")
         self.sock.sendto(msg, (self.host, self.port))
 
     def _set_pair(self, a, b, active):

@@ -242,7 +242,10 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if self.active_friend and not self.msg_timer.isActive():
             self.msg_timer.start()
 
+        # Загружаем и unread, и друзей — список чатов не должен зависеть
+        # только от успешности unread-запроса.
         self.load_unread_counts()
+        self.load_friends()
 
     def stop_auto_update(self):
         if self.msg_timer.isActive():
@@ -254,6 +257,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         """
         Полный сброс состояния при перелогине/смене пользователя.
         """
+        self._alive = True
         self.stop_auto_update()
 
         self.active_friend = None
@@ -334,15 +338,14 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         def cb(resp):
             try:
-                if resp.get("status") != "ok":
-                    return
+                if resp.get("status") == "ok":
+                    self.unread_counts = resp.get("counts", {}) or {}
+                    self.unread_total = int(resp.get("total", 0) or 0)
 
-                self.unread_counts = resp.get("counts", {}) or {}
-                self.unread_total = int(resp.get("total", 0) or 0)
+                    if callable(self.on_unread_total_changed):
+                        self.on_unread_total_changed(self.unread_total)
 
-                if callable(self.on_unread_total_changed):
-                    self.on_unread_total_changed(self.unread_total)
-
+                # Даже если unread не удалось получить — список друзей всё равно обновляем.
                 self.load_friends()
             finally:
                 self._loading_unread = False
@@ -534,7 +537,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             "action": "send_message",
             "from_user": self.ctx.login,
             "to_user": self.active_friend["login"],
-            "message": text
+            "text": text
         }
 
         def cb(_resp):

@@ -278,6 +278,12 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
 
     def logout(self):
+        # Используем единый пайплайн логаута (останавливает таймеры/voice и чистит контекст)
+        if self.parent_window and hasattr(self.parent_window, "perform_logout"):
+            self.parent_window.perform_logout()
+            return
+
+        # Fallback (на всякий случай)
         data = {"action": "logout", "login": self.login}
         self.start_request(data, self.on_logout_finished)
 

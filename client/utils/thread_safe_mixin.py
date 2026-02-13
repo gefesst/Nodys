@@ -1,17 +1,41 @@
 class ThreadSafeMixin:
-    """
-    Универсальный mixin для безопасной работы с NetworkThread (threading-based).
+    """Универсальный mixin для безопасной работы с NetworkThread (threading-based).
+
     Ожидает:
     - self._threads: list
     - self._alive: bool
     """
-    def start_request(self, data, callback, host="127.0.0.1", port=5555):
-        from network import NetworkThread  # локальный импорт, чтобы избежать циклов
+
+    def start_request(self, data, callback, host=None, port=None):
+        from network import NetworkThread, AUTH_ACTIONS  # локальный импорт, чтобы избежать циклов
 
         if not getattr(self, "_alive", True):
             return
 
-        t = NetworkThread(host, port, data)
+        payload = dict(data or {})
+        action = payload.get("action")
+
+        # Локальная привязка к контексту страницы/окна.
+        # Это помогает при нескольких окнах приложения в одном процессе:
+        # запросы идут с токеном/логином именно этой страницы.
+        ctx = getattr(self, "ctx", None)
+        if ctx is not None and action in AUTH_ACTIONS:
+            token = getattr(ctx, "session_token", "")
+            login = getattr(ctx, "login", "")
+
+            if token and "token" not in payload:
+                payload["token"] = token
+
+            if "login" not in payload and login:
+                payload["login"] = login
+
+            # from_user должен автозаполняться только там,
+            # где это действительно "текущий пользователь".
+            if action in {"send_friend_request", "send_message", "call_user", "get_messages"}:
+                if "from_user" not in payload and login:
+                    payload["from_user"] = login
+
+        t = NetworkThread(host, port, payload)
         self._threads.append(t)
 
         def done(resp):
