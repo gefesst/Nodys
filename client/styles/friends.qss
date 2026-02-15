@@ -1,19 +1,31 @@
 QWidget#FriendsPage {
-    background: #36393f;
+    background: transparent;
 }
 
+/* Карточки — как в профиле, но мягче: без лишних обводок */
 QFrame#FriendsTopBar,
 QFrame#FriendsContentCard,
 QFrame#AddFriendPanel {
     background: #2b2d31;
-    border: 1px solid #3a3d42;
+    border: none;
     border-radius: 14px;
 }
 
 QLabel#FriendsTitle {
     font-size: 18px;
     font-weight: 800;
-    color: white;
+    color: #ffffff;
+}
+
+QLabel#AddPanelTitle {
+    color: #d7d9dd;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QLabel#AddPanelHint {
+    color: #b9bbbe;
+    font-size: 12px;
 }
 
 QPushButton#AddFriendButton,
@@ -21,7 +33,7 @@ QPushButton#FindUserButton,
 QPushButton#SendRequestButton,
 QPushButton#HideAddPanelButton {
     background: #5865F2;
-    color: white;
+    color: #ffffff;
     border: none;
     border-radius: 10px;
     padding: 8px 12px;
@@ -35,12 +47,15 @@ QPushButton#FindUserButton:hover,
 QPushButton#SendRequestButton:hover { background: #4752c4; }
 QPushButton#HideAddPanelButton:hover { background: #5d6269; }
 
-QLineEdit {
-    background: #202225;
-    color: white;
-    border: 1px solid #3a3d42;
+QWidget#FriendsPage QLineEdit {
+    background: #232428;
+    color: #ffffff;
+    border: none;
     border-radius: 10px;
     padding: 8px 10px;
+}
+QWidget#FriendsPage QLineEdit:focus {
+    border: 1px solid #5865F2;
 }
 
 QLabel#SectionHeader {
@@ -51,23 +66,28 @@ QLabel#SectionHeader {
     text-transform: uppercase;
 }
 
+/* Карточки друзей — с мягкой подложкой для визуального разделения */
 QFrame#FriendItem {
-    background: #313338;
-    border: none;
+    background: #30343b;
+    border: 1px solid #3a3d42;
     border-radius: 12px;
     min-height: 64px;
     max-height: 64px;
 }
 QFrame#FriendItem:hover {
-    background: #3a3d42;
+    background: #373b43;
+    border: 1px solid #4a4f59;
+}
+QFrame#FriendItem[request="true"] {
+    background: #32363e;
 }
 
-QLabel#FriendItemName { color: white; font-size: 14px; font-weight: 700; }
+QLabel#FriendItemName { color: #ffffff; font-size: 14px; font-weight: 700; }
 QLabel#FriendItemSub { color: #b9bbbe; font-size: 11px; }
 
 QPushButton#AcceptButton {
     background: #43b581;
-    color: white;
+    color: #ffffff;
     border: none;
     border-radius: 8px;
     padding: 6px 10px;
@@ -77,7 +97,7 @@ QPushButton#AcceptButton:hover { background: #3aa06f; }
 
 QPushButton#DeclineButton {
     background: #f04747;
-    color: white;
+    color: #ffffff;
     border: none;
     border-radius: 8px;
     padding: 6px 10px;
@@ -85,5 +105,197 @@ QPushButton#DeclineButton {
 }
 QPushButton#DeclineButton:hover { background: #d83c3c; }
 
-QPushButton#FriendCallButton { background:#43b581; color:white; border:none; border-radius:17px; font-size:14px; font-weight:700; }
-QPushButton#FriendCallButton:hover { background:#3ca374; }
+QPushButton#FriendCallButton {
+    background: #35a96b;
+    color: #ffffff;
+    border: none;
+    border-radius: 17px;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0;
+    text-align: center;
+}
+QPushButton#FriendCallButton:hover { background: #2f995f; }
+QPushButton#FriendCallButton:pressed { background: #2a8854; }
+
+/* Скролл без рамок и лишней подложки */
+QScrollArea#FriendsScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollArea#FriendsScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: #4a4e57;
+    border-radius: 5px;
+    min-height: 24px;
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+
+QPushButton#FriendMoreButton {
+    background: #4a4f59;
+    color: #ffffff;
+    border: none;
+    border-radius: 17px;
+    font-size: 15px;
+    font-weight: 900;
+    padding: 0px;
+    text-align: center;
+}
+QPushButton#FriendMoreButton:hover {
+    background: #5a6070;
+}
+QPushButton#FriendMoreButton:pressed {
+    background: #646b7d;
+}
+
+QMenu#FriendActionsMenu {
+    background: #23262d;
+    color: #f2f3f5;
+    border: 1px solid #3a3f4b;
+    border-radius: 10px;
+    padding: 6px;
+}
+QMenu#FriendActionsMenu::item {
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+QMenu#FriendActionsMenu::item:selected {
+    background: #5865F2;
+    color: #ffffff;
+}
+
+QLabel#FriendsToast {
+    background: rgba(24, 26, 31, 0.95);
+    color: #ffffff;
+    border: 1px solid #3a3f4b;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 700;
+}
+
+
+QFrame#InlineConfirmCard {
+    background: rgba(30, 33, 40, 0.98);
+    border: 1px solid #3d4350;
+    border-radius: 12px;
+    min-width: 290px;
+}
+
+QLabel#InlineConfirmText {
+    color: #f2f3f5;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QPushButton#InlineConfirmCancelButton,
+QPushButton#InlineConfirmDeleteButton {
+    border: none;
+    border-radius: 8px;
+    min-height: 32px;
+    padding: 6px 12px;
+    font-weight: 700;
+}
+
+QPushButton#InlineConfirmCancelButton {
+    background: #4f545c;
+    color: #ffffff;
+}
+QPushButton#InlineConfirmCancelButton:hover {
+    background: #5d6269;
+}
+
+QPushButton#InlineConfirmDeleteButton {
+    background: #ed4245;
+    color: #ffffff;
+}
+QPushButton#InlineConfirmDeleteButton:hover {
+    background: #d83c3c;
+}
+
+/* ===== UI polish package #2 ===== */
+#FriendsCompactToggle {
+    min-height: 30px;
+    padding: 0 12px;
+    border-radius: 9px;
+    border: 1px solid #40444b;
+    background: #2f3136;
+    color: #dcddde;
+    font-size: 12px;
+    font-weight: 600;
+}
+#FriendsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
+#FriendsCompactToggle:checked {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+#FriendItemName {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f3f4f6;
+}
+#FriendItemSub {
+    font-size: 12px;
+    color: #aab0ba;
+}
+#FriendItem[compact="true"] #FriendItemName {
+    font-size: 13px;
+    font-weight: 650;
+}
+#FriendItem[compact="true"] #FriendItemSub {
+    font-size: 11px;
+}
+
+#FriendCallButton {
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+    padding: 0;
+    text-align: center;
+}
+#FriendCallButton:hover {
+    background: #43b966;
+}
+#FriendCallButton:pressed {
+    background: #2e8b50;
+}
+
+#FriendsEmptyStateCard {
+    background: #2c2f36;
+    border: 1px solid #3a3d45;
+    border-radius: 12px;
+    margin: 8px 4px;
+}
+#FriendsEmptyStateIcon {
+    font-size: 22px;
+    color: #8ea4ff;
+}
+#FriendsEmptyStateTitle {
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 700;
+}
+#FriendsEmptyStateSub {
+    color: #b0b6c0;
+    font-size: 12px;
+}
+
+#FriendsSkeletonCard {
+    min-height: 56px;
+    border-radius: 12px;
+    border: 1px solid #3b3f47;
+    background: #2f3239;
+    margin: 2px 2px;
+}

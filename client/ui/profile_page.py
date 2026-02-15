@@ -3,13 +3,14 @@ import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QMessageBox, QFrame
+    QPushButton, QFileDialog, QFrame
 )
 from PySide6.QtCore import Qt
 
 from config import load_config, save_config, clear_config
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
+from ui.toast import InlineToast
 from user_context import UserContext
 
 
@@ -105,6 +106,31 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
         self.layout.addWidget(self.card)
         self.layout.addStretch()
+
+        # toast-уведомления внутри страницы (единый компонент)
+        self._toast = InlineToast(
+            self,
+            object_name="InlineToast",
+            min_width=240,
+            max_width=520,
+            horizontal_margin=12,
+            bottom_margin=14,
+        )
+
+    def _reposition_toast(self):
+        if getattr(self, "_toast", None):
+            self._toast.reposition()
+
+    def show_toast(self, text: str, msec: int = 2600):
+        if not text:
+            return
+        if getattr(self, "_toast", None):
+            self._toast.show(text, max(900, int(msec)))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_toast()
+
     # ==================================================
     # ================== Avatar logic ==================
     # ==================================================
@@ -154,6 +180,43 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             nickname=self.nickname_edit.text().strip() or self.nickname
         )
 
+    def _sync_context_and_parent(self):
+        """Синхронизировать ник/аватар после сохранения профиля без перезапуска окна."""
+        try:
+            ctx = UserContext()
+            ctx.login = self.login or ctx.login
+            ctx.nickname = self.nickname
+            if self.avatar_path:
+                ctx.avatar = self.avatar_path
+        except Exception:
+            pass
+
+        pw = self.parent_window
+        if pw is None:
+            return
+
+        try:
+            if hasattr(pw, "ctx"):
+                pw.ctx.login = self.login or getattr(pw.ctx, "login", "")
+                pw.ctx.nickname = self.nickname
+                if self.avatar_path:
+                    pw.ctx.avatar = self.avatar_path
+        except Exception:
+            pass
+
+        try:
+            if hasattr(pw, "user_nick_lbl"):
+                pw.user_nick_lbl.setText(self.nickname or "Гость")
+            if hasattr(pw, "user_login_lbl"):
+                pw.user_login_lbl.setText(self.login or "")
+            if hasattr(pw, "user_avatar"):
+                pw.user_avatar.set_avatar(
+                    path=self.avatar_path,
+                    login=self.login,
+                    nickname=self.nickname,
+                )
+        except Exception:
+            pass
 
     def set_user_data(self, login, nickname, avatar=""):
         """
@@ -228,7 +291,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     def save_changes(self):
         nickname = self.nickname_edit.text().strip()
         if not nickname:
-            QMessageBox.warning(self, "Ошибка", "Никнейм не может быть пустым")
+            self.show_toast("Никнейм не может быть пустым", msec=2800)
             return
 
         # Если выбран файл из проводника (абсолютный путь), копируем в client/avatars
@@ -263,9 +326,12 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             self._apply_avatar(self.avatar_path)
             self.password_edit.clear()
 
-            QMessageBox.information(self, "Готово", "Профиль обновлён")
+            # Важно: чтобы ник сразу обновился в мини-карточке слева (MainWindow)
+            self._sync_context_and_parent()
+
+            self.show_toast("Профиль обновлён")
         else:
-            QMessageBox.warning(self, "Ошибка", resp.get("message", "Не удалось обновить профиль"))
+            self.show_toast(resp.get("message", "Не удалось обновить профиль"), msec=3200)
 
     def update_status(self, online: bool):
         if online:
@@ -296,7 +362,6 @@ class ProfilePage(QWidget, ThreadSafeMixin):
                 self.parent_window.controller.logout_to_auth()
             else:
                 self.parent_window.show_login()
-
 
     # ==================================================
     # ==================== Lifecycle ===================

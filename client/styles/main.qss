@@ -12,3 +12,13 @@ QFrame#UserMiniCard{
 }
 QLabel#UserMiniNick { font-weight:800; font-size:12px; color:white; }
 QLabel#UserMiniLogin { color:#b9bbbe; font-size:11px; }
+
+/* ===== UI polish package #2 ===== */
+#NavButton {
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+#NavButton:pressed {
+    padding-top: 1px;
+    padding-left: 13px;
+}

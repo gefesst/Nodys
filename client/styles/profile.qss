@@ -18,3 +18,13 @@ QPushButton#ProfileDangerButton {
     background-color:#f04747; color:white; font-weight:700; min-height:38px; border-radius:10px;
 }
 QPushButton#ProfileDangerButton:hover { background-color:#d83c3c; }
+
+
+QLabel#ProfileToast {
+    background: rgba(24, 26, 31, 0.96);
+    color: #ffffff;
+    border: 1px solid #3a3f4b;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 700;
+}

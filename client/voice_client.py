@@ -18,14 +18,22 @@ class VoiceClient:
         self.channels = 1
         self.dtype = "int16"
         self.frame_samples = 320
-        self.play_q = queue.Queue(maxsize=50)
+        # Короткий джиттер-буфер для сглаживания неровной UDP-доставки.
+        self.play_q = queue.Queue(maxsize=80)
         self.recv_thread = None
         self.heartbeat_thread = None
         self.in_stream = None
         self.out_stream = None
         self.peer = None
+        self.room_id = None
         self.mic_enabled = True
         self.sound_enabled = True
+
+        # Playback/buffer state
+        self._target_buffer_frames = 3
+        self._last_play_chunk = b""
+        self._underflow_score = 0.0
+        self._overflow_score = 0.0
 
         # speaking/activity metrics
         self._mic_level = 0.0
@@ -40,25 +48,36 @@ class VoiceClient:
         self._ping_sent = {}
         self._voice_threshold = 0.015
 
-        # quality metrics
-        self._last_recv_ts = 0.0
-        self._jitter_ms = 0.0
-        self._avg_gap_ms = 20.0
-        self._loss_score = 0.0
-        self._latency_ms = 0.0
+        # quality metrics / ping
         self._ping_thread = None
         self._ping_seq = 0
         self._ping_sent = {}
 
-    def start(self, peer_login):
+    def start(self, peer_login=None, room_id=None):
         if self.running:
             return
-        self.peer = peer_login
+
+        self.peer = peer_login or None
+        self.room_id = str(room_id) if room_id is not None else None
+
+        if not self.peer and not self.room_id:
+            raise ValueError("peer_login or room_id is required")
+
         self.running = True
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # Чуть больше буферы ОС, чтобы меньше терять пакеты под нагрузкой.
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
+        except Exception:
+            pass
         self.sock.settimeout(0.2)
+        self._reset_runtime_metrics()
         self._join()
-        self._set_pair(self.login, self.peer, True)
+        if self.room_id:
+            self._join_room(self.room_id)
+        elif self.peer:
+            self._set_pair(self.login, self.peer, True)
 
         self.recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
         self.recv_thread.start()
@@ -92,6 +111,8 @@ class VoiceClient:
         try:
             if self.peer:
                 self._set_pair(self.login, self.peer, False)
+            if self.room_id:
+                self._leave_room(self.room_id)
         except Exception:
             pass
 
@@ -112,6 +133,7 @@ class VoiceClient:
                 pass
             self.sock = None
         self.peer = None
+        self.room_id = None
         self.mic_enabled = True
         self.sound_enabled = True
         self._mic_level = 0.0
@@ -124,6 +146,26 @@ class VoiceClient:
         self._loss_score = 0.0
         self._latency_ms = 0.0
         self._ping_sent = {}
+        self._underflow_score = 0.0
+        self._overflow_score = 0.0
+        self._last_play_chunk = b""
+        with self.play_q.mutex:
+            self.play_q.queue.clear()
+
+    def _reset_runtime_metrics(self):
+        self._mic_level = 0.0
+        self._peer_level = 0.0
+        self._last_mic_voice_ts = 0.0
+        self._last_peer_voice_ts = 0.0
+        self._last_recv_ts = 0.0
+        self._jitter_ms = 0.0
+        self._avg_gap_ms = 20.0
+        self._loss_score = 0.0
+        self._latency_ms = 0.0
+        self._ping_sent = {}
+        self._underflow_score = 0.0
+        self._overflow_score = 0.0
+        self._last_play_chunk = b""
         with self.play_q.mutex:
             self.play_q.queue.clear()
 
@@ -134,15 +176,37 @@ class VoiceClient:
             msg = f"J|{self.login}".encode("utf-8")
         self.sock.sendto(msg, (self.host, self.port))
 
+    def _join_room(self, room_id: str):
+        room = str(room_id or "").strip()
+        if not room:
+            return
+        token_part = self.token or ""
+        msg = f"C|{self.login}|{token_part}|{room}".encode("utf-8")
+        self.sock.sendto(msg, (self.host, self.port))
+
+    def _leave_room(self, room_id: str):
+        room = str(room_id or "").strip()
+        if not room:
+            return
+        msg = f"L|{self.login}|{room}".encode("utf-8")
+        self.sock.sendto(msg, (self.host, self.port))
+
     def _set_pair(self, a, b, active):
         flag = "1" if active else "0"
-        msg = f"S|{a}|{b}|{flag}".encode("utf-8")
+        # Новый формат (безопасный): S|sender_login|token|a|b|flag
+        # Legacy fallback (для старых серверов): S|a|b|flag
+        if self.token:
+            msg = f"S|{self.login}|{self.token}|{a}|{b}|{flag}".encode("utf-8")
+        else:
+            msg = f"S|{a}|{b}|{flag}".encode("utf-8")
         self.sock.sendto(msg, (self.host, self.port))
 
     def _heartbeat_loop(self):
         while self.running:
             try:
                 self._join()
+                if self.room_id:
+                    self._join_room(self.room_id)
             except Exception:
                 pass
             time.sleep(2)
@@ -189,17 +253,44 @@ class VoiceClient:
             outdata[:] = 0
             return
         try:
+            # Небольшой prebuffer для устойчивости к джиттеру сети.
+            if self.play_q.qsize() < self._target_buffer_frames and self._last_recv_ts > 0:
+                outdata[:] = 0
+                self._underflow_score = min(100.0, self._underflow_score * 0.97 + 2.5)
+                return
+
             chunk = self.play_q.get_nowait()
+            self._last_play_chunk = chunk
             arr = np.frombuffer(chunk, dtype=np.int16).reshape(-1, 1)
             if len(arr) < len(outdata):
                 outdata[:] = 0
                 outdata[:len(arr)] = arr
             else:
                 outdata[:] = arr[:len(outdata)]
+
+            # плавно снижаем штрафы при стабильном воспроизведении
+            self._underflow_score = max(0.0, self._underflow_score * 0.96 - 0.2)
+            self._overflow_score = max(0.0, self._overflow_score * 0.97 - 0.2)
         except queue.Empty:
-            outdata[:] = 0
+            # Простая PLC-логика: кратковременно повторяем последний фрейм,
+            # если пакет задержался совсем немного.
+            now_ts = time.time()
+            if self._last_play_chunk and self._last_recv_ts > 0 and (now_ts - self._last_recv_ts) < 0.12:
+                try:
+                    arr = np.frombuffer(self._last_play_chunk, dtype=np.int16).reshape(-1, 1)
+                    if len(arr) < len(outdata):
+                        outdata[:] = 0
+                        outdata[:len(arr)] = arr
+                    else:
+                        outdata[:] = arr[:len(outdata)]
+                except Exception:
+                    outdata[:] = 0
+            else:
+                outdata[:] = 0
+            self._underflow_score = min(100.0, self._underflow_score * 0.97 + 3.0)
         except Exception:
             outdata[:] = 0
+            self._underflow_score = min(100.0, self._underflow_score * 0.98 + 1.5)
 
     def _recv_loop(self):
         while self.running:
@@ -251,8 +342,11 @@ class VoiceClient:
                 self.play_q.put_nowait(pcm)
             except queue.Full:
                 try:
+                    # При переполнении сбрасываем самый старый кадр,
+                    # чтобы держать задержку низкой.
                     _ = self.play_q.get_nowait()
                     self.play_q.put_nowait(pcm)
+                    self._overflow_score = min(100.0, self._overflow_score * 0.96 + 2.0)
                 except Exception:
                     pass
 
@@ -270,7 +364,15 @@ class VoiceClient:
         jitter = float(self._jitter_ms)
         latency = float(self._latency_ms)
         loss = float(self._loss_score)
-        score = 100.0 - (jitter * 1.5 + max(0.0, latency - 60.0) * 0.6 + loss * 0.8)
+        uf = float(self._underflow_score)
+        of = float(self._overflow_score)
+        score = 100.0 - (
+            jitter * 1.4
+            + max(0.0, latency - 60.0) * 0.6
+            + loss * 0.7
+            + uf * 0.45
+            + of * 0.25
+        )
         if score >= 75:
             quality = "Отличное"
         elif score >= 50:
@@ -287,6 +389,7 @@ class VoiceClient:
             "peer_speaking": peer,
             "latency_ms": round(latency, 1),
             "jitter_ms": round(jitter, 1),
+            "buffer_frames": int(self.play_q.qsize()),
             "quality": quality,
             "quality_score": round(max(0.0, min(100.0, score)), 1),
         }

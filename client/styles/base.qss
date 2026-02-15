@@ -27,3 +27,13 @@ QPushButton {
     padding: 8px 12px;
 }
 QPushButton:hover { background-color: #4a4e57; }
+
+
+QLabel#InlineToast {
+    background: rgba(24, 26, 31, 0.96);
+    color: #ffffff;
+    border: 1px solid #3a3f4b;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 700;
+}

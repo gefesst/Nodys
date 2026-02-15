@@ -6,7 +6,7 @@ from style_manager import apply_app_styles
 
 def main():
     app = QApplication(sys.argv)
-    apply_app_styles(app, "base", "auth", "main", "friends", "chats", "profile", "call")
+    apply_app_styles(app, "base", "auth", "main", "friends", "chats", "channels", "profile", "call")
     w = AppWindow()
     w.show()
     sys.exit(app.exec())

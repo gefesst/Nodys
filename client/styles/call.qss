@@ -123,3 +123,55 @@ QLabel#CallQuality {
     color: #b5bac1;
     font-size: 12px;
 }
+
+/* ================= Inline call popups inside MainWindow ================= */
+QFrame#CallInlineNoticeCard {
+    background-color: rgba(30, 33, 40, 0.98);
+    border: 1px solid #3d4350;
+    border-radius: 12px;
+}
+QLabel#CallInlineNoticeText {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QFrame#IncomingCallInlineCard {
+    background-color: rgba(30, 33, 40, 0.98);
+    border: 1px solid #3d4350;
+    border-radius: 14px;
+}
+QLabel#IncomingCallInlineTitle {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+}
+QLabel#IncomingCallInlineFrom {
+    color: #dcddde;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+QPushButton#IncomingCallInlineAcceptBtn,
+QPushButton#IncomingCallInlineDeclineBtn {
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 9px;
+    border: 1px solid #3a3d42;
+    font-weight: 700;
+}
+QPushButton#IncomingCallInlineDeclineBtn {
+    background: #3a3d42;
+    color: #ffffff;
+}
+QPushButton#IncomingCallInlineDeclineBtn:hover {
+    background: #464a53;
+}
+QPushButton#IncomingCallInlineAcceptBtn {
+    background: #5865F2;
+    color: #ffffff;
+    border-color: #6b76ff;
+}
+QPushButton#IncomingCallInlineAcceptBtn:hover {
+    background: #4f5be0;
+}

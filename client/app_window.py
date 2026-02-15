@@ -52,7 +52,8 @@ class AppWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Nodys")
-        self.setMinimumSize(1000, 650)
+        # Стартовый минимум: шире, но чуть ниже по высоте.
+        self.setMinimumSize(1120, 620)
 
         # Иконка
         icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "app_icon.png")
@@ -67,14 +68,14 @@ class AppWindow(QWidget):
         self.stack = QStackedWidget(self)
         root.addWidget(self.stack)
 
-        # Создаем страницы один раз
+        # Создаем auth/register сразу, а MainWindow — лениво после успешной авторизации.
+        # Это убирает фоновую активность (таймеры/запросы) до логина.
         self.auth_page = AuthWindow()
         self.register_page = RegisterWindow()
-        self.main_page = MainWindow(controller=self)  # твой существующий main_window уже умеет controller
+        self.main_page = None
 
-        self.stack.addWidget(self.auth_page)      # index 0
-        self.stack.addWidget(self.register_page)  # index 1
-        self.stack.addWidget(self.main_page)      # index 2
+        self.stack.addWidget(self.auth_page)
+        self.stack.addWidget(self.register_page)
 
         # Колбэки навигации
         self.auth_page.on_login_success = self.show_main
@@ -137,16 +138,22 @@ class AppWindow(QWidget):
         except Exception:
             return {}
 
+    def _ensure_main_page(self):
+        if self.main_page is None:
+            self.main_page = MainWindow(controller=self)
+            self.stack.addWidget(self.main_page)
+
     def show_auth(self):
-        self.stack.setCurrentIndex(0)
+        self.stack.setCurrentWidget(self.auth_page)
 
     def show_register(self):
-        self.stack.setCurrentIndex(1)
+        self.stack.setCurrentWidget(self.register_page)
 
     def show_main(self):
+        self._ensure_main_page()
         # Полный рефреш main-части под текущий UserContext
         self.main_page.reload_from_context(full_reset=True)
-        self.stack.setCurrentIndex(2)
+        self.stack.setCurrentWidget(self.main_page)
 
     def logout_to_auth(self):
         # Вызывается из MainWindow/ProfilePage
@@ -155,7 +162,8 @@ class AppWindow(QWidget):
     def closeEvent(self, event):
         # Корректно закрыть внутреннюю main-страницу (остановка таймеров/потоков)
         try:
-            self.main_page.prepare_to_close_app()
+            if self.main_page is not None:
+                self.main_page.prepare_to_close_app()
         except Exception:
             pass
         app = QApplication.instance()

@@ -71,10 +71,10 @@ def save_config(data: Dict[str, Any]) -> None:
 
 
 def clear_config() -> None:
-    # удаляем только новый конфиг; legacy оставляем (мягко)
-    try:
-        path = get_config_path()
-        if os.path.exists(path):
-            os.remove(path)
-    except Exception:
-        pass
+    # Удаляем и новый, и legacy-конфиг, чтобы авто-логин не восстанавливался из старого файла.
+    for path in (get_config_path(), LEGACY_CONFIG_FILE):
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass

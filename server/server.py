@@ -8,10 +8,12 @@ import secrets
 import socket
 import sqlite3
 import struct
+import random
+import string
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, List
 
 # -------------------- Paths / DB --------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -34,7 +36,7 @@ CHAT_DB = resolve_db_path("voice_chat.db")
 
 # -------------------- Presence / Sessions --------------------
 SESSION_TTL_SEC = 60 * 60 * 24 * 30  # 30 days
-ONLINE_WINDOW_SEC = 120              # considered online if seen within this window
+ONLINE_WINDOW_SEC = 45               # considered online if seen within this window
 SESSION_TOUCH_MIN_INTERVAL_SEC = 3     # reduce DB write contention on frequent polling
 
 # -------------------- Events / Calls --------------------
@@ -196,6 +198,78 @@ def init_db() -> None:
             )"""
         )
 
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS active_call_pairs (
+                user_a TEXT NOT NULL,
+                user_b TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'ringing',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_a, user_b)
+            )"""
+        )
+
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS channels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                avatar TEXT DEFAULT '',
+                owner_login TEXT NOT NULL,
+                text_min_role TEXT NOT NULL DEFAULT 'member',
+                voice_min_role TEXT NOT NULL DEFAULT 'member',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS channel_members (
+                channel_id INTEGER NOT NULL,
+                login TEXT NOT NULL,
+                joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                role TEXT NOT NULL DEFAULT 'member',
+                PRIMARY KEY (channel_id, login)
+            )"""
+        )
+        # migration for older DBs
+        try:
+            cm_cols = [r[1] for r in c.execute("PRAGMA table_info(channel_members)").fetchall()]
+            if "role" not in cm_cols:
+                c.execute("ALTER TABLE channel_members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
+        except Exception:
+            pass
+
+        # migration for channels access policy
+        try:
+            ch_cols = [r[1] for r in c.execute("PRAGMA table_info(channels)").fetchall()]
+            if "text_min_role" not in ch_cols:
+                c.execute("ALTER TABLE channels ADD COLUMN text_min_role TEXT NOT NULL DEFAULT 'member'")
+            if "voice_min_role" not in ch_cols:
+                c.execute("ALTER TABLE channels ADD COLUMN voice_min_role TEXT NOT NULL DEFAULT 'member'")
+        except Exception:
+            pass
+
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS channel_voice_presence (
+                channel_id INTEGER NOT NULL,
+                login TEXT NOT NULL,
+                speaking INTEGER NOT NULL DEFAULT 0,
+                last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (channel_id, login)
+            )"""
+        )
+
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS channel_invites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id INTEGER NOT NULL,
+                from_user TEXT NOT NULL,
+                to_user TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+
         # Helpful indexes
         # indexes (compatible with existing DB)
         c.execute("CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_login)")
@@ -203,6 +277,22 @@ def init_db() -> None:
         c.execute("CREATE INDEX IF NOT EXISTS idx_fr_to ON friend_requests(to_user)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_login ON sessions(login)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_login)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_channel_members_login ON channel_members(login)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_channel_members_channel ON channel_members(channel_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_voice_presence_channel ON channel_voice_presence(channel_id)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_voice_presence_seen ON channel_voice_presence(last_seen)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_inv_to_status ON channel_invites(to_user, status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_inv_channel_status ON channel_invites(channel_id, status)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_active_call_pairs_updated ON active_call_pairs(updated_at)")
+
+        # На старте процесса очищаем transient-таблицу активных звонков
+        # (в памяти active_calls всё равно пустой после рестарта).
+        try:
+            c.execute("DELETE FROM active_call_pairs")
+        except Exception:
+            pass
+
         conn.commit()
 
 
@@ -233,8 +323,19 @@ def init_chat_db() -> None:
         except Exception:
             pass
 
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS channel_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id INTEGER NOT NULL,
+                from_user TEXT NOT NULL,
+                text TEXT NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+
         c.execute("CREATE INDEX IF NOT EXISTS idx_msg_pair_time ON messages(from_user, to_user, timestamp)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_msg_to_read ON messages(to_user, is_read)")
+        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_msg_channel_time ON channel_messages(channel_id, timestamp)")
         conn.commit()
 
 
@@ -326,6 +427,28 @@ def delete_session(token: str) -> None:
     except Exception:
         pass
     finally:
+        with _session_touch_lock:
+            _session_touch_cache.pop(token, None)
+
+
+def set_session_offline(token: str) -> None:
+    """Mark session as offline without deleting token.
+
+    Useful on app close when we want fast presence convergence but still keep
+    token for auto-login on next app start.
+    """
+    if not token:
+        return
+    # move last_seen outside online window
+    old_seen = _iso(_now_utc() - dt.timedelta(seconds=ONLINE_WINDOW_SEC + 5))
+    try:
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            conn.execute("UPDATE sessions SET last_seen=? WHERE token=?", (old_seen, token))
+            conn.commit()
+    except Exception:
+        pass
+    finally:
+        # allow immediate future touch updates after app relaunch/login resume
         with _session_touch_lock:
             _session_touch_cache.pop(token, None)
 
@@ -530,6 +653,50 @@ def get_friends(login: str) -> list:
         return [r[0] for r in cur.fetchall()]
 
 
+def are_friends(user_a: str, user_b: str) -> bool:
+    if not user_a or not user_b or user_a == user_b:
+        return False
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        row = conn.execute(
+            """
+            SELECT 1
+            FROM friends
+            WHERE (user_login=? AND friend_login=?)
+               OR (user_login=? AND friend_login=?)
+            LIMIT 1
+            """,
+            (user_a, user_b, user_b, user_a),
+        ).fetchone()
+        return bool(row)
+
+
+def remove_friend(current_user: str, friend_login: str) -> bool:
+    """Remove friendship in both directions and clear pending requests between users."""
+    if (not current_user) or (not friend_login) or (current_user == friend_login):
+        return False
+
+    with sqlite3.connect(DB_FILE) as conn:
+        cur = conn.cursor()
+
+        # remove accepted friendship in both directions
+        cur.execute(
+            "DELETE FROM friends WHERE (user_login=? AND friend_login=?) OR (user_login=? AND friend_login=?)",
+            (current_user, friend_login, friend_login, current_user),
+        )
+        deleted_friends = cur.rowcount
+
+        # also clear pending requests in both directions (if any)
+        cur.execute(
+            "DELETE FROM friend_requests WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)",
+            (current_user, friend_login, friend_login, current_user),
+        )
+        deleted_requests = cur.rowcount
+
+        conn.commit()
+
+    return (deleted_friends > 0) or (deleted_requests > 0)
+
+
 # -------------------- Chat (messages) --------------------
 
 def save_message(from_user: str, to_user: str, text: str) -> bool:
@@ -544,6 +711,7 @@ def save_message(from_user: str, to_user: str, text: str) -> bool:
 
 
 def get_messages(user_a: str, user_b: str, limit: int = 50) -> list:
+    lim = max(1, min(500, int(limit or 50)))
     with sqlite3.connect(CHAT_DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -551,11 +719,13 @@ def get_messages(user_a: str, user_b: str, limit: int = 50) -> list:
             """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read
                FROM messages
                WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)
-               ORDER BY timestamp ASC
+               ORDER BY timestamp DESC, id DESC
                LIMIT ?""",
-            (user_a, user_b, user_b, user_a, int(limit)),
+            (user_a, user_b, user_b, user_a, lim),
         )
-        return [dict(r) for r in cur.fetchall()]
+        # Клиенту по-прежнему отдаём в хронологическом порядке (старые -> новые).
+        rows = cur.fetchall()
+        return [dict(r) for r in reversed(rows)]
 
 
 def mark_chat_read(current_user: str, friend: str) -> None:
@@ -580,10 +750,861 @@ def get_unread_counts(current_user: str) -> Dict[str, int]:
         return {row[0]: int(row[1]) for row in cur.fetchall()}
 
 
+# -------------------- Channels --------------------
+
+def _generate_channel_code(conn: sqlite3.Connection, length: int = 8) -> str:
+    alphabet = string.ascii_uppercase + string.digits
+    for _ in range(20):
+        code = ''.join(random.choice(alphabet) for _ in range(length))
+        row = conn.execute("SELECT 1 FROM channels WHERE code=?", (code,)).fetchone()
+        if not row:
+            return code
+    # ultra-rare fallback
+    return ''.join(random.choice(alphabet) for _ in range(length + 2))
+
+
+def create_channel(owner_login: str, name: str, avatar: str = "") -> Dict[str, Any]:
+    channel_name = (name or "").strip()
+    if not channel_name:
+        raise ValueError("Название канала не может быть пустым")
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        code = _generate_channel_code(conn)
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO channels(code, name, avatar, owner_login, text_min_role, voice_min_role, created_at) VALUES(?,?,?,?,?,?,?)",
+            (code, channel_name[:64], avatar or "", owner_login, "member", "member", _iso(_now_utc())),
+        )
+        channel_id = int(cur.lastrowid)
+        cur.execute(
+            "INSERT OR IGNORE INTO channel_members(channel_id, login, joined_at, role) VALUES(?,?,?,?)",
+            (channel_id, owner_login, _iso(_now_utc()), "admin"),
+        )
+        conn.commit()
+
+        row = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (channel_id,),
+        ).fetchone()
+        return dict(row) if row else {
+            "id": channel_id,
+            "code": code,
+            "name": channel_name[:64],
+            "avatar": avatar or "",
+            "owner_login": owner_login,
+        }
+
+
+def list_user_channels(login: str) -> list:
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        _cleanup_channel_voice_presence(conn)
+        rows = conn.execute(
+            """
+            SELECT c.id, c.code, c.name, c.avatar, c.owner_login, c.text_min_role, c.voice_min_role, c.created_at,
+                   CASE
+                       WHEN c.owner_login = m.login THEN 'owner'
+                       ELSE COALESCE(NULLIF(m.role,''), 'member')
+                   END AS my_role,
+                   (SELECT COUNT(*) FROM channel_members cm WHERE cm.channel_id = c.id) AS participants_count,
+                   (SELECT COUNT(*) FROM channel_voice_presence vp WHERE vp.channel_id = c.id) AS voice_online_count
+            FROM channels c
+            JOIN channel_members m ON m.channel_id = c.id
+            WHERE m.login=?
+            ORDER BY LOWER(c.name) ASC, c.id ASC
+            """,
+            (login,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_channel_by_id(channel_id: int) -> Optional[Dict[str, Any]]:
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (int(channel_id),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def is_channel_member(channel_id: int, login: str) -> bool:
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM channel_members WHERE channel_id=? AND login=? LIMIT 1",
+            (int(channel_id), login),
+        ).fetchone()
+        return bool(row)
+
+
+def join_channel_by_code(login: str, code: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    code_norm = (code or "").strip().upper()
+    if not code_norm:
+        return False, "Укажите код канала", None
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE UPPER(code)=?",
+            (code_norm,),
+        ).fetchone()
+        if not row:
+            return False, "Канал не найден", None
+
+        channel_id = int(row["id"])
+        conn.execute(
+            "INSERT OR IGNORE INTO channel_members(channel_id, login, joined_at, role) VALUES(?,?,?,?)",
+            (channel_id, login, _iso(_now_utc()), "member"),
+        )
+        conn.commit()
+        return True, "ok", dict(row)
+
+
+def send_channel_invite(actor_login: str, channel_id: int, target_login: str) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    to_login = (target_login or "").strip()
+    if cid <= 0 or not to_login:
+        return False, "Некорректные данные"
+    if actor_login == to_login:
+        return False, "Нельзя пригласить самого себя"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+
+        target_user = conn.execute("SELECT 1 FROM users WHERE login=?", (to_login,)).fetchone()
+        if not target_user:
+            return False, "Пользователь не найден"
+
+        ch, my_role = _get_channel_and_my_role(conn, cid, actor_login)
+        if not ch or not my_role:
+            return False, "Нет доступа к каналу"
+
+        perms = _role_permissions(my_role, ch.get("text_min_role", "member"), ch.get("voice_min_role", "member"))
+        if not bool(perms.get("can_invite", False)):
+            return False, "Недостаточно прав"
+
+        already_member = conn.execute(
+            "SELECT 1 FROM channel_members WHERE channel_id=? AND login=?",
+            (cid, to_login),
+        ).fetchone()
+        if already_member:
+            return False, "Пользователь уже состоит в канале"
+
+        existing = conn.execute(
+            "SELECT id FROM channel_invites WHERE channel_id=? AND to_user=? AND status='pending' LIMIT 1",
+            (cid, to_login),
+        ).fetchone()
+        if existing:
+            return False, "У этого пользователя уже есть активное приглашение"
+
+        now = _iso(_now_utc())
+        conn.execute(
+            """
+            INSERT INTO channel_invites(channel_id, from_user, to_user, status, created_at, updated_at)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (cid, actor_login, to_login, "pending", now, now),
+        )
+        conn.commit()
+    return True, "ok"
+
+
+def get_incoming_channel_invites(login: str) -> List[Dict[str, Any]]:
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT i.id AS invite_id,
+                   i.channel_id,
+                   i.from_user,
+                   i.to_user,
+                   i.created_at,
+                   c.name AS channel_name,
+                   c.avatar AS channel_avatar,
+                   c.code AS channel_code,
+                   COALESCE(u.nickname, i.from_user) AS from_nickname,
+                   COALESCE(u.avatar, '') AS from_avatar
+            FROM channel_invites i
+            JOIN channels c ON c.id = i.channel_id
+            LEFT JOIN users u ON u.login = i.from_user
+            WHERE i.to_user=? AND i.status='pending'
+            ORDER BY i.id DESC
+            """,
+            (login,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def respond_channel_invite(login: str, invite_id: int, accept: bool) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    iid = int(invite_id or 0)
+    if iid <= 0:
+        return False, "Некорректное приглашение", None
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        inv = conn.execute(
+            "SELECT id, channel_id, to_user, status FROM channel_invites WHERE id=?",
+            (iid,),
+        ).fetchone()
+        if not inv:
+            return False, "Приглашение не найдено", None
+
+        if inv["to_user"] != login:
+            return False, "Это приглашение адресовано другому пользователю", None
+
+        if (inv["status"] or "").lower() != "pending":
+            return False, "Приглашение уже обработано", None
+
+        cid = int(inv["channel_id"])
+        ch = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not ch:
+            now = _iso(_now_utc())
+            conn.execute(
+                "UPDATE channel_invites SET status='declined', updated_at=? WHERE id=?",
+                (now, iid),
+            )
+            conn.commit()
+            return False, "Канал уже не существует", None
+
+        now = _iso(_now_utc())
+        if accept:
+            conn.execute(
+                "INSERT OR IGNORE INTO channel_members(channel_id, login, joined_at, role) VALUES(?,?,?,?)",
+                (cid, login, now, "member"),
+            )
+            conn.execute(
+                "UPDATE channel_invites SET status='accepted', updated_at=? WHERE channel_id=? AND to_user=? AND status='pending'",
+                (now, cid, login),
+            )
+            conn.commit()
+            return True, "ok", dict(ch)
+
+        conn.execute(
+            "UPDATE channel_invites SET status='declined', updated_at=? WHERE id=?",
+            (now, iid),
+        )
+        conn.commit()
+        return True, "ok", None
+
+
+def get_channel_messages(channel_id: int, limit: int = 200) -> list:
+    lim = max(1, min(500, int(limit or 200)))
+    with sqlite3.connect(CHAT_DB, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT id, channel_id, from_user, text, timestamp AS created_at
+            FROM channel_messages
+            WHERE channel_id=?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(channel_id), lim),
+        ).fetchall()
+        # Возвращаем в хронологическом порядке для UI.
+        return [dict(r) for r in reversed(rows)]
+
+
+def save_channel_message(channel_id: int, from_user: str, text: str) -> bool:
+    msg = (text or "").strip()
+    if not msg:
+        return False
+    with sqlite3.connect(CHAT_DB, timeout=10) as conn:
+        conn.execute(
+            "INSERT INTO channel_messages(channel_id, from_user, text) VALUES(?,?,?)",
+            (int(channel_id), from_user, msg),
+        )
+        conn.commit()
+    return True
+
+
+_VALID_CHANNEL_ROLES = {"member", "moderator", "admin"}
+_VALID_MIN_ACCESS_ROLES = {"member", "moderator", "admin"}
+_ROLE_RANK = {"member": 1, "moderator": 2, "admin": 3, "owner": 4}
+VOICE_PRESENCE_TTL_SEC = 8
+
+
+def _normalize_member_role(role: str) -> str:
+    r = (role or "").strip().lower()
+    if r not in _VALID_CHANNEL_ROLES:
+        return "member"
+    return r
+
+
+def _normalize_min_access_role(role: str) -> str:
+    r = (role or "").strip().lower()
+    if r not in _VALID_MIN_ACCESS_ROLES:
+        return "member"
+    return r
+
+
+def _has_min_role(user_role: str, min_role: str) -> bool:
+    ur = (user_role or "member").strip().lower()
+    mr = _normalize_min_access_role(min_role)
+    return _ROLE_RANK.get(ur, 0) >= _ROLE_RANK.get(mr, 1)
+
+
+def _channel_member_role(conn: sqlite3.Connection, channel_id: int, login: str) -> Optional[str]:
+    row = conn.execute(
+        "SELECT c.owner_login, m.role FROM channels c LEFT JOIN channel_members m ON m.channel_id=c.id AND m.login=? WHERE c.id=?",
+        (login, int(channel_id)),
+    ).fetchone()
+    if not row:
+        return None
+    owner = row[0]
+    if owner == login:
+        return "owner"
+    role = row[1] if len(row) > 1 else "member"
+    return _normalize_member_role(role)
+
+
+def _role_permissions(role: str, text_min_role: str = "member", voice_min_role: str = "member") -> Dict[str, bool]:
+    rr = (role or "member").strip().lower()
+    text_req = _normalize_min_access_role(text_min_role)
+    voice_req = _normalize_min_access_role(voice_min_role)
+
+    can_send_text = _has_min_role(rr, text_req)
+    can_join_voice = _has_min_role(rr, voice_req)
+
+    if rr == "owner":
+        return {
+            "can_send_text": True,
+            "can_join_voice": True,
+            "can_invite": True,
+            "manage_members": True,
+            "manage_channel": True,
+            "assign_roles": True,
+            "delete_channel": True,
+            "text_min_role": text_req,
+            "voice_min_role": voice_req,
+            "my_role": rr,
+        }
+    if rr == "admin":
+        return {
+            "can_send_text": can_send_text,
+            "can_join_voice": can_join_voice,
+            "can_invite": True,
+            "manage_members": True,
+            "manage_channel": False,
+            "assign_roles": True,
+            "delete_channel": False,
+            "text_min_role": text_req,
+            "voice_min_role": voice_req,
+            "my_role": rr,
+        }
+    if rr == "moderator":
+        return {
+            "can_send_text": can_send_text,
+            "can_join_voice": can_join_voice,
+            "can_invite": True,
+            "manage_members": True,
+            "manage_channel": False,
+            "assign_roles": False,
+            "delete_channel": False,
+            "text_min_role": text_req,
+            "voice_min_role": voice_req,
+            "my_role": rr,
+        }
+    return {
+        "can_send_text": can_send_text,
+        "can_join_voice": can_join_voice,
+        "can_invite": True,
+        "manage_members": False,
+        "manage_channel": False,
+        "assign_roles": False,
+        "delete_channel": False,
+        "text_min_role": text_req,
+        "voice_min_role": voice_req,
+        "my_role": rr,
+    }
+
+
+
+def _channel_online_map(conn: sqlite3.Connection) -> Dict[str, bool]:
+    now = _now_utc()
+    threshold = now - dt.timedelta(seconds=ONLINE_WINDOW_SEC)
+    rows = conn.execute(
+        "SELECT DISTINCT login FROM sessions WHERE last_seen >= ? AND expires_at > ?",
+        (_iso(threshold), _iso(now)),
+    ).fetchall()
+    out = {}
+    for r in rows:
+        try:
+            out[r[0]] = True
+        except Exception:
+            pass
+    return out
+
+
+def _channel_members_details(conn: sqlite3.Connection, channel_id: int, owner_login: str) -> List[Dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT m.login, COALESCE(NULLIF(m.role,''), 'member') AS role,
+               COALESCE(u.nickname, m.login) AS nickname, COALESCE(u.avatar, '') AS avatar
+        FROM channel_members m
+        LEFT JOIN users u ON u.login = m.login
+        WHERE m.channel_id = ?
+        ORDER BY CASE WHEN m.login = ? THEN 0 ELSE 1 END, LOWER(COALESCE(u.nickname, m.login)) ASC, LOWER(m.login) ASC
+        """,
+        (int(channel_id), owner_login),
+    ).fetchall()
+
+    online_map = _channel_online_map(conn)
+    members = []
+    for r in rows:
+        login = r[0]
+        role = "owner" if login == owner_login else _normalize_member_role(r[1])
+        members.append({
+            "login": login,
+            "nickname": r[2] or login,
+            "avatar": r[3] or "",
+            "role": role,
+            "online": bool(online_map.get(login)),
+        })
+    return members
+
+
+
+def _get_channel_and_my_role(conn: sqlite3.Connection, channel_id: int, login: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+        (int(channel_id),),
+    ).fetchone()
+    if not row:
+        return None, None
+    ch = dict(row)
+    member = conn.execute(
+        "SELECT role FROM channel_members WHERE channel_id=? AND login=?",
+        (int(channel_id), login),
+    ).fetchone()
+    if not member:
+        return ch, None
+    my_role = "owner" if ch.get("owner_login") == login else _normalize_member_role(member[0] if member else "member")
+    return ch, my_role
+
+
+def _can_send_text(conn: sqlite3.Connection, channel_id: int, login: str) -> bool:
+    ch, my_role = _get_channel_and_my_role(conn, channel_id, login)
+    if not ch or not my_role:
+        return False
+    need = ch.get("text_min_role", "member")
+    return _has_min_role(my_role, need)
+
+
+def _can_join_voice(conn: sqlite3.Connection, channel_id: int, login: str) -> bool:
+    ch, my_role = _get_channel_and_my_role(conn, channel_id, login)
+    if not ch or not my_role:
+        return False
+    need = ch.get("voice_min_role", "member")
+    return _has_min_role(my_role, need)
+
+
+def _cleanup_channel_voice_presence(conn: sqlite3.Connection, channel_id: Optional[int] = None) -> None:
+    threshold = _iso(_now_utc() - dt.timedelta(seconds=VOICE_PRESENCE_TTL_SEC))
+    if channel_id is None:
+        conn.execute("DELETE FROM channel_voice_presence WHERE last_seen < ?", (threshold,))
+    else:
+        conn.execute(
+            "DELETE FROM channel_voice_presence WHERE channel_id=? AND last_seen < ?",
+            (int(channel_id), threshold),
+        )
+
+
+def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = False, joined: bool = True) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        if not is_channel_member(cid, login):
+            return False, "Нет доступа к каналу"
+        if joined and not _can_join_voice(conn, cid, login):
+            return False, "У вас нет прав для входа в голосовой канал"
+
+        _cleanup_channel_voice_presence(conn, cid)
+        if not joined:
+            conn.execute(
+                "DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?",
+                (cid, login),
+            )
+            conn.commit()
+            return True, "ok"
+
+        conn.execute(
+            """
+            INSERT INTO channel_voice_presence(channel_id, login, speaking, last_seen)
+            VALUES(?,?,?,?)
+            ON CONFLICT(channel_id, login) DO UPDATE SET
+                speaking=excluded.speaking,
+                last_seen=excluded.last_seen
+            """,
+            (cid, login, 1 if bool(speaking) else 0, _iso(_now_utc())),
+        )
+        conn.commit()
+    return True, "ok"
+
+
+def leave_channel_voice(login: str, channel_id: int) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал"
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.execute(
+            "DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?",
+            (cid, login),
+        )
+        conn.commit()
+    return True, "ok"
+
+
+def get_channel_voice_participants(channel_id: int, login: str) -> Tuple[bool, str, List[Dict[str, Any]]]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал", []
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        if not is_channel_member(cid, login):
+            return False, "Нет доступа к каналу", []
+        # visibility is available to all channel members
+        _cleanup_channel_voice_presence(conn, cid)
+
+        ch = conn.execute(
+            "SELECT owner_login FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not ch:
+            return False, "Канал не найден", []
+
+        owner_login = ch["owner_login"]
+        rows = conn.execute(
+            """
+            SELECT p.login,
+                   p.speaking,
+                   p.last_seen,
+                   COALESCE(u.nickname, p.login) AS nickname,
+                   COALESCE(u.avatar, '') AS avatar,
+                   COALESCE(NULLIF(m.role,''), 'member') AS role
+            FROM channel_voice_presence p
+            LEFT JOIN users u ON u.login = p.login
+            LEFT JOIN channel_members m ON m.channel_id = p.channel_id AND m.login = p.login
+            WHERE p.channel_id=?
+            ORDER BY p.speaking DESC, LOWER(COALESCE(u.nickname, p.login)) ASC, LOWER(p.login) ASC
+            """,
+            (cid,),
+        ).fetchall()
+
+        online_map = _channel_online_map(conn)
+
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            lg = r["login"]
+            role = "owner" if lg == owner_login else _normalize_member_role(r["role"])
+            out.append({
+                "login": lg,
+                "nickname": r["nickname"] or lg,
+                "avatar": r["avatar"] or "",
+                "role": role,
+                "speaking": bool(int(r["speaking"] or 0)),
+                "online": bool(online_map.get(lg)),
+            })
+
+        return True, "ok", out
+
+
+def get_channel_details_for_user(channel_id: int, login: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал", None
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not row:
+            return False, "Канал не найден", None
+
+        member = conn.execute(
+            "SELECT role FROM channel_members WHERE channel_id=? AND login=?",
+            (cid, login),
+        ).fetchone()
+        if not member:
+            return False, "Нет доступа к каналу", None
+
+        ch = dict(row)
+        my_role = "owner" if ch.get("owner_login") == login else _normalize_member_role(member[0] if member else "member")
+        perms = _role_permissions(my_role, ch.get("text_min_role", "member"), ch.get("voice_min_role", "member"))
+        members = _channel_members_details(conn, cid, ch.get("owner_login") or "")
+
+        result = {
+            "channel": ch,
+            "my_role": my_role,
+            "permissions": perms,
+            "members": members,
+        }
+        return True, "ok", result
+
+
+def update_channel_settings(actor_login: str, channel_id: int, name: str, avatar: str, text_min_role: str = "member", voice_min_role: str = "member") -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал", None
+
+    new_name = (name or "").strip()
+    if not new_name:
+        return False, "Введите название канала", None
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not ch:
+            return False, "Канал не найден", None
+
+        if ch["owner_login"] != actor_login:
+            return False, "Недостаточно прав", None
+
+        text_policy = _normalize_min_access_role(text_min_role)
+        voice_policy = _normalize_min_access_role(voice_min_role)
+        conn.execute(
+            "UPDATE channels SET name=?, avatar=?, text_min_role=?, voice_min_role=? WHERE id=?",
+            (new_name[:64], avatar or "", text_policy, voice_policy, cid),
+        )
+        conn.commit()
+
+        out = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        return True, "ok", dict(out) if out else None
+
+
+def regenerate_channel_code(actor_login: str, channel_id: int) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал", None
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute(
+            "SELECT id, owner_login FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        if not ch:
+            return False, "Канал не найден", None
+        if ch["owner_login"] != actor_login:
+            return False, "Недостаточно прав", None
+
+        code = _generate_channel_code(conn)
+        conn.execute("UPDATE channels SET code=? WHERE id=?", (code, cid))
+        conn.commit()
+
+        out = conn.execute(
+            "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
+            (cid,),
+        ).fetchone()
+        return True, "ok", dict(out) if out else None
+
+
+def set_channel_member_role(actor_login: str, channel_id: int, target_login: str, role: str) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    tgt = (target_login or "").strip()
+    new_role = _normalize_member_role(role)
+
+    if cid <= 0 or not tgt:
+        return False, "Некорректные данные"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
+        if not ch:
+            return False, "Канал не найден"
+
+        owner = ch["owner_login"]
+        actor_role = _channel_member_role(conn, cid, actor_login)
+        if actor_role not in {"owner", "admin"}:
+            return False, "Недостаточно прав"
+
+        tgt_member = conn.execute(
+            "SELECT login, COALESCE(NULLIF(role,''), 'member') FROM channel_members WHERE channel_id=? AND login=?",
+            (cid, tgt),
+        ).fetchone()
+        if not tgt_member:
+            return False, "Участник не найден"
+
+        if tgt == owner:
+            return False, "Нельзя изменить роль владельца"
+
+        if new_role == "owner":
+            return False, "Нельзя назначить владельца через эту операцию"
+
+        tgt_role = "owner" if tgt == owner else _normalize_member_role(tgt_member[1])
+        if actor_role == "admin":
+            if tgt_role in {"owner", "admin"}:
+                return False, "Админ не может изменить роль этого участника"
+            if new_role == "admin":
+                return False, "Админ не может назначать администраторов"
+
+        conn.execute(
+            "UPDATE channel_members SET role=? WHERE channel_id=? AND login=?",
+            (new_role, cid, tgt),
+        )
+        conn.commit()
+        return True, "ok"
+
+
+def remove_channel_member(actor_login: str, channel_id: int, target_login: str) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    tgt = (target_login or "").strip()
+    if cid <= 0 or not tgt:
+        return False, "Некорректные данные"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
+        if not ch:
+            return False, "Канал не найден"
+
+        owner = ch["owner_login"]
+        actor_role = _channel_member_role(conn, cid, actor_login)
+        if actor_role not in {"owner", "admin", "moderator"}:
+            return False, "Недостаточно прав"
+
+        tgt_member = conn.execute(
+            "SELECT login, COALESCE(NULLIF(role,''), 'member') FROM channel_members WHERE channel_id=? AND login=?",
+            (cid, tgt),
+        ).fetchone()
+        if not tgt_member:
+            return False, "Участник не найден"
+
+        if tgt == owner:
+            return False, "Нельзя удалить владельца"
+
+        tgt_role = _normalize_member_role(tgt_member[1])
+        if actor_role == "admin" and tgt_role == "admin":
+            return False, "Админ не может удалить другого админа"
+        if actor_role == "moderator" and tgt_role != "member":
+            return False, "Модератор может удалять только обычных участников"
+
+        conn.execute("DELETE FROM channel_members WHERE channel_id=? AND login=?", (cid, tgt))
+        conn.execute("DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?", (cid, tgt))
+        conn.execute(
+            "DELETE FROM channel_invites WHERE channel_id=? AND (from_user=? OR to_user=?)",
+            (cid, tgt, tgt),
+        )
+        conn.commit()
+        return True, "ok"
+
+
+def leave_channel(login: str, channel_id: int) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
+        if not ch:
+            return False, "Канал не найден"
+
+        if ch["owner_login"] == login:
+            return False, "Владелец не может выйти из канала. Передайте владельца или удалите канал"
+
+        row = conn.execute("SELECT 1 FROM channel_members WHERE channel_id=? AND login=?", (cid, login)).fetchone()
+        if not row:
+            return False, "Вы не участник канала"
+
+        conn.execute("DELETE FROM channel_members WHERE channel_id=? AND login=?", (cid, login))
+        conn.execute("DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?", (cid, login))
+        conn.execute(
+            "DELETE FROM channel_invites WHERE channel_id=? AND (from_user=? OR to_user=?)",
+            (cid, login, login),
+        )
+        conn.commit()
+        return True, "ok"
+
+
+def delete_channel(actor_login: str, channel_id: int) -> Tuple[bool, str]:
+    cid = int(channel_id or 0)
+    if cid <= 0:
+        return False, "Не указан канал"
+
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.row_factory = sqlite3.Row
+        ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
+        if not ch:
+            return False, "Канал не найден"
+
+        if ch["owner_login"] != actor_login:
+            return False, "Только владелец может удалить канал"
+
+        conn.execute("DELETE FROM channel_members WHERE channel_id=?", (cid,))
+        conn.execute("DELETE FROM channel_voice_presence WHERE channel_id=?", (cid,))
+        conn.execute("DELETE FROM channel_invites WHERE channel_id=?", (cid,))
+        conn.execute("DELETE FROM channels WHERE id=?", (cid,))
+        conn.commit()
+
+    # delete channel chat history in separate DB
+    try:
+        with sqlite3.connect(CHAT_DB, timeout=10) as chat_conn:
+            chat_conn.execute("DELETE FROM channel_messages WHERE channel_id=?", (cid,))
+            chat_conn.commit()
+    except Exception:
+        pass
+
+    return True, "ok"
+
+
 # -------------------- Calls --------------------
+
+def _canon_call_pair(a: str, b: str) -> Tuple[str, str]:
+    return (a, b) if a <= b else (b, a)
+
+
+def _db_set_call_pair(a: str, b: str, status: str) -> None:
+    ua, ub = _canon_call_pair(a, b)
+    now_iso = _iso(_now_utc())
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.execute(
+            """
+            INSERT INTO active_call_pairs(user_a, user_b, status, created_at, updated_at)
+            VALUES(?,?,?,?,?)
+            ON CONFLICT(user_a, user_b) DO UPDATE SET
+                status=excluded.status,
+                updated_at=excluded.updated_at
+            """,
+            (ua, ub, status, now_iso, now_iso),
+        )
+        conn.commit()
+
+
+def _db_remove_call_pair(a: str, b: str) -> None:
+    ua, ub = _canon_call_pair(a, b)
+    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        conn.execute(
+            "DELETE FROM active_call_pairs WHERE user_a=? AND user_b=?",
+            (ua, ub),
+        )
+        conn.commit()
+
 
 def start_call(from_user: str, to_user: str) -> Tuple[bool, str]:
     prune_stale_calls()
+
+    if not user_exists(to_user):
+        return False, "Пользователь не найден"
+
+    if not are_friends(from_user, to_user):
+        return False, "Можно звонить только друзьям"
 
     if not is_online(to_user):
         return False, "Пользователь не в сети"
@@ -596,6 +1617,11 @@ def start_call(from_user: str, to_user: str) -> Tuple[bool, str]:
         ts = time.time()
         call_activity[from_user] = ts
         call_activity[to_user] = ts
+
+    try:
+        _db_set_call_pair(from_user, to_user, "ringing")
+    except Exception:
+        pass
 
     push_event(to_user, {"type": "incoming_call", "from_user": from_user})
     return True, "ok"
@@ -637,6 +1663,10 @@ def prune_stale_calls() -> None:
             call_activity.pop(b, None)
 
     for a, b in stale_pairs:
+        try:
+            _db_remove_call_pair(a, b)
+        except Exception:
+            pass
         # notify both sides (best effort)
         push_event(a, {"type": "call_ended", "with_user": b, "by_user": "system"})
         push_event(b, {"type": "call_ended", "with_user": a, "by_user": "system"})
@@ -652,6 +1682,11 @@ def accept_call(current_user: str, from_user: str) -> bool:
         ts = time.time()
         call_activity[current_user] = ts
         call_activity[from_user] = ts
+
+    try:
+        _db_set_call_pair(current_user, from_user, "active")
+    except Exception:
+        pass
 
     # Звонящий получает подтверждение.
     push_event(from_user, {
@@ -681,6 +1716,10 @@ def decline_call(current_user: str, from_user: str) -> bool:
         active_calls.pop(from_user, None)
         call_activity.pop(current_user, None)
         call_activity.pop(from_user, None)
+    try:
+        _db_remove_call_pair(current_user, from_user)
+    except Exception:
+        pass
     push_event(from_user, {"type": "call_declined", "by_user": current_user})
     return True
 
@@ -695,6 +1734,10 @@ def end_call(current_user: str, with_user: str) -> bool:
         active_calls.pop(with_user, None)
         call_activity.pop(current_user, None)
         call_activity.pop(with_user, None)
+    try:
+        _db_remove_call_pair(current_user, with_user)
+    except Exception:
+        pass
     push_event(with_user, {"type": "call_ended", "with_user": current_user, "by_user": current_user})
     return True
 
@@ -707,6 +1750,10 @@ def cleanup_calls_for_user(user: str) -> None:
             active_calls.pop(peer, None)
             call_activity.pop(user, None)
             call_activity.pop(peer, None)
+            try:
+                _db_remove_call_pair(user, peer)
+            except Exception:
+                pass
             push_event(peer, {"type": "call_ended", "with_user": user, "by_user": user})
 
 
@@ -763,20 +1810,22 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
             "expires_at": sess.get("expires_at", ""),
         }
 
-    if action == "find_user":
-        login = (data.get("login") or "").strip()
-        info = get_user_info(login)
-        if not info:
-            return {"status": "error", "message": "Пользователь не найден"}
-        info["online"] = is_online(login)
-        return {"status": "ok", **info}
-
     # Everything below requires auth
     current_user, token, err = require_auth(data)
     if err:
         return err
 
     # Common touch already done
+
+    if action == "find_user":
+        target_login = (data.get("target_login") or data.get("login") or "").strip()
+        if not target_login:
+            return {"status": "error", "message": "Не указан логин пользователя"}
+        info = get_user_info(target_login)
+        if not info:
+            return {"status": "error", "message": "Пользователь не найден"}
+        info["online"] = is_online(target_login)
+        return {"status": "ok", **info}
 
     if action == "heartbeat":
         mark_call_activity(current_user)
@@ -792,6 +1841,11 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         # Used by client on app close to avoid stale "busy" state,
         # but keeps session token valid for auto-login.
         cleanup_calls_for_user(current_user)
+        return {"status": "ok"}
+
+    if action == "presence_offline":
+        # Fast presence convergence on app close while keeping session token.
+        set_session_offline(token)
         return {"status": "ok"}
 
     if action == "status":
@@ -840,6 +1894,13 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
             })
         return {"status": "ok", "friends": friends_info}
 
+    if action == "remove_friend":
+        friend_login = (data.get("friend_login") or "").strip()
+        if not friend_login:
+            return {"status": "error", "message": "Не указан пользователь"}
+        ok = remove_friend(current_user, friend_login)
+        return {"status": "ok"} if ok else {"status": "error", "message": "Друг не найден или уже удалён"}
+
     # Chat
     if action == "send_message":
         to_user = (data.get("to_user") or "").strip()
@@ -870,6 +1931,147 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         counts = get_unread_counts(current_user)
         total = sum(counts.values())
         return {"status": "ok", "counts": counts, "total": total}
+
+    # Channels
+    if action == "create_channel":
+        name = (data.get("name") or "").strip()
+        avatar = data.get("avatar") or ""
+        try:
+            ch = create_channel(current_user, name=name, avatar=avatar)
+            return {"status": "ok", "channel": ch}
+        except ValueError as ve:
+            return {"status": "error", "message": str(ve)}
+        except Exception as e:
+            return {"status": "error", "message": f"Не удалось создать канал: {e}"}
+
+    if action == "join_channel":
+        code = (data.get("code") or "").strip()
+        ok, msg, ch = join_channel_by_code(current_user, code)
+        if ok:
+            return {"status": "ok", "channel": ch}
+        return {"status": "error", "message": msg}
+
+    if action == "get_my_channels":
+        channels = list_user_channels(current_user)
+        return {"status": "ok", "channels": channels}
+
+    if action == "send_channel_invite":
+        channel_id = int(data.get("channel_id") or 0)
+        to_user = (data.get("to_user") or "").strip()
+        ok, msg = send_channel_invite(current_user, channel_id, to_user)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "get_my_channel_invites":
+        invites = get_incoming_channel_invites(current_user)
+        return {"status": "ok", "invites": invites}
+
+    if action == "respond_channel_invite":
+        invite_id = int(data.get("invite_id") or 0)
+        decision = (data.get("decision") or "").strip().lower()
+        if decision not in {"accept", "decline"}:
+            return {"status": "error", "message": "Некорректное решение"}
+        ok, msg, ch = respond_channel_invite(current_user, invite_id, accept=(decision == "accept"))
+        if not ok:
+            return {"status": "error", "message": msg}
+        return {"status": "ok", "channel": ch} if ch else {"status": "ok"}
+
+    if action == "get_channel_messages":
+        channel_id = int(data.get("channel_id") or 0)
+        if channel_id <= 0:
+            return {"status": "error", "message": "Не указан канал"}
+        if not is_channel_member(channel_id, current_user):
+            return {"status": "error", "message": "Нет доступа к каналу"}
+        msgs = get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200))
+        return {"status": "ok", "messages": msgs}
+
+    if action == "send_channel_message":
+        channel_id = int(data.get("channel_id") or 0)
+        text_msg = (data.get("text") or data.get("message") or "").strip()
+        if channel_id <= 0:
+            return {"status": "error", "message": "Не указан канал"}
+        if not text_msg:
+            return {"status": "error", "message": "Пустое сообщение"}
+        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+            if not is_channel_member(channel_id, current_user):
+                return {"status": "error", "message": "Нет доступа к каналу"}
+            if not _can_send_text(conn, channel_id, current_user):
+                return {"status": "error", "message": "У вас нет прав писать в этот канал"}
+        ok = save_channel_message(channel_id, current_user, text_msg)
+        return {"status": "ok"} if ok else {"status": "error", "message": "Не удалось отправить сообщение"}
+
+    if action == "get_channel_details":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg, details = get_channel_details_for_user(channel_id, current_user)
+        if not ok:
+            return {"status": "error", "message": msg}
+        return {"status": "ok", **(details or {})}
+
+    if action == "update_channel_settings":
+        channel_id = int(data.get("channel_id") or 0)
+        name = (data.get("name") or "").strip()
+        avatar = data.get("avatar") or ""
+        text_min_role = (data.get("text_min_role") or "member").strip().lower()
+        voice_min_role = (data.get("voice_min_role") or "member").strip().lower()
+        ok, msg, channel = update_channel_settings(
+            current_user,
+            channel_id,
+            name,
+            avatar,
+            text_min_role=text_min_role,
+            voice_min_role=voice_min_role,
+        )
+        if not ok:
+            return {"status": "error", "message": msg}
+        return {"status": "ok", "channel": channel}
+
+    if action == "regenerate_channel_code":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg, channel = regenerate_channel_code(current_user, channel_id)
+        if not ok:
+            return {"status": "error", "message": msg}
+        return {"status": "ok", "channel": channel}
+
+    if action == "set_channel_member_role":
+        channel_id = int(data.get("channel_id") or 0)
+        target_login = (data.get("target_login") or "").strip()
+        role = (data.get("role") or "").strip().lower()
+        ok, msg = set_channel_member_role(current_user, channel_id, target_login, role)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "remove_channel_member":
+        channel_id = int(data.get("channel_id") or 0)
+        target_login = (data.get("target_login") or "").strip()
+        ok, msg = remove_channel_member(current_user, channel_id, target_login)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "leave_channel":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg = leave_channel(current_user, channel_id)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "delete_channel":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg = delete_channel(current_user, channel_id)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "set_channel_voice_presence":
+        channel_id = int(data.get("channel_id") or 0)
+        speaking = bool(data.get("speaking", False))
+        joined = bool(data.get("joined", True))
+        ok, msg = set_channel_voice_presence(current_user, channel_id, speaking=speaking, joined=joined)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "leave_channel_voice":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg = leave_channel_voice(current_user, channel_id)
+        return {"status": "ok"} if ok else {"status": "error", "message": msg}
+
+    if action == "get_channel_voice_participants":
+        channel_id = int(data.get("channel_id") or 0)
+        ok, msg, participants = get_channel_voice_participants(channel_id, current_user)
+        if not ok:
+            return {"status": "error", "message": msg}
+        return {"status": "ok", "participants": participants}
 
     # Calls
     if action == "call_user":

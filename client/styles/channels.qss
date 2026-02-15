@@ -1,0 +1,676 @@
+/* ===================== Channels page ===================== */
+
+QWidget#ChannelsPage {
+    background-color: transparent;
+}
+
+QFrame#ChannelsSidebarCard,
+QFrame#ChannelsMainCard {
+    background-color: #2b2d31;
+    border: 1px solid #3a3d42;
+    border-radius: 14px;
+}
+
+QPushButton#ChannelCircleButton {
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 48px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
+    padding: 10px;
+}
+QPushButton#ChannelCircleButton[variant="create"] {
+    background-color: #2e9d5e;
+    border-color: #39b86f;
+}
+QPushButton#ChannelCircleButton[variant="create"]:hover {
+    background-color: #2a8e55;
+    border-color: #43c878;
+}
+QPushButton#ChannelCircleButton[variant="create"]:pressed {
+    background-color: #267f4c;
+}
+
+QPushButton#ChannelCircleButton[variant="join"] {
+    background-color: #3b82f6;
+    border-color: #5292ff;
+}
+QPushButton#ChannelCircleButton[variant="join"]:hover {
+    background-color: #3475de;
+    border-color: #669dff;
+}
+QPushButton#ChannelCircleButton[variant="join"]:pressed {
+    background-color: #2e68c4;
+}
+
+QPushButton#ChannelCircleButton:hover {
+    border-color: #5865F2;
+}
+QPushButton#ChannelCircleButton:pressed {
+    border-color: #6b76ff;
+}
+
+QLabel#ChannelsListHeader {
+    color: #b9bbbe;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 2px 4px;
+}
+
+QFrame#ChannelsInvitesHeader {
+    background: transparent;
+    border: none;
+}
+
+QFrame#ChannelsSidebarSeparator {
+    background: #3a3d42;
+    border: none;
+    margin: 2px 4px 4px 4px;
+}
+
+QPushButton#ChannelsInvitesToggle {
+    background: transparent;
+    border: none;
+    color: #b9bbbe;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 2px 4px;
+}
+QPushButton#ChannelsInvitesToggle:hover {
+    color: #dcddde;
+}
+
+QLabel#ChannelsInviteBadge {
+    background: #f04747;
+    color: #ffffff;
+    border: none;
+    border-radius: 9px;
+    min-width: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 0 4px;
+}
+
+QFrame#ChannelsInvitesDropdown {
+    background: transparent;
+    border: none;
+}
+
+QScrollArea#ChannelsListScroll {
+    border: none;
+    background: transparent;
+}
+QScrollArea#ChannelsListScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+QScrollArea#ChannelsInvitesScroll {
+    border: 1px solid #3a3d42;
+    border-radius: 10px;
+    background-color: #26292f;
+}
+QScrollArea#ChannelsInvitesScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+QFrame#ChannelInviteItem {
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 10px;
+}
+QLabel#ChannelInviteTitle {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+}
+QLabel#ChannelInviteSub {
+    color: #b9bbbe;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QFrame#ChannelListItem {
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 10px;
+}
+QFrame#ChannelListItem:hover {
+    background-color: #3a3f4b;
+    border-color: #5865F2;
+}
+QFrame#ChannelListItem[active="true"] {
+    background-color: #383d49;
+    border-color: #6b76ff;
+}
+
+QLabel#ChannelListItemName {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+}
+QLabel#ChannelListItemSub {
+    color: #b9bbbe;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#ChannelsEmptyList {
+    color: #b9bbbe;
+    font-size: 13px;
+    padding: 8px;
+}
+QLabel#ChannelsListEmpty {
+    color: #b9bbbe;
+    font-size: 12px;
+    padding: 6px;
+}
+
+QLabel#ChannelEmptyHint {
+    color: #dcddde;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+QFrame#ChannelFormCard {
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 12px;
+    min-width: 460px;
+    max-width: 520px;
+}
+QLabel#ChannelFormTitle {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 800;
+}
+QLabel#ChannelFormHint {
+    color: #b9bbbe;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QLineEdit#ChannelInput {
+    background-color: #1f2126;
+    border: 1px solid #3a3d42;
+    border-radius: 9px;
+    color: #ffffff;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
+}
+QLineEdit#ChannelInput:focus {
+    border-color: #5865F2;
+}
+
+QPushButton#ChannelPrimaryButton,
+QPushButton#ChannelSecondaryButton {
+    min-height: 34px;
+    border-radius: 9px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
+QPushButton#ChannelPrimaryButton {
+    background-color: #5865F2;
+    color: #ffffff;
+    border: 1px solid #6b76ff;
+}
+QPushButton#ChannelPrimaryButton:hover {
+    background-color: #4f5be0;
+}
+QPushButton#ChannelPrimaryButton:pressed {
+    background-color: #4650c7;
+}
+
+QPushButton#ChannelSecondaryButton {
+    background-color: #3a3d42;
+    color: #ffffff;
+    border: 1px solid #4a4e56;
+}
+QPushButton#ChannelSecondaryButton:hover {
+    background-color: #474b54;
+}
+QPushButton#ChannelSecondaryButton:pressed {
+    background-color: #40444c;
+}
+
+QFrame#ChannelTopBar {
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 10px;
+}
+QLabel#ChannelOpenTitle {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 800;
+}
+QLabel#ChannelOpenCode {
+    color: #b9bbbe;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QFrame#ChannelInnerNav {
+    min-width: 180px;
+    max-width: 180px;
+    background-color: #31343c;
+    border: 1px solid #3d4350;
+    border-radius: 10px;
+}
+QPushButton#ChannelInnerNavButton {
+    text-align: left;
+    min-height: 36px;
+    border-radius: 8px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #dcddde;
+    font-size: 13px;
+    font-weight: 700;
+}
+QPushButton#ChannelInnerNavButton:hover {
+    background-color: #3a3f4b;
+    border-color: #4a5060;
+}
+QPushButton#ChannelInnerNavButton:checked {
+    background-color: #5865F2;
+    border-color: #6b76ff;
+    color: #ffffff;
+}
+
+QScrollArea#ChannelMessagesScroll {
+    background: #2b2f36;
+    border: 1px solid #3d4350;
+    border-radius: 14px;
+    padding: 4px;
+}
+QScrollArea#ChannelMessagesScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+QFrame#ChannelMessageRow {
+    background: transparent;
+    border: none;
+}
+
+QFrame#ChannelMsgCard {
+    background: #323741;
+    border: 1px solid #3f4655;
+    border-radius: 17px;
+}
+QFrame#ChannelMsgCard[outgoing="true"] {
+    background: #3d4ac0;
+    border: 1px solid #6072ff;
+}
+
+QLabel#ChannelMsgAuthor {
+    color: #d7d9df;
+    font-size: 12px;
+    font-weight: 700;
+}
+QLabel#ChannelMsgText {
+    color: #ffffff;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+QLabel#ChannelMsgMeta {
+    color: #b9bbbe;
+    font-size: 10px;
+    font-weight: 700;
+}
+QFrame#ChannelMsgCard[outgoing="true"] QLabel#ChannelMsgMeta {
+    color: #dde4ff;
+}
+
+QLabel#ChannelVoiceStatus {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+}
+QLabel#ChannelVoiceQuality {
+    color: #b9bbbe;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+QLabel#ChannelsToast {
+    background-color: rgba(30, 33, 40, 0.98);
+    border: 1px solid #3d4350;
+    border-radius: 12px;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 800;
+    padding: 10px 14px;
+}
+
+/* ===== Stage 2: Channel settings ===== */
+#ChannelSettingsTopBar {
+    background-color: #323741;
+    border: 1px solid #3b4250;
+    border-radius: 12px;
+}
+
+#ChannelSettingsCard {
+    background-color: #2b3038;
+    border: 1px solid #3a404d;
+    border-radius: 12px;
+}
+#ChannelSettingsCard QPushButton#ChannelSecondaryButton,
+#ChannelSettingsCard QPushButton#ChannelPrimaryButton {
+    min-height: 34px;
+}
+
+#ChannelSettingsSectionTitle {
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+#ChannelSettingsCode {
+    color: #cfd6e4;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+
+#ChannelInviteBlock {
+    background: transparent;
+    border: none;
+}
+#ChannelInviteBlock QLineEdit#ChannelInput {
+    min-height: 34px;
+}
+#ChannelInviteBlock QPushButton#ChannelSecondaryButton {
+    min-width: 0px;
+}
+
+#ChannelMembersScroll,
+#ChannelMembersScroll > QWidget,
+#ChannelMembersScroll > QWidget > QWidget {
+    background: transparent;
+    border: none;
+}
+
+#ChannelMemberItem {
+    background-color: #313640;
+    border: 1px solid #3d4452;
+    border-radius: 12px;
+}
+
+#ChannelMemberName {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+#ChannelMemberSub {
+    color: #b3bdcf;
+    font-size: 12px;
+}
+
+#ChannelMemberRoleBadge {
+    padding: 3px 8px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 800;
+    color: #ecf1ff;
+    border: 1px solid #55617a;
+    background-color: #4a5570;
+}
+#ChannelMemberRoleBadge[role="owner"] {
+    border-color: #5f78ff;
+    background-color: #4c61cf;
+}
+#ChannelMemberRoleBadge[role="admin"] {
+    border-color: #3f9bbf;
+    background-color: #356f8d;
+}
+#ChannelMemberRoleBadge[role="moderator"] {
+    border-color: #7ca044;
+    background-color: #59793b;
+}
+#ChannelMemberRoleBadge[role="member"] {
+    border-color: #5b667c;
+    background-color: #4b5566;
+}
+
+#ChannelTinyActionButton {
+    background-color: #3a404d;
+    color: #edf2ff;
+    border: 1px solid #4a5061;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+#ChannelTinyActionButton:hover {
+    background-color: #444b5a;
+}
+#ChannelTinyActionButton:pressed {
+    background-color: #363c48;
+}
+
+#ChannelTinyDangerButton {
+    background-color: #4a2b34;
+    color: #ffe9ee;
+    border: 1px solid #6f3a49;
+    border-radius: 10px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+#ChannelTinyDangerButton:hover {
+    background-color: #57313c;
+}
+#ChannelTinyDangerButton:pressed {
+    background-color: #442730;
+}
+
+#ChannelInlineConfirm {
+    background-color: #1e2128;
+    border: 1px solid #3a404d;
+    border-radius: 12px;
+}
+
+#ChannelInlineConfirmText {
+    color: #f3f6ff;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+
+/* ===== Stage 3: channel access + voice participants ===== */
+
+QFrame#ChannelAccessCard {
+    background-color: #2f343d;
+    border: 1px solid #3f4655;
+    border-radius: 12px;
+}
+
+QLabel#ChannelAccessLabel {
+    color: #dfe6f7;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+QComboBox#ChannelAccessCombo {
+    min-height: 32px;
+    background-color: #242831;
+    border: 1px solid #41495b;
+    border-radius: 9px;
+    color: #ffffff;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+QComboBox#ChannelAccessCombo:focus {
+    border-color: #6b76ff;
+}
+QComboBox#ChannelAccessCombo::drop-down {
+    border: none;
+    width: 20px;
+}
+QComboBox#ChannelAccessCombo QAbstractItemView {
+    background: #2b3038;
+    color: #ffffff;
+    border: 1px solid #41495b;
+    selection-background-color: #5865F2;
+    selection-color: #ffffff;
+}
+
+QLabel#ChannelAccessHint {
+    color: #aeb7cb;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+QFrame#ChannelVoiceMembersCard {
+    background-color: #2f343d;
+    border: 1px solid #3f4655;
+    border-radius: 12px;
+}
+
+QLabel#ChannelVoiceMembersTitle {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+QScrollArea#ChannelVoiceMembersScroll {
+    background: transparent;
+    border: none;
+}
+QScrollArea#ChannelVoiceMembersScroll > QWidget > QWidget {
+    background: transparent;
+}
+
+QFrame#ChannelVoiceMemberItem {
+    background-color: #323845;
+    border: 1px solid #434c5f;
+    border-radius: 10px;
+}
+QFrame#ChannelVoiceMemberItem[speaking="true"] {
+    background-color: #374058;
+    border-color: #6b76ff;
+}
+
+QLabel#ChannelVoiceMemberName {
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+}
+QLabel#ChannelVoiceMemberMeta {
+    color: #b9c3d9;
+    font-size: 11px;
+    font-weight: 600;
+}
+QLabel#ChannelVoiceSpeakingBadge {
+    background-color: #5865F2;
+    color: #ffffff;
+    border-radius: 7px;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-weight: 800;
+}
+QLabel#ChannelVoiceSpeakingBadge[off="true"] {
+    background: transparent;
+    color: #95a1bc;
+    border: 1px solid #4a556b;
+}
+
+/* ===== UI polish package #2 ===== */
+#ChannelsCompactToggle {
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid #40444b;
+    background: #2f3136;
+    color: #dcddde;
+    font-size: 12px;
+    font-weight: 600;
+}
+#ChannelsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
+#ChannelsCompactToggle:checked {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+#ChannelListItemTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: #f2f3f5;
+}
+#ChannelListItemSub {
+    font-size: 11px;
+    color: #a5adba;
+}
+#ChannelListItem[compact="true"] #ChannelListItemTitle {
+    font-size: 12px;
+}
+#ChannelListItem[compact="true"] #ChannelListItemSub {
+    font-size: 10px;
+}
+
+#ChannelsEmptyStateCard {
+    background: #2c2f36;
+    border: 1px solid #3a3d45;
+    border-radius: 12px;
+    margin: 8px 4px;
+}
+#ChannelsEmptyStateIcon {
+    font-size: 22px;
+    color: #8ea4ff;
+}
+#ChannelsEmptyStateTitle {
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 700;
+}
+#ChannelsEmptyStateSub {
+    color: #b0b6c0;
+    font-size: 12px;
+}
+
+#ChannelsSkeletonCard {
+    min-height: 56px;
+    border-radius: 12px;
+    border: 1px solid #3a3e46;
+    background: #2f3239;
+    margin: 2px 2px;
+}
+
+#ChannelMsgSkeleton {
+    min-height: 44px;
+    border-radius: 10px;
+    background: #2d3138;
+    border: 1px solid #3a3e46;
+    margin: 3px 6px;
+}
+
+#ChannelTextEmptyHint {
+    color: #aab2be;
+    font-size: 13px;
+    padding: 18px 12px;
+    margin: 8px 4px;
+    border: 1px dashed #3d414a;
+    border-radius: 10px;
+    background: #282b31;
+}
+
+#ChannelsListEmpty {
+    color: #aeb4be;
+    background: #2b2f36;
+    border: 1px solid #3a3e46;
+    border-radius: 10px;
+    padding: 10px 8px;
+    margin: 4px 2px;
+}

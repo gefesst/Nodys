@@ -1,54 +1,76 @@
 QWidget#ChatsPage {
-    background: #36393f;
+    background: transparent;
 }
 
+/* Основные панели в стиле профиля */
 QFrame#ChatsFriendsCard,
-QFrame#ChatsDialogCard,
-QLabel#ChatHeader {
+QFrame#ChatsDialogCard {
     background: #2b2d31;
-    border: 1px solid #3a3d42;
+    border: none;
     border-radius: 14px;
 }
 
+/* Выделение имени собеседника сверху */
+QFrame#ChatHeaderCard {
+    background: #2f3136;
+    border: 1px solid #3a3d42;
+    border-radius: 12px;
+}
 QLabel#ChatHeader {
-    color: white;
-    font-size: 16px;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 15px;
     font-weight: 800;
-    padding: 10px 12px;
+    padding: 2px 10px;
 }
 
+/* Карточки друзей в чатах (мягкий стиль) */
 QFrame#ChatFriendItem {
-    background: #313338;
-    border: none;                 /* убрана обводка карточки друга */
+    background: #30343b;
+    border: 1px solid #3a3d42;
     border-radius: 12px;
     min-height: 64px;
     max-height: 64px;
 }
 QFrame#ChatFriendItem:hover {
-    background: #3a3d42;
+    background: #363b44;
+    border: 1px solid #4b515d;
 }
+/* Активный чат: левая полоска является частью карточки */
 QFrame#ChatFriendItem[active="true"] {
-    background: #3a3d42;
+    background: #3a3f48;
+    border: 1px solid #59606d;
+    border-left: 4px solid #5865F2;
+    border-top-left-radius: 12px;
+    border-bottom-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-right-radius: 12px;
 }
 
-QFrame#ChatActiveBar {
+/* Внутренний контент карточки без собственной подложки */
+QFrame#ChatFriendContent {
     background: transparent;
     border: none;
-    border-radius: 0;
-}
-QFrame#ChatActiveBar[active="true"] {
-    background: #5865F2;         /* только одна закругленная полоска */
-    border: none;
-    border-top-left-radius: 10px;
-    border-bottom-left-radius: 10px;
 }
 
-QLabel#ChatFriendName { color: white; font-size: 14px; font-weight: 700; background: transparent; border: none; }
-QLabel#ChatFriendSub { color: #b9bbbe; font-size: 11px; background: transparent; border: none; }
+QLabel#ChatFriendName {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    background: transparent;
+    border: none;
+}
+QLabel#ChatFriendSub {
+    color: #b9bbbe;
+    font-size: 11px;
+    background: transparent;
+    border: none;
+}
 
 QLabel#UnreadBadge {
     background: #f04747;
-    color: white;
+    color: #ffffff;
     border: none;
     border-radius: 10px;
     min-width: 20px;
@@ -60,18 +82,166 @@ QLabel#UnreadBadge {
 }
 
 QLineEdit#ChatInput {
-    background: #202225;
-    color: white;
-    border: 1px solid #3a3d42;
+    background: #232428;
+    color: #ffffff;
+    border: none;
     border-radius: 10px;
     padding: 8px 10px;
 }
+QLineEdit#ChatInput:focus {
+    border: 1px solid #5865F2;
+}
+
 QPushButton#ChatSendButton {
     background: #5865F2;
-    color: white;
+    color: #ffffff;
     border: none;
     border-radius: 10px;
     padding: 8px 14px;
     font-weight: 700;
 }
-QPushButton#ChatSendButton:hover { background: #4752c4; }
+QPushButton#ChatSendButton:hover {
+    background: #4752c4;
+}
+
+/* Скроллы и внутренние области */
+QWidget#ChatsPage QScrollArea {
+    background: transparent;
+    border: none;
+}
+QWidget#ChatsPage QScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+QWidget#ChatsPage QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 2px;
+}
+QWidget#ChatsPage QScrollBar::handle:vertical {
+    background: #4a4e57;
+    border-radius: 5px;
+    min-height: 24px;
+}
+QWidget#ChatsPage QScrollBar::add-line:vertical,
+QWidget#ChatsPage QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+/* ===== UI polish package #2 ===== */
+#ChatsListTitle {
+    color: #f2f3f5;
+    font-size: 13px;
+    font-weight: 700;
+    padding-left: 4px;
+}
+
+#ChatsCompactToggle {
+    min-height: 28px;
+    padding: 0 10px;
+    border-radius: 8px;
+    border: 1px solid #40444b;
+    background: #2f3136;
+    color: #dcddde;
+    font-size: 12px;
+    font-weight: 600;
+}
+#ChatsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
+#ChatsCompactToggle:checked {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: white;
+}
+
+#ChatsSectionHeader {
+    color:#b9bbbe;
+    font-size:11px;
+    font-weight:700;
+    text-transform: uppercase;
+    padding:6px 4px 2px 4px;
+}
+
+#ChatFriendItem[compact="true"] #ChatFriendName {
+    font-size: 13px;
+}
+#ChatFriendItem[compact="true"] #ChatFriendStatus {
+    font-size: 11px;
+}
+
+#ChatsSkeletonCard {
+    min-height: 56px;
+    border-radius: 12px;
+    border: 1px solid #3a3e46;
+    background: #2f3239;
+    margin: 2px 2px;
+}
+
+#ChatsEmptyStateCard {
+    background: #2c2f36;
+    border: 1px solid #3a3d45;
+    border-radius: 12px;
+    margin: 8px 2px;
+}
+#ChatsEmptyStateIcon {
+    font-size: 20px;
+    color: #8ea4ff;
+}
+#ChatsEmptyStateTitle {
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 700;
+}
+#ChatsEmptyStateSub {
+    color: #b0b6c0;
+    font-size: 12px;
+}
+
+#ChatsMessagesEmptyHint {
+    color: #aab2be;
+    font-size: 13px;
+    padding: 18px 12px;
+    margin: 8px 4px;
+    border: 1px dashed #3d414a;
+    border-radius: 10px;
+    background: #282b31;
+}
+
+
+/* Message bubbles */
+QFrame#ChatMessageRow {
+    background: transparent;
+    border: none;
+}
+
+QFrame#ChatBubbleCard {
+    background: #353943;
+    border: 1px solid #454c59;
+    border-radius: 16px;
+}
+
+QFrame#ChatBubbleCard[outgoing="true"] {
+    background: #5462e8;
+    border: 1px solid #6f7bff;
+}
+
+QLabel#ChatBubbleText {
+    color: #ffffff;
+    background: transparent;
+    border: none;
+    font-size: 13px;
+}
+
+QLabel#ChatBubbleMeta {
+    color: #b9bbbe;
+    background: transparent;
+    border: none;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+QLabel#ChatBubbleMeta[accent="true"] {
+    color: #8ea4ff;
+}
+
+QFrame#ChatBubbleCard[outgoing="true"] QLabel#ChatBubbleMeta {
+    color: #e0e5ff;
+}
