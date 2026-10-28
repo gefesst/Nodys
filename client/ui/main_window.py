@@ -770,6 +770,9 @@ class MainWindow(QWidget):
         self.set_active_nav(self.btn_channels)
         self.stack.setCurrentIndex(2)
         self._apply_polling_policy(force=True)
+        # Explicit navigation must load once even before the OS reports focus.
+        if not self.channels_page._loading_channels:
+            self.channels_page.load_channels(force_refresh=True)
 
 
     def show_profile(self):

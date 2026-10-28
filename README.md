@@ -30,3 +30,9 @@ Voice packets revalidate the session and channel/private-call policy for both se
 The settings page has a whole-page scroll container. Channel list polling preserves create/join screens and no longer overwrites settings drafts. Session configuration preserves endpoints on login/logout and retains tokens on temporary resume failure.
 
 Run `python tools/preview.py --smoke-seconds 8` for a bounded two-client process smoke. Actual microphone/speaker quality requires manual testing. The preview launcher uses temporary accounts and storage on loopback only.
+
+## Second change set: channel state
+
+Channel responses are scoped to the selected channel/session, empty chats render a hint, settings drafts survive delayed responses, and voice presence updates are ordered on the server. New channel/profile avatars are portable PNG thumbnails instead of local file paths. Existing path-based avatars must be selected and saved again to migrate them.
+
+Manual preview: open the test channel in both windows; use Alice to edit the channel avatar/name, then check Bob. Switch channels while requests are pending and leave/rejoin voice to inspect the participant list. Audio hardware permissions and quality require a separate manual test.

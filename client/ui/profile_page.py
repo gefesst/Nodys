@@ -1,3 +1,4 @@
+from application.avatars import encode_avatar
 import os
 import shutil
 
@@ -285,7 +286,11 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         if not path:
             return
 
-        self.avatar_path = path  # пока абсолютный путь (до сохранения)
+        try:
+            self.avatar_path = encode_avatar(path)
+        except ValueError as error:
+            self.show_toast(str(error))
+            return
         self._apply_avatar(self.avatar_path)
 
     def save_changes(self):
