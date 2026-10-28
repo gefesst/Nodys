@@ -20,10 +20,10 @@ Database context managers commit or roll back and always close. Preview data liv
 ## Remaining stages
 
 1. Replace per-packet connection churn with a measured read model and explicit cross-process revocation invalidation. Preserve denial after revocation and receiver checks.
-2. Extract command handlers/services and repositories; introduce versioned migration fixtures and protocol schemas.
-3. Separate client session/channel state from Qt widgets. Add request generations and serialized voice transitions.
-4. Secure control/audio transport, media storage, acknowledged events and multi-speaker mixing.
-5. Lock dependencies and package for target platforms, with hardware audio acceptance.
+2. Continue extracting channel/authentication services and repositories; add protocol schemas. Calls and versioned migrations are extracted.
+3. Continue separating client session/channel state from Qt widgets. Request generations and serialized background voice lifecycle are implemented.
+4. Improve packet-loss/reordering playback, media storage and transport capacity. Encrypted transport, durable call events and basic mixing are implemented.
+5. Lock dependencies and expand hardware/network acceptance. Application packaging is deferred at the user's request.
 
 Do not present this first extraction as completion of the entire architecture migration. Real audio, external network failure matrices and public-server hardening remain release gates.
 
@@ -37,7 +37,7 @@ Avatars now travel as bounded 128-pixel PNG thumbnails in existing avatar fields
 
 ## Call delivery, audio and control transport (third change set)
 
-- `server/storage/events.py`: non-destructive event reads by cursor; retention is 180 seconds and 200 events per user. Legacy clients still use the old destructive queue. A current call snapshot repairs state even when events have expired. Events and call changes are not yet a transactional outbox.
+- `server/storage/events.py`: non-destructive event reads by cursor; retention is 180 seconds and 200 events per user. Legacy clients still use the old destructive queue. A current call snapshot repairs state even when events have expired. Call events and state changes now commit in the same transaction (fifth change set).
 - `client/ui/main_window.py`: reconciles snapshots by session, call ID, peer and status; rejects responses from a previous session. Extracting this controller from the widget remains follow-up work.
 - `client/audio/mixer.py`: bounded PCM queues per speaker, summed in int32 and clipped to int16. Network sequencing, adaptive jitter control and codec work remain open.
 - `client/transport/control.py`: shared verified TLS connection factory for asynchronous requests and shutdown/resume requests.
@@ -55,4 +55,14 @@ The third-stage remote-voice block is superseded by the authenticated datagram t
 
 Cryptographic API reference: https://cryptography.io/en/stable/hazmat/primitives/aead/ . Never reconstruct a cipher with previously used send keys; the persistent claim and client credential renewal are required invariants. This is a Nodys-specific encrypted transport using a standard AEAD primitive, not DTLS, SRTP or an independently audited protocol. It is not E2EE.
 
-Known limits: SQLite reads per sender/recipient remain a scalability cost; packet sequencing prevents replay but the playback buffer does not yet reorder audio or implement loss concealment. Client reconnection is automatic, but initial connection still runs in the existing UI voice-start path and can wait for the network timeout. Transport keys are stored in the protected server DB and may survive in backups. Public admission throttling, migration versioning, load tests and hardware/network acceptance remain follow-up work.
+Known limits: SQLite reads per sender/recipient remain a scalability cost; packet sequencing prevents replay but the playback buffer does not yet reorder audio or implement loss concealment. Voice startup, shutdown and reconnection run outside the Qt UI thread (fifth change set). Transport keys are stored in the protected server DB and may survive in backups. Public admission throttling, migration versioning, load tests and hardware/network acceptance remain follow-up work.
+
+## Transactional calls, migrations and background voice (fifth change set)
+
+`server/services/calls.py` owns call creation, acceptance, termination and expiry. SQLite is the only source of active call state; the duplicate in-memory maps and swallowed DB failures are removed. `BEGIN IMMEDIATE` serializes competing call transitions. Persistent events and call changes commit together; legacy queue notifications are published only after commit. Event polling reads events and the snapshot from the same read transaction. Only the callee may accept a ringing call; repeated acceptance is idempotent. Each participant has a separate heartbeat timestamp. Reinitializing the schema no longer deletes active calls; stale calls still expire.
+
+`server/storage/migrations.py` introduces a per-database `schema_migrations` ledger: users baseline v1, call heartbeats v2, chat baseline v1. Older unversioned databases are upgraded in place. Before upgrading an existing database, SQLite's backup API saves a consistent snapshot including WAL data in a `backups/` directory beside it. All pending steps for one database and their ledger entries commit atomically; failures roll back and stop startup. Unknown/newer versions are rejected. Users and chat remain separate databases and migrate independently, not as one cross-database transaction. Backup files contain sensitive account/session data and must receive the same protection as the live DB. No automatic backup deletion is performed.
+
+`client/application/voice_session.py` adapts the core audio client to Qt. A shared serial worker completes old audio shutdown before new startup. Completion is delivered through queued Qt signals. Cancellation prevents a late success/error from modifying the new screen; pending channel startup is cancelled on channel switch. Network/audio startup and stop do not wait on the GUI thread. Normal navigation to Friends preserves an ongoing call. Authentication resume and some application-close/logout requests still use the older synchronous code and remain follow-up work.
+
+Validation covers legacy users/messages and avatars surviving migrations, readable pre-upgrade snapshots, repeated initialization, rollback of DDL/ledger on injected failure, rejection of future versions, call/event rollback including a failure on the second event, concurrent callers, restart/heartbeat expiry, Qt timer responsiveness during blocked voice startup, cancellation and callback thread affinity.
