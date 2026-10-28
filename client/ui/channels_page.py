@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QFileDialog,
     QComboBox,
+    QMenu,
     QSizePolicy,
     QApplication,
 )
@@ -234,10 +235,13 @@ class ChannelMemberItem(QFrame):
                 elif role == "moderator":
                     role_actions.append(("Сделать участником", "member"))
 
-            for txt, new_role in role_actions:
-                btn = QPushButton(txt)
-                btn.setObjectName("ChannelTinyActionButton")
-                btn.clicked.connect(partial(on_toggle_role, login, new_role))
+            if role_actions:
+                btn = QPushButton('Изменить роль ▾')
+                btn.setObjectName('ChannelTinyActionButton')
+                menu = QMenu(btn)
+                for txt, new_role in role_actions:
+                    menu.addAction(txt, partial(on_toggle_role, login, new_role))
+                btn.setMenu(menu)
                 lay.addWidget(btn)
 
         if can_manage and role != "owner" and login and login != current_login:
@@ -534,7 +538,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.placeholder_page = QWidget()
         ph_l = QVBoxLayout(self.placeholder_page)
         ph_l.setContentsMargins(0, 0, 0, 0)
+        placeholder_title=QLabel('Ваши пространства');placeholder_title.setObjectName('PageTitle');ph_l.addWidget(placeholder_title)
         ph_l.addStretch()
+        from PySide6.QtSvgWidgets import QSvgWidget
+        from ui.design.widgets import ASSETS
+        illustration=QSvgWidget(str(ASSETS/'illustration-channels.svg'));illustration.setFixedSize(240,160)
+        ph_l.addWidget(illustration,0,Qt.AlignHCenter)
         empty_lbl = QLabel("Подключитесь или создайте свой первый канал")
         empty_lbl.setObjectName("ChannelEmptyHint")
         empty_lbl.setAlignment(Qt.AlignCenter)
@@ -546,14 +555,15 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.create_page = QWidget()
         cp_root = QVBoxLayout(self.create_page)
         cp_root.setContentsMargins(0, 0, 0, 0)
-        cp_root.addStretch()
+        cp_root.setContentsMargins(16, 12, 16, 0)
 
         create_card = QFrame()
-        create_card.setObjectName("ChannelFormCard")
+        create_card.setObjectName("FlatForm")
+        create_card.setMaximumWidth(840)
         create_card.setMinimumWidth(440)
         create_l = QVBoxLayout(create_card)
-        create_l.setContentsMargins(16, 16, 16, 16)
-        create_l.setSpacing(10)
+        create_l.setContentsMargins(0, 0, 0, 0)
+        create_l.setSpacing(24)
 
         create_title = QLabel("Создание канала")
         create_title.setObjectName("ChannelFormTitle")
@@ -579,7 +589,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         create_l.addWidget(self.create_name_input)
 
         create_actions = QHBoxLayout()
-        create_actions.addStretch()
+
 
         self.create_cancel_btn = QPushButton("Отменить")
         self.create_cancel_btn.setObjectName("ChannelSecondaryButton")
@@ -590,12 +600,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.create_confirm_btn = QPushButton("Создать")
         self.create_confirm_btn.setObjectName("ChannelPrimaryButton")
         self.create_confirm_btn.clicked.connect(self.create_channel)
-        create_actions.addWidget(self.create_confirm_btn)
+        create_actions.insertWidget(0, self.create_confirm_btn)
+        create_actions.addStretch()
         install_opacity_feedback(self.create_confirm_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         create_l.addLayout(create_actions)
 
-        cp_root.addWidget(create_card, alignment=Qt.AlignCenter)
+        cp_root.addWidget(create_card)
         cp_root.addStretch()
         self.main_stack.addWidget(self.create_page)
 
@@ -603,14 +614,15 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.join_page = QWidget()
         jp_root = QVBoxLayout(self.join_page)
         jp_root.setContentsMargins(0, 0, 0, 0)
-        jp_root.addStretch()
+        jp_root.setContentsMargins(16, 12, 16, 0)
 
         join_card = QFrame()
-        join_card.setObjectName("ChannelFormCard")
+        join_card.setObjectName("FlatForm")
+        join_card.setMaximumWidth(840)
         join_card.setMinimumWidth(440)
         join_l = QVBoxLayout(join_card)
-        join_l.setContentsMargins(16, 16, 16, 16)
-        join_l.setSpacing(10)
+        join_l.setContentsMargins(0, 0, 0, 0)
+        join_l.setSpacing(24)
 
         join_title = QLabel("Подключение к каналу")
         join_title.setObjectName("ChannelFormTitle")
@@ -627,7 +639,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         join_l.addWidget(self.join_code_input)
 
         join_actions = QHBoxLayout()
-        join_actions.addStretch()
+
 
         self.join_cancel_btn = QPushButton("Отменить")
         self.join_cancel_btn.setObjectName("ChannelSecondaryButton")
@@ -638,12 +650,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.join_confirm_btn = QPushButton("Подключиться")
         self.join_confirm_btn.setObjectName("ChannelPrimaryButton")
         self.join_confirm_btn.clicked.connect(self.join_channel)
-        join_actions.addWidget(self.join_confirm_btn)
+        join_actions.insertWidget(0, self.join_confirm_btn)
+        join_actions.addStretch()
         install_opacity_feedback(self.join_confirm_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         join_l.addLayout(join_actions)
 
-        jp_root.addWidget(join_card, alignment=Qt.AlignCenter)
+        jp_root.addWidget(join_card)
         jp_root.addStretch()
         self.main_stack.addWidget(self.join_page)
 
@@ -795,7 +808,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.voice_members_scroll.setWidget(self.voice_members_container)
         vm_l.addWidget(self.voice_members_scroll, 1)
 
-        v_l.addWidget(voice_members_card, 1)
+        v_l.insertWidget(0, voice_members_card, 1)
 
         self.channel_inner_stack.addWidget(voice_tab)
 
@@ -832,7 +845,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.settings_title_lbl = QLabel("Настройки канала")
         self.settings_title_lbl.setObjectName("ChannelOpenTitle")
-        self.settings_title_lbl.setAlignment(Qt.AlignCenter)
+        self.settings_title_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.settings_title_lbl.setWordWrap(True)
         sp_top_l.addWidget(self.settings_title_lbl, 1)
 
         sp_top_l.addSpacing(10)
@@ -840,8 +854,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         # general settings
         general = QFrame()
-        general.setObjectName("ChannelSettingsCard")
+        general.setObjectName("FlatForm")
         self.settings_general_card = general
+        general.setMaximumWidth(840)
         g_l = QVBoxLayout(general)
         g_l.setContentsMargins(12, 12, 12, 12)
         g_l.setSpacing(8)
@@ -946,7 +961,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         sp_root.addWidget(general)
 
         access_card = QFrame()
-        access_card.setObjectName("ChannelAccessCard")
+        access_card.setObjectName("FlatForm")
+        access_card.setMaximumWidth(840)
         self.settings_access_card = access_card
         a_l = QVBoxLayout(access_card)
         a_l.setContentsMargins(12, 12, 12, 12)
@@ -1035,7 +1051,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         m_l.addLayout(danger_row)
 
-        sp_root.addWidget(members_card, 1)
+        sp_root.addWidget(members_card)
 
         self.settings_confirm = QFrame()
         self.settings_confirm.setObjectName("ChannelInlineConfirm")
@@ -1062,6 +1078,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         install_opacity_feedback(self.settings_confirm_apply, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         sp_root.addWidget(self.settings_confirm)
+        sp_root.addStretch()
 
         sections = QHBoxLayout()
         self.settings_sections = {}
@@ -1071,9 +1088,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             button.clicked.connect(lambda checked=False, key=key: self.show_settings_section(key))
             self.settings_sections[key] = button
             sections.addWidget(button)
-        settings_outer.insertLayout(0, sections)
+        sp_root.insertLayout(1, sections)
         g_actions.removeWidget(self.settings_save_btn)
-        settings_outer.addWidget(self.settings_save_btn, 0, Qt.AlignRight)
+        sp_root.insertWidget(sp_root.count()-1, self.settings_save_btn, 0, Qt.AlignLeft)
         self.show_settings_section('general')
 
         self._settings_revision = 0
@@ -1366,9 +1383,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         area_w = self.main_stack.width() if getattr(self, "main_stack", None) else self.width()
         area_w = max(0, int(area_w or self.width() or 0))
 
-        narrow = area_w < 980
-        stacked_buttons = area_w < 900
-        stacked_rows = area_w < 780
+        narrow = area_w < 620
+        stacked_buttons = area_w < 620
+        stacked_rows = area_w < 620
         mode = (narrow, stacked_buttons, stacked_rows)
 
         if (not force) and mode == getattr(self, "_settings_layout_mode", None):
@@ -1451,10 +1468,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         lay.setContentsMargins(14, 14, 14, 14)
         lay.setSpacing(5)
 
-        icon = QLabel("🛰️")
+        from PySide6.QtSvgWidgets import QSvgWidget
+        from ui.design.widgets import ASSETS
+        icon = QSvgWidget(str(ASSETS / "illustration-channels.svg"))
+        icon.setFixedSize(180,120)
         icon.setObjectName("ChannelsEmptyStateIcon")
-        icon.setAlignment(Qt.AlignCenter)
-        lay.addWidget(icon)
+        lay.addWidget(icon,0,Qt.AlignHCenter)
 
         t = QLabel(title)
         t.setObjectName("ChannelsEmptyStateTitle")

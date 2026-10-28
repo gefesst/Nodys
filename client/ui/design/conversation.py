@@ -5,6 +5,7 @@ import uuid
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
 from PySide6.QtWidgets import (
     QWidget,
+    QFrame,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -68,8 +69,13 @@ class Conversation(QWidget):
         self.view.customContextMenuRequested.connect(self.context_menu)
         self.view.verticalScrollBar().valueChanged.connect(self.scrolled)
         root.addWidget(self.view, 1)
-        compose = QHBoxLayout()
+        compose_frame = QFrame()
+        compose_frame.setObjectName("ComposerFrame")
+        compose = QHBoxLayout(compose_frame)
+        compose.setContentsMargins(4, 4, 12, 4)
+        compose.setSpacing(8)
         self.editor = Composer()
+        self.editor.setObjectName("MessageComposer")
         self.editor.setAccessibleName("Текст сообщения")
         self.editor.submit.connect(self.send)
         self.editor.textChanged.connect(self.edited)
@@ -79,7 +85,7 @@ class Conversation(QWidget):
         self.send_button.clicked.connect(self.send)
         compose.addWidget(self.editor, 1)
         compose.addWidget(self.send_button, 0, Qt.AlignBottom)
-        root.addLayout(compose)
+        root.addWidget(compose_frame)
         self.send_status = QLabel("Enter — отправить · Shift + Enter — новая строка")
         self.send_status.setObjectName("Muted")
         self.send_status.setWordWrap(True)

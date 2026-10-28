@@ -27,7 +27,7 @@ class AuthWindow(QWidget):
         self.status_label=QLabel();self.status_label.setObjectName('ErrorLabel');self.status_label.setWordWrap(True);layout.addWidget(self.status_label)
         layout.addStretch()
         self.btn_login=Button('Войти',primary=True);self.btn_login.clicked.connect(self.login_user);layout.addWidget(self.btn_login)
-        self.btn_register=Button('Нет аккаунта? Регистрация');self.btn_register.clicked.connect(self.open_register);layout.addWidget(self.btn_register)
+        self.btn_register=Button('Нет аккаунта? Регистрация');self.btn_register.setProperty('flat',True);self.btn_register.clicked.connect(self.open_register);layout.addWidget(self.btn_register)
 
     def login_user(self):
         if self.thread and self.thread.isRunning():

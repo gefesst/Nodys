@@ -1,6 +1,6 @@
 """Shared authentication composition; forms remain connected to real handlers."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QEvent
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QWidget,
     QLineEdit,
+    QSizePolicy,
 )
 from PySide6.QtSvgWidgets import QSvgWidget
 from .widgets import ASSETS
@@ -17,19 +18,22 @@ from .widgets import ASSETS
 
 def build_auth_layout(page, title, subtitle):
     outer = QHBoxLayout(page)
-    outer.setContentsMargins(55, 42, 55, 42)
-    outer.setSpacing(50)
+    outer.setContentsMargins(100, 80, 100, 64)
+    outer.setSpacing(80)
     hero = QVBoxLayout()
+    hero.setSpacing(12)
     hero.addStretch()
     words = QLabel('Свои люди.<br><span style="color:#91ADFF">Рядом в Nodus.</span>')
     words.setObjectName("AuthHero")
+    words.setSizePolicy(QSizePolicy.Preferred,QSizePolicy.Fixed)
     hero.addWidget(words)
     tagline = QLabel("Разговоры, которые хочется продолжать.")
     tagline.setObjectName("AuthSubtitle")
     tagline.setWordWrap(True)
+    tagline.setSizePolicy(QSizePolicy.Preferred,QSizePolicy.Fixed)
     hero.addWidget(tagline)
     illustration = QSvgWidget(str(ASSETS / "illustration-chat.svg"))
-    illustration.setFixedSize(340, 230)
+    illustration.setFixedSize(300, 180)
     hero.addSpacing(30)
     hero.addWidget(illustration, 0, Qt.AlignHCenter)
     hero.addStretch()
@@ -37,7 +41,8 @@ def build_auth_layout(page, title, subtitle):
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setMinimumWidth(380)
-    scroll.setMaximumWidth(510)
+    scroll.setMaximumWidth(500)
+    scroll.setMaximumHeight(680)
     card = QFrame()
     card.setObjectName("AuthCard")
     form = QVBoxLayout(card)
@@ -56,6 +61,14 @@ def build_auth_layout(page, title, subtitle):
     form.addSpacing(12)
     scroll.setWidget(card)
     outer.addWidget(scroll, 1)
+    class FitAuth(QObject):
+        def eventFilter(self, obj, event):
+            if event.type()==QEvent.Resize:
+                margin=max(24,min(80,(page.height()-520)//2))
+                outer.setContentsMargins(80,margin,80,margin)
+                form.setSpacing(8 if page.height()<700 else 14)
+            return False
+    page._fit_auth=FitAuth(page);page.installEventFilter(page._fit_auth)
     return form
 
 

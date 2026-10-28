@@ -1,8 +1,8 @@
 """Real persisted preferences and read-only live audio diagnostics."""
 
 import json
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QCheckBox, QPlainTextEdit
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QCheckBox, QPlainTextEdit, QHBoxLayout, QFrame, QScrollArea, QPushButton
 from config import load_config, save_config
 from .widgets import Button
 
@@ -11,7 +11,20 @@ class SettingsPage(QWidget):
     def __init__(self, main):
         super().__init__(main)
         self.main = main
-        root = QVBoxLayout(self)
+        outer=QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
+        sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(340)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(22,32,20,20);side.setSpacing(12)
+        eyebrow=QLabel('ПРИЛОЖЕНИЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
+        heading=QLabel('Настройки');heading.setObjectName('PageTitle');side.addWidget(heading)
+        side.addSpacing(14)
+        for text in ('Внешний вид', 'Звук', 'Диагностика'):
+            button=QPushButton(text);button.setObjectName('SectionTab');side.addWidget(button)
+            button.clicked.connect(lambda checked=False,t=text:self.scroll.ensureWidgetVisible(self.reduce if t=='Внешний вид' else self.diagnostics))
+        side.addStretch();outer.addWidget(sidebar)
+        self.scroll=QScrollArea();self.scroll.setWidgetResizable(True);outer.addWidget(self.scroll,1)
+        content=QWidget();self.scroll.setWidget(content)
+        root = QVBoxLayout(content)
+        root.setSpacing(20)
         root.setContentsMargins(40, 32, 40, 28)
         title = QLabel("Настройки приложения")
         title.setObjectName("PageTitle")
@@ -33,13 +46,16 @@ class SettingsPage(QWidget):
         )
         self.diagnostics = QPlainTextEdit()
         self.diagnostics.setReadOnly(True)
-        root.addWidget(self.diagnostics, 1)
+        self.diagnostics.setMinimumHeight(160)
+        self.diagnostics.setMaximumHeight(220)
+        root.addWidget(self.diagnostics)
         copy = Button("Копировать диагностику", "copy")
         copy.clicked.connect(self.copy)
-        root.addWidget(copy)
+        root.addWidget(copy,0,Qt.AlignLeft)
         microphone = Button("Проверить микрофон", "mic")
         microphone.clicked.connect(self.check_microphone)
-        root.addWidget(microphone)
+        root.addWidget(microphone,0,Qt.AlignLeft)
+        root.addStretch()
         self.timer = QTimer(self)
         self.timer.setInterval(1000)
         self.timer.timeout.connect(self.refresh)

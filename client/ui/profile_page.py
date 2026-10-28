@@ -48,28 +48,36 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         title=QLabel('Мой профиль');title.setObjectName('PageTitle');side.addWidget(title);side.addSpacing(14)
         self.profile_tabs={}
         for key,text in [('main','Профиль'),('edit','Редактирование'),('password','Пароль')]:
-            button=QPushButton(text);button.setCheckable(True);button.clicked.connect(lambda checked=False,k=key:self.show_section(k));side.addWidget(button);self.profile_tabs[key]=button
+            button=QPushButton(text);button.setObjectName('SectionTab');button.setCheckable(True);button.clicked.connect(lambda checked=False,k=key:self.show_section(k));side.addWidget(button);self.profile_tabs[key]=button
         side.addStretch();logout=QPushButton('Выйти из аккаунта');logout.setObjectName('ProfileDangerButton');logout.clicked.connect(self.confirm_logout);side.addWidget(logout)
         outer.addWidget(sidebar)
         scroll=QScrollArea();scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
         content=QWidget();scroll.setWidget(content);self.layout=QVBoxLayout(content);self.layout.setContentsMargins(40,30,40,30);self.layout.setSpacing(20)
-        self.page_title=QLabel('Мой профиль');self.page_title.setObjectName('PageTitle');self.layout.addWidget(self.page_title)
-        self.card=QFrame();self.card.setObjectName('ProfileCard');self.card.setMaximumWidth(720)
-        card_l=QVBoxLayout(self.card);card_l.setContentsMargins(30,28,30,28);card_l.setSpacing(14)
-        self.avatar_label=AvatarLabel(size=96);card_l.addWidget(self.avatar_label,0,Qt.AlignHCenter)
-        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('PageTitle');self.display_name.setAlignment(Qt.AlignCenter);card_l.addWidget(self.display_name)
-        self.login_label=QLabel(self.login);self.login_label.setAlignment(Qt.AlignCenter);card_l.addWidget(self.login_label)
-        self.status_label=QLabel('Не в сети');self.status_label.setObjectName('ProfileStatusOffline');self.status_label.setAlignment(Qt.AlignCenter);card_l.addWidget(self.status_label)
-        self.edit_block=QWidget();edit=QVBoxLayout(self.edit_block);edit.setContentsMargins(0,12,0,0)
-        self.nick_title=QLabel('Имя в Nodus');self.nick_title.setObjectName('FieldTitle');edit.addWidget(self.nick_title)
-        self.nickname_edit=QLineEdit(self.nickname);edit.addWidget(self.nickname_edit)
-        avatar=Button('Изменить аватар','profile');avatar.clicked.connect(self.choose_avatar);edit.addWidget(avatar);card_l.addWidget(self.edit_block)
-        self.password_block=QWidget();password=QVBoxLayout(self.password_block);password.setContentsMargins(0,12,0,0)
+        self.page_title=QLabel('Ваш профиль');self.page_title.setObjectName('PageTitle');self.layout.addWidget(self.page_title)
+        subtitle=QLabel('Так вас видят друзья и участники каналов');subtitle.setObjectName('Muted');self.layout.addWidget(subtitle)
+        divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);self.layout.addWidget(divider)
+        self.card=QFrame();self.card.setObjectName('ProfileForm');self.card.setMaximumWidth(840)
+        card_l=QVBoxLayout(self.card);card_l.setContentsMargins(0,16,0,0);card_l.setSpacing(18)
+        identity=QHBoxLayout();identity.setSpacing(18)
+        self.avatar_label=AvatarLabel(size=80);identity.addWidget(self.avatar_label)
+        names=QVBoxLayout();names.setSpacing(6)
+        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('FieldHeading');names.addWidget(self.display_name)
+        self.status_label=QLabel('Не в сети');self.status_label.setObjectName('ProfileStatusOffline');names.addWidget(self.status_label)
+        identity.addLayout(names,1)
+        avatar=Button('Изменить аватар','profile');avatar.clicked.connect(self.choose_avatar);identity.addWidget(avatar)
+        card_l.addLayout(identity);card_l.addSpacing(14)
+        login_title=QLabel('Логин · нельзя изменить');login_title.setObjectName('FieldTitle');card_l.addWidget(login_title)
+        self.login_label=QLabel(self.login);self.login_label.setObjectName('ReadOnlyField');card_l.addWidget(self.login_label)
+        self.edit_block=QWidget();edit=QVBoxLayout(self.edit_block);edit.setContentsMargins(0,0,0,0);edit.setSpacing(10)
+        self.nick_title=QLabel('Никнейм');self.nick_title.setObjectName('FieldTitle');edit.addWidget(self.nick_title)
+        self.nickname_edit=QLineEdit(self.nickname);edit.addWidget(self.nickname_edit);card_l.addWidget(self.edit_block)
+        self.password_block=QWidget();password=QHBoxLayout(self.password_block);password.setContentsMargins(0,0,0,0);password.setSpacing(16)
         self.current_password_edit=QLineEdit();self.current_password_edit.setEchoMode(QLineEdit.Password);self.current_password_edit.setPlaceholderText('Текущий пароль');password.addWidget(self.current_password_edit)
         self.password_edit=QLineEdit();self.password_edit.setEchoMode(QLineEdit.Password);self.password_edit.setPlaceholderText('Новый пароль');password.addWidget(self.password_edit);card_l.addWidget(self.password_block)
-        self.save_button=Button('Сохранить изменения',primary=True);self.save_button.clicked.connect(self.save_changes);card_l.addWidget(self.save_button)
-        self.edit_button=Button('Редактировать профиль','profile');self.edit_button.clicked.connect(lambda:self.show_section('edit'));card_l.addWidget(self.edit_button)
-        self.layout.addWidget(self.card,0,Qt.AlignHCenter);self.layout.addStretch()
+        self.edit_button=Button('Изменить пароль');self.edit_button.clicked.connect(lambda:self.show_section('password'));card_l.addWidget(self.edit_button,0,Qt.AlignLeft)
+        card_l.addSpacing(12)
+        self.save_button=Button('Сохранить изменения',primary=True);self.save_button.clicked.connect(self.save_changes);card_l.addWidget(self.save_button,0,Qt.AlignLeft)
+        self.layout.addWidget(self.card);self.layout.addStretch()
         self._saving=False
         self.show_section('main')
 
@@ -86,9 +94,9 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     def show_section(self,key):
         self._profile_section = key
         for name,button in self.profile_tabs.items():button.setChecked(name==key)
-        self.edit_block.setVisible(key=='edit');self.password_block.setVisible(key=='password')
-        self.save_button.setVisible(key!='main');self.edit_button.setVisible(key=='main')
-        self.page_title.setText({'main':'Мой профиль','edit':'Редактирование профиля','password':'Изменение пароля'}[key])
+        self.edit_block.setVisible(True);self.password_block.setVisible(key=='password')
+        self.save_button.setVisible(True);self.edit_button.setVisible(key!='password')
+        self.page_title.setText('Ваш профиль')
 
     def confirm_logout(self):
         from ui.design.dialogs import confirm
@@ -183,7 +191,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
         try:
             if hasattr(pw, "user_nick_lbl"):
-                pw.user_nick_lbl.setText(self.nickname or "Гость")
+                pw.user_nick_lbl.setText("Вы")
             if hasattr(pw, "user_login_lbl"):
                 pw.user_login_lbl.setText(self.login or "")
             if hasattr(pw, "user_avatar"):

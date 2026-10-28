@@ -81,6 +81,7 @@ class MainWindow(QWidget):
         menu_layout.setSpacing(18)
         brand = Button('', 'n', True)
         brand.setFixedSize(50,50)
+        brand.setFocusPolicy(Qt.NoFocus)
         brand.clicked.connect(self.show_friends)
         menu_layout.addWidget(brand,0,Qt.AlignHCenter)
         wordmark = QLabel('nodus');wordmark.setAlignment(Qt.AlignCenter)
@@ -92,12 +93,14 @@ class MainWindow(QWidget):
             button.clicked.connect(action);menu_layout.addWidget(button)
         menu_layout.addStretch()
         self.quick_button = Button('', 'keyboard');self.quick_button.setToolTip('Найти диалог')
+        self.quick_button.setProperty('flat', True)
         self.quick_button.clicked.connect(self.open_quick_switch)
         from PySide6.QtGui import QShortcut, QKeySequence
         self.quick_shortcut = QShortcut(QKeySequence('Meta+K' if __import__('sys').platform=='darwin' else 'Ctrl+K'),self)
         self.quick_shortcut.activated.connect(self.open_quick_switch)
         menu_layout.addWidget(self.quick_button)
         self.settings_button = Button('', 'settings');self.settings_button.setToolTip('Настройки приложения')
+        self.settings_button.setProperty('flat', True)
         self.settings_button.clicked.connect(self.show_settings)
         menu_layout.addWidget(self.settings_button)
         divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);menu_layout.addWidget(divider)
@@ -279,21 +282,30 @@ class MainWindow(QWidget):
         self.call_notice_lbl.setWordWrap(True)
         notice_l.addWidget(self.call_notice_lbl)
 
+        self.incoming_shade=QFrame(self)
+        self.incoming_shade.setStyleSheet('background:rgba(8,14,24,170);')
+        self.incoming_shade.hide()
         self.incoming_card = QFrame(self)
         self.incoming_card.setObjectName("IncomingCallInlineCard")
         self.incoming_card.setVisible(False)
         incoming_l = QVBoxLayout(self.incoming_card)
-        incoming_l.setContentsMargins(14, 12, 14, 12)
+        incoming_l.setContentsMargins(32, 32, 32, 32)
         incoming_l.setSpacing(10)
 
         incoming_title = QLabel("Входящий вызов", self.incoming_card)
         incoming_title.setObjectName("IncomingCallInlineTitle")
+        incoming_title.setAlignment(Qt.AlignCenter)
         incoming_l.addWidget(incoming_title)
+        incoming_l.addSpacing(24)
+        self.incoming_avatar=AvatarLabel(96)
+        incoming_l.addWidget(self.incoming_avatar,0,Qt.AlignHCenter)
 
         self.incoming_from_lbl = QLabel("", self.incoming_card)
         self.incoming_from_lbl.setObjectName("IncomingCallInlineFrom")
         self.incoming_from_lbl.setWordWrap(True)
+        self.incoming_from_lbl.setAlignment(Qt.AlignCenter)
         incoming_l.addWidget(self.incoming_from_lbl)
+        incoming_l.addSpacing(32)
 
         row = QHBoxLayout()
         row.addStretch()
@@ -316,6 +328,8 @@ class MainWindow(QWidget):
         Центрируем не по всему приложению, а по текущему открытому окну
         (текущая страница в self.stack).
         """
+        if hasattr(self,"incoming_shade"):
+            self.incoming_shade.setGeometry(self.rect())
         side_margin = 12
         bottom_margin = 16
         gap = 10
@@ -387,7 +401,7 @@ class MainWindow(QWidget):
             self.call_notice.move(_center_x(n_w), base_y + in_h + gap)
         elif has_incoming:
             in_y = max(oy + side_margin, page_bottom - bottom_margin - in_h)
-            self.incoming_card.move(_center_x(in_w), in_y)
+            self.incoming_card.move(_center_x(in_w), max(16,(self.height()-in_h)//2))
         elif has_notice:
             n_y = max(oy + side_margin, page_bottom - bottom_margin - n_h)
             self.call_notice.move(_center_x(n_w), n_y)
@@ -414,9 +428,15 @@ class MainWindow(QWidget):
         if not from_user:
             return
         self._incoming_from_user = from_user
-        self.incoming_from_lbl.setText(f"Вам звонит: {from_user}\nПринять вызов?")
+        peer=next((r for r in self.friends_page._friends_data if r.get('login')==from_user),{})
+        name=peer.get('nickname') or from_user
+        self.incoming_avatar.set_avatar(path=peer.get('avatar',''),login=from_user,nickname=name)
+        self.incoming_from_lbl.setText(f"{name}\n@{from_user}")
         self._set_incoming_buttons_enabled(True)
         self._reposition_inline_call_ui()
+        self.incoming_shade.setGeometry(self.rect())
+        self.incoming_shade.show()
+        self.incoming_shade.raise_()
         self.incoming_card.show()
         self.incoming_card.raise_()
 
@@ -424,6 +444,7 @@ class MainWindow(QWidget):
         self._incoming_from_user = None
         if getattr(self, "incoming_card", None):
             self.incoming_card.hide()
+            self.incoming_shade.hide()
 
     def _set_incoming_buttons_enabled(self, enabled: bool):
         try:

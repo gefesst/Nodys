@@ -41,6 +41,44 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_resize_targets_follow_all_edges_without_covering_content(self):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QWidget
+        from ui.design.shell import create_resize_handles, position_resize_handles
+
+        window = QWidget()
+        window.resize_handles = create_resize_handles(window)
+        for width, height in ((1120, 620), (1280, 780), (1440, 900)):
+            window.resize(width, height)
+            position_resize_handles(window)
+            for point in (QPoint(0, 0), QPoint(width - 1, height - 1),
+                          QPoint(0, height // 2), QPoint(width // 2, 0),
+                          QPoint(width - 1, height // 2), QPoint(width // 2, height - 1)):
+                self.assertTrue(any(h.geometry().contains(point) for h in window.resize_handles))
+            self.assertFalse(any(h.geometry().contains(window.rect().center())
+                                 for h in window.resize_handles))
+        window.close()
+
+    def test_resize_fallback_preserves_minimum_and_opposite_corner(self):
+        from PySide6.QtCore import Qt, QPoint, QPointF
+        from PySide6.QtWidgets import QWidget
+        from ui.design.shell import ResizeHandle
+
+        window = QWidget()
+        window.setMinimumSize(400, 300)
+        window.setGeometry(100, 100, 600, 500)
+        handle = ResizeHandle(window, Qt.TopEdge | Qt.LeftEdge, Qt.SizeFDiagCursor)
+        handle.drag_origin = QPoint(100, 100)
+        handle.drag_geometry = window.geometry()
+        event = SimpleNamespace(globalPosition=lambda: QPointF(900, 900), accept=lambda: None)
+        handle.mouseMoveEvent(event)
+        self.assertEqual(window.size().width(), 400)
+        self.assertEqual(window.size().height(), 300)
+        self.assertEqual(window.geometry().bottomRight(), handle.drag_geometry.bottomRight())
+        handle.mouseReleaseEvent(event)
+        self.assertIsNone(handle.drag_origin)
+        window.close()
+
     def test_theme_does_not_clip_navigation_or_icon_buttons(self):
         from PySide6.QtWidgets import QWidget, QVBoxLayout
         from ui.design.shell import NavButton

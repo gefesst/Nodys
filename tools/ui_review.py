@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--synthetic-voice", action="store_true")
     parser.add_argument("--relogin-cycles", type=int, default=1)
+    parser.add_argument("--resize-all", action="store_true")
+    parser.add_argument("--visual-only", action="store_true")
     args = parser.parse_args()
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
@@ -59,6 +61,8 @@ def main():
             self.predicate = predicate
 
         def advance(self):
+            if getattr(self,"capturing",False):
+                return
             try:
                 if time.monotonic() > self.deadline:
                     raise TimeoutError("Review timed out")
@@ -77,6 +81,20 @@ def main():
         def shot(self, name, widget=None):
             target = widget or self.w
             target.grab().save(str(self.path / (name + ".png")))
+            if args.resize_all:
+                self.capturing=True
+                original_size=self.w.size()
+                try:
+                    folder=self.path/'sizes';folder.mkdir(exist_ok=True)
+                    for width,height in ((1120,620),(1280,780),(1440,900)):
+                        self.w.resize(width,height)
+                        QApplication.processEvents()
+                        assert self.w.width()==width and self.w.height()==height, (name,self.w.size(),width,height)
+                        self.w.grab().save(str(folder/f'{name}-{width}.png'))
+                finally:
+                    self.w.resize(original_size)
+                    QApplication.processEvents()
+                    self.capturing=False
             self.log.append(name)
             print("Captured", name, flush=True)
 
@@ -128,6 +146,11 @@ def main():
             lab.tokens[lab.me] = m.ctx.session_token
             self.wait(1)
             yield
+            for size in ((1120, 620), (1280, 780), (1440, 900)):
+                w.resize(*size)
+                self.wait()
+                yield
+                self.shot(f"04-friends-{size[0]}")
             self.shot("04-friends-all")
             m.friends_page.set_view("online")
             self.wait()
@@ -227,6 +250,8 @@ def main():
             self.wait()
             yield
             self.shot("22-settings")
+            if args.visual_only:
+                return
             m.settings_page.check_microphone();self.wait();yield
             self.shot("22b-microphone-check-not-started",m.settings_page.microphone_check)
             m.settings_page.microphone_check.close()

@@ -197,6 +197,8 @@ class Button(QPushButton):
         p.setRenderHint(QPainter.Antialiasing)
         a = QColor(ACC if self.primary else "#28364A")
         b = QColor("#ACC0FF" if self.primary else "#3A4D67")
+        if self.property("danger"):
+            a, b = QColor("#54313E"), QColor("#704151")
         t = self._hover
         bg = QColor.fromRgbF(
             a.redF() * (1 - t) + b.redF() * t,
@@ -207,6 +209,8 @@ class Button(QPushButton):
             bg = QColor("#7898EB" if self.primary else "#354866")
         if not self.isEnabled():
             bg = QColor("#252E3A")
+        if self.property("flat") and not self._hover and not self.isDown():
+            bg.setAlpha(0)
         p.setPen(Qt.NoPen)
         p.setBrush(bg)
         p.drawRoundedRect(QRectF(3, 3, self.width() - 6, self.height() - 6), 9, 9)
@@ -517,7 +521,7 @@ class Toast(QWidget):
     def show_message(self, text):
         self.message = text
         self.setGeometry(
-            max(100, self.parent().width() - 600), self.parent().height() - 180, 560, 58
+            max(12, self.parent().width() - 600), self.parent().height() - 66, min(560,self.parent().width()-24), 46
         )
         self.show()
         self.raise_()

@@ -61,9 +61,35 @@ QLabel#ChannelFormTitle,QLabel#ChannelSettingsSectionTitle,QLabel#CallTitle {fon
 QLabel#ChannelFormHint,QLabel#ChannelOpenCode,QLabel#CallPeerLogin,QLabel#CallQuality {color:@SUB@;font-size:12px;}
 QLabel#ChannelsListHeader {color:@MUT@;font-size:10px;padding-top:12px;}
 QFrame#ChannelVoiceMemberRow {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
-QWidget#Sidebar {background:#121923;}
+QWidget#Sidebar {background:#19222D;}
 
 QFrame#IncomingCallInlineCard,QFrame#CallInlineNoticeCard,QFrame#ChannelInlineConfirm {background:@SURFACE@;border:1px solid #536D92;border-radius:14px;}
 QLabel#IncomingCallInlineTitle {font-size:20px;font-weight:600;}
 QPushButton#IncomingCallInlineAcceptBtn {background:@ACC@;color:#142039;}
 QPushButton#IncomingCallInlineDeclineBtn,QPushButton#ChannelTinyDangerButton {color:@RED@;}
+
+QPushButton#SectionTab {text-align:left; background:#202B39; border:0; padding:0 22px; min-height:44px; color:@SUB@; border-radius:9px;}
+QPushButton#SectionTab:checked {background:#2B3B51;color:@FG@;}
+QPushButton#SectionTab:hover {background:#2B3B51;}
+QPushButton#SectionTab:focus {border:1px solid @ACC@;}
+QLabel#FriendsSubtitle {color:@SUB@;font-size:14px;}
+QLabel#FriendItemName {font-size:16px;}
+QLabel#FriendItemSub {font-size:13px;}
+
+QLabel#ChatTitle {font-size:22px;font-weight:600;}
+QFrame#ComposerFrame {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+QPlainTextEdit#MessageComposer {background:transparent;border:0;}
+
+QLabel#ReadOnlyField {background:@SURFACE@;border:1px solid @EDGE@;border-radius:9px;padding:12px 14px;color:@SUB@;}
+QLabel#FieldHeading {font-size:20px;font-weight:600;}
+QFrame#FlatForm,QFrame#ProfileForm {background:transparent;border:0;}
+
+QDialog#CallPanel {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+QLabel#WindowBrand {font-size:13px;font-weight:600;color:@SUB@;}
+QLabel#FriendsEmptyStateTitle,QLabel#ChannelsEmptyStateTitle {font-size:20px;font-weight:600;}
+QLabel#FriendsEmptyStateSub,QLabel#ChannelsEmptyStateSub {color:@SUB@;font-size:13px;}
+
+QFrame#CallContent {background:transparent;border:0;}
+QLabel#CallPeerName {font-size:22px;font-weight:600;}
+QLabel#CallSpeaking {font-size:12px;color:@SUB@;}
+QLabel#CallTimer {font-size:18px;font-weight:600;}

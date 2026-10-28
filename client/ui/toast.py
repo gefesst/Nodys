@@ -19,4 +19,4 @@ class InlineToast:
     def reposition(self):
         if not self.label.isVisible():return
         width=min(self.max_width,max(160,self.parent.width()-2*self.margin))
-        self.label.setGeometry((self.parent.width()-width)//2,self.parent.height()-74-self.bottom,width,74)
+        self.label.setGeometry((self.parent.width()-width)//2,self.parent.height()-46-self.bottom,width,46)

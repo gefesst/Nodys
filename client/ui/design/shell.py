@@ -2,43 +2,57 @@
 
 from PySide6.QtCore import Qt, QRectF, QSize
 from PySide6.QtGui import QPainter, QColor
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 from .widgets import Button, icon, font
 from .tokens import FG, ACC, SUB
+
+
+class WindowDot(QPushButton):
+    def __init__(self, color, parent):
+        super().__init__(parent)
+        self.color=color
+        self.setFixedSize(12,12)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setStyleSheet('padding:0;border:0;min-height:0;')
+
+    def paintEvent(self, event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen);painter.setBrush(QColor(self.color))
+        painter.drawEllipse(QRectF(0,0,12,12))
 
 
 class TitleBar(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.setFixedHeight(40)
-        row = QHBoxLayout(self)
-        row.setContentsMargins(18, 0, 8, 0)
-        logo = QLabel("N  Nodus")
-        logo.setObjectName("WindowBrand")
         import sys
-
-        controls = [
-            ("—", "Свернуть", parent.showMinimized),
-            ("□", "Развернуть", self.maximize),
-            ("×", "Закрыть", parent.close),
-        ]
-        if sys.platform == "darwin":
-            controls = [controls[2], controls[0], controls[1]]
+        row = QHBoxLayout(self)
+        row.setContentsMargins(18, 0, 18, 0)
+        row.setSpacing(10)
+        if sys.platform == 'darwin':
+            for color, text, callback in (
+                ('#F47973', 'Закрыть', parent.close),
+                ('#E8BC64', 'Свернуть', parent.showMinimized),
+                ('#70C7A0', 'Развернуть', self.maximize),
+            ):
+                button = WindowDot(color, self)
+                button.setToolTip(text);button.setAccessibleName(text)
+                button.clicked.connect(callback);row.addWidget(button)
+            row.addStretch()
+            self.brand = QLabel('Nodus', self)
+            self.brand.setObjectName('WindowBrand')
+            self.brand.setAlignment(Qt.AlignCenter)
+            self.brand.setAttribute(Qt.WA_TransparentForMouseEvents)
         else:
-            row.addWidget(logo)
-            row.addStretch()
-        for text, tip, callback in controls:
-            button = Button(text)
-            button.setFixedSize(36, 32)
-            button.setFocusPolicy(Qt.NoFocus)
-            button.setToolTip(tip)
-            button.setAccessibleName(tip)
-            button.clicked.connect(callback)
-            row.addWidget(button)
-        if sys.platform == "darwin":
-            row.addSpacing(16)
-            row.addWidget(logo)
-            row.addStretch()
+            logo=QLabel('N  Nodus');logo.setObjectName('WindowBrand');row.addWidget(logo);row.addStretch()
+            for text, tip, callback in [('—','Свернуть',parent.showMinimized),('□','Развернуть',self.maximize),('×','Закрыть',parent.close)]:
+                button=Button(text);button.setProperty('flat',True);button.setFixedSize(36,32)
+                button.setToolTip(tip);button.setAccessibleName(tip);button.clicked.connect(callback);row.addWidget(button)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'brand'):
+            self.brand.setGeometry(self.width()//2-100,0,200,40)
 
     def maximize(self):
         self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
@@ -82,3 +96,64 @@ class NavButton(Button):
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(ACC))
             p.drawEllipse(QRectF(45, 6, 8, 8))
+
+
+class ResizeHandle(QWidget):
+    """Thin native resize target; keeps frameless windows resizable on every edge."""
+
+    def __init__(self, parent, edges, cursor):
+        super().__init__(parent)
+        self.edges = edges
+        self.setCursor(cursor)
+        self.drag_origin = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and self.window().windowHandle():
+            if not self.window().windowHandle().startSystemResize(self.edges):
+                # Some platform plugins do not implement native frameless resize.
+                self.drag_origin = event.globalPosition().toPoint()
+                self.drag_geometry = self.window().geometry()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self.drag_origin is None:
+            return
+        delta = event.globalPosition().toPoint() - self.drag_origin
+        rect = self.drag_geometry.adjusted(0, 0, 0, 0)
+        window = self.window()
+        if self.edges & Qt.LeftEdge:
+            rect.setLeft(min(rect.right() - window.minimumWidth() + 1, rect.left() + delta.x()))
+        if self.edges & Qt.RightEdge:
+            rect.setRight(max(rect.left() + window.minimumWidth() - 1, rect.right() + delta.x()))
+        if self.edges & Qt.TopEdge:
+            rect.setTop(min(rect.bottom() - window.minimumHeight() + 1, rect.top() + delta.y()))
+        if self.edges & Qt.BottomEdge:
+            rect.setBottom(max(rect.top() + window.minimumHeight() - 1, rect.bottom() + delta.y()))
+        window.setGeometry(rect)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self.drag_origin = None
+        event.accept()
+
+
+def create_resize_handles(window):
+    return [ResizeHandle(window, edges, cursor) for edges, cursor in (
+        (Qt.LeftEdge, Qt.SizeHorCursor), (Qt.RightEdge, Qt.SizeHorCursor),
+        (Qt.TopEdge, Qt.SizeVerCursor), (Qt.BottomEdge, Qt.SizeVerCursor),
+        (Qt.TopEdge | Qt.LeftEdge, Qt.SizeFDiagCursor),
+        (Qt.TopEdge | Qt.RightEdge, Qt.SizeBDiagCursor),
+        (Qt.BottomEdge | Qt.LeftEdge, Qt.SizeBDiagCursor),
+        (Qt.BottomEdge | Qt.RightEdge, Qt.SizeFDiagCursor),
+    )]
+
+
+def position_resize_handles(window):
+    w, h, d = window.width(), window.height(), 5
+    geometries = ((0,d,d,h-2*d), (w-d,d,d,h-2*d),
+                  (d,0,w-2*d,d), (d,h-d,w-2*d,d),
+                  (0,0,d,d), (w-d,0,d,d), (0,h-d,d,d), (w-d,h-d,d,d))
+    for handle, geometry in zip(window.resize_handles, geometries):
+        handle.setGeometry(*geometry)
+        handle.setVisible(not window.isMaximized() and not window.isFullScreen())
+        handle.raise_()

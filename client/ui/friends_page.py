@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit,
-    QMenu, QApplication, QDialog
+    QMenu, QApplication, QDialog, QSizePolicy
 )
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
@@ -32,8 +32,8 @@ class FriendItem(QFrame):
         self.setFixedHeight(88)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(10)
+        layout.setContentsMargins(20, 8, 20, 8)
+        layout.setSpacing(18)
 
         avatar = AvatarLabel(size=44)
         avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
@@ -42,13 +42,13 @@ class FriendItem(QFrame):
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
-        text_col.setSpacing(1)
+        text_col.setSpacing(6)
 
         name = QLabel(nickname)
         name.setObjectName("FriendItemName")
         text_col.addWidget(name)
 
-        sub = QLabel(login if request_from is None else f"Запрос от: {login}")
+        sub = QLabel(f"@{login} · {'В сети' if online else 'Не в сети'}" if request_from is None else f"Запрос от: {login}")
         sub.setObjectName("FriendItemSub")
         text_col.addWidget(sub)
 
@@ -70,6 +70,7 @@ class FriendItem(QFrame):
 
             self.more_btn = Button('', 'more')
             self.more_btn.setObjectName("FriendMoreButton")
+            self.more_btn.setProperty("flat", True)
             self.more_btn.setFixedSize(42, 42)
             self.more_btn.setCursor(self.call_btn.cursor())
             f = self.more_btn.font()
@@ -130,28 +131,37 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         from ui.design.tokens import LIST_WIDTH
         outer = QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
-        side=QVBoxLayout(sidebar);side.setContentsMargins(20,30,20,20);side.setSpacing(10)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(16,32,12,20);side.setSpacing(10)
         eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
         heading=QLabel('Друзья');heading.setObjectName('PageTitle');side.addWidget(heading);side.addSpacing(15)
         self.view_buttons={}
         for mode,text in [('all','Все друзья'),('online','В сети'),('requests','Заявки'),('add','Добавить друга')]:
-            button=QPushButton(text);button.setCheckable(True);button.setChecked(mode=='all');button.clicked.connect(lambda checked=False,m=mode:self.set_view(m));side.addWidget(button);self.view_buttons[mode]=button
+            button=QPushButton(text);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.clicked.connect(lambda checked=False,m=mode:self.set_view(m));side.addWidget(button);self.view_buttons[mode]=button
         side.addStretch();outer.addWidget(sidebar)
         work=QWidget();outer.addWidget(work,1)
         root = QVBoxLayout(work)
-        root.setContentsMargins(32, 28, 32, 20)
+        root.setContentsMargins(40, 32, 40, 20)
         root.setSpacing(12)
+        root.setAlignment(Qt.AlignTop)
 
         # ---------- Top bar card ----------
         topbar = QFrame()
         topbar.setObjectName("FriendsTopBar")
+        topbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         head = QHBoxLayout(topbar)
-        head.setContentsMargins(12, 10, 12, 10)
+        head.setContentsMargins(0, 0, 0, 0)
         head.setSpacing(10)
 
         title = QLabel("Друзья")
         title.setObjectName("FriendsTitle")
-        head.addWidget(title)
+        title_col = QVBoxLayout()
+        title_col.setSpacing(6)
+        title_col.addWidget(title)
+        subtitle = QLabel("Люди, с которыми хочется быть на связи")
+        self.subtitle=subtitle
+        subtitle.setObjectName("FriendsSubtitle")
+        title_col.addWidget(subtitle)
+        head.addLayout(title_col)
         self.heading = title
         head.addStretch()
 
@@ -165,10 +175,17 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         install_opacity_feedback(self.add_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         root.addWidget(topbar)
+        root.addSpacing(6)
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+        root.addSpacing(24)
 
         # ---------- Inline add panel ----------
         self.add_panel = QFrame()
-        self.add_panel.setObjectName("AddFriendPanel")
+        self.add_panel.setObjectName("FlatForm")
+        self.add_panel.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Maximum)
         self.add_panel.setVisible(False)
 
         panel_lay = QVBoxLayout(self.add_panel)
@@ -220,7 +237,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.body_card = body_card
         body_card.setObjectName("FriendsContentCard")
         body_lay = QVBoxLayout(body_card)
-        body_lay.setContentsMargins(10, 10, 10, 10)
+        body_lay.setContentsMargins(0, 0, 0, 0)
         body_lay.setSpacing(8)
 
         self.scroll = QScrollArea()
@@ -229,7 +246,8 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         self.container = QWidget()
         self.list_layout = QVBoxLayout(self.container)
-        self.list_layout.setSpacing(8)
+        self.list_layout.setContentsMargins(0, 0, 0, 0)
+        self.list_layout.setSpacing(16)
         self.list_layout.addStretch()
 
         self.scroll.setWidget(self.container)
@@ -354,6 +372,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
     # ==================================================
     def set_view(self, mode):
         self.view_mode=mode
+        self.subtitle.setText({"all":"Люди, с которыми хочется быть на связи","online":"Друзья, которые сейчас в сети","requests":"Новые знакомства начинаются здесь","add":"Найдите человека по его логину"}[mode])
         for key,button in self.view_buttons.items():button.setChecked(key==mode)
         self.heading.setText({'all':'Друзья','online':'Друзья в сети','requests':'Заявки','add':'Добавить друга'}[mode])
         self.add_panel.setVisible(mode=='add');self.body_card.setVisible(mode!='add')
@@ -392,10 +411,12 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         lay.setContentsMargins(16, 16, 16, 16)
         lay.setSpacing(5)
 
-        icon = QLabel("👥")
+        from PySide6.QtSvgWidgets import QSvgWidget
+        from ui.design.widgets import ASSETS
+        icon = QSvgWidget(str(ASSETS / "illustration-friends.svg"))
+        icon.setFixedSize(220,160)
         icon.setObjectName("FriendsEmptyStateIcon")
-        icon.setAlignment(Qt.AlignCenter)
-        lay.addWidget(icon)
+        lay.addWidget(icon,0,Qt.AlignHCenter)
 
         t = QLabel(title)
         t.setObjectName("FriendsEmptyStateTitle")

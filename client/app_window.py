@@ -2,8 +2,8 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication
 from PySide6.QtCore import Qt, Slot, QTimer
 from network import NetworkThread
 from PySide6.QtGui import QIcon, QPainter, QColor
-from ui.design.shell import TitleBar
-from ui.design.tokens import BACKGROUND_ALPHA
+from ui.design.shell import TitleBar, create_resize_handles, position_resize_handles
+from ui.design.tokens import BACKGROUND_ALPHA, BACKGROUND
 import os
 
 from auth_window import AuthWindow
@@ -25,7 +25,9 @@ class AppWindow(QWidget):
         self.setWindowTitle("Nodus")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.resize(1440, 900)
+        available = self.screen().availableGeometry()
+        self.resize(min(1280, available.width() - 80), min(800, available.height() - 80))
+        self.move(available.center() - self.rect().center())
         self.setProperty('translucent_background',load_config().get('translucent_background',True))
         # Стартовый минимум: шире, но чуть ниже по высоте.
         self.setMinimumSize(1120, 620)
@@ -55,6 +57,7 @@ class AppWindow(QWidget):
         root.addWidget(self.stack)
         self.grip = QSizeGrip(self)
         self.grip.setFixedSize(16,16)
+        self.resize_handles = create_resize_handles(self)
 
         # Создаем auth/register сразу, а MainWindow — лениво после успешной авторизации.
         # Это убирает фоновую активность (таймеры/запросы) до логина.
@@ -108,12 +111,16 @@ class AppWindow(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(17,25,35,BACKGROUND_ALPHA if self.property('translucent_background') is not False else 255))
+        color = QColor(BACKGROUND)
+        color.setAlpha(BACKGROUND_ALPHA if self.property('translucent_background') is not False else 255)
+        painter.fillRect(self.rect(), color)
 
     def resizeEvent(self, event):
         if hasattr(self, 'grip'):
             self.grip.move(self.width()-18,self.height()-18)
             self.grip.raise_()
+        if hasattr(self, "resize_handles"):
+            position_resize_handles(self)
         super().resizeEvent(event)
 
     def _cancel_resume(self):

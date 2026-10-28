@@ -2,7 +2,7 @@ import base64
 import os
 from PySide6.QtWidgets import QLabel
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont, QPen
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QRectF
 
 
 class AvatarLabel(QLabel):
@@ -120,9 +120,13 @@ class AvatarLabel(QLabel):
         if source.isNull():
             return QPixmap()
 
-        src = source.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        ratio = self.devicePixelRatioF()
+        src = source.scaled(round(size * ratio), round(size * ratio), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        src.setDevicePixelRatio(ratio)
 
-        out = QPixmap(size, size)
+        ratio = self.devicePixelRatioF()
+        out = QPixmap(round(size * ratio), round(size * ratio))
+        out.setDevicePixelRatio(ratio)
         out.fill(Qt.transparent)
 
         painter = QPainter(out)
@@ -138,7 +142,9 @@ class AvatarLabel(QLabel):
 
     def _make_initials_avatar(self, name: str) -> QPixmap:
         size = self.size_px
-        out = QPixmap(size, size)
+        ratio = self.devicePixelRatioF()
+        out = QPixmap(round(size * ratio), round(size * ratio))
+        out.setDevicePixelRatio(ratio)
         out.fill(Qt.transparent)
 
         painter = QPainter(out)
@@ -154,9 +160,14 @@ class AvatarLabel(QLabel):
 
         initials = self._initials(name)
         painter.setPen(QColor("white"))
-        font = QFont("Arial", max(8, size // 4), QFont.DemiBold)
+        painter.setPen(QPen(QColor('#66799A'), 1))
+        painter.drawArc(QRectF(size*.12,size*.12,size*.76,size*.76),210*16,105*16)
+        painter.setPen(QColor('#EDF2FA'))
+        font = QFont("Arial")
+        font.setPixelSize(max(10,round(size*.29)))
+        font.setWeight(QFont.DemiBold)
         painter.setFont(font)
-        painter.drawText(out.rect(), Qt.AlignCenter, initials)
+        painter.drawText(QRectF(0,0,size,size), Qt.AlignCenter, initials)
 
         painter.end()
         return out

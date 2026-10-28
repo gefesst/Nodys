@@ -1,11 +1,39 @@
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QEvent
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
 from ui.avatar_widget import AvatarLabel
 from ui.design.widgets import Button
 from ui.design.motion import reduced
 
 
-class ActiveCallWindow(QDialog):
+class CallPanel(QDialog):
+    """Call surface inside the workspace, with no extra desktop window."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        if parent is not None:
+            self.setWindowFlags(Qt.Widget)
+            parent.installEventFilter(self)
+        self.setObjectName('CallPanel')
+
+    def position_panel(self):
+        parent=self.parentWidget()
+        if parent is not None:
+            left=min(428,max(0,parent.width()-560))
+            width=min(540,parent.width()-left-40)
+            height=min(640,parent.height()-40)
+            self.setGeometry(left+(parent.width()-left-width)//2,(parent.height()-height)//2,width,height)
+
+    def showEvent(self,event):
+        self.position_panel()
+        super().showEvent(event)
+        self.raise_()
+
+    def eventFilter(self, watched, event):
+        if event.type()==QEvent.Resize:
+            self.position_panel()
+        return super().eventFilter(watched,event)
+
+
+class ActiveCallWindow(CallPanel):
     def __init__(
         self,
         my_login: str,
@@ -37,15 +65,15 @@ class ActiveCallWindow(QDialog):
 
         self.setWindowTitle("Активный звонок")
         self.setModal(False)
-        self.setMinimumSize(480, 590)
-        self.setObjectName("ActiveCallWindow")
+        self.setMinimumSize(360, 480)
+        self.setObjectName("CallPanel")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(16)
 
         card = QFrame()
-        card.setObjectName("CallCard")
+        card.setObjectName("CallContent")
         card_l = QVBoxLayout(card)
         card_l.setContentsMargins(18, 18, 18, 18)
         card_l.setSpacing(10)
@@ -60,7 +88,7 @@ class ActiveCallWindow(QDialog):
         self.timer_lbl.setAlignment(Qt.AlignCenter)
         card_l.addWidget(self.timer_lbl)
 
-        self.avatar = AvatarLabel(size=120)
+        self.avatar = AvatarLabel(size=96)
         self.avatar.set_avatar(path=self.peer_avatar, login=self.peer_login, nickname=self.peer_nickname)
         self.avatar.set_online(True, ring_color="#2b2d31")
         card_l.addWidget(self.avatar, alignment=Qt.AlignHCenter)
@@ -115,12 +143,15 @@ class ActiveCallWindow(QDialog):
 
         for b in (self.btn_end, self.btn_mic, self.btn_sound):
             b.setFixedSize(56, 56)
+        self.btn_end.setProperty("danger", True)
         self.btn_end.setToolTip("Завершить звонок")
         self.btn_mic.setToolTip("Микрофон")
         self.btn_sound.setToolTip("Звук")
-        btns.addWidget(self.btn_end)
+        btns.addStretch()
         btns.addWidget(self.btn_mic)
         btns.addWidget(self.btn_sound)
+        btns.addWidget(self.btn_end)
+        btns.addStretch()
         root.addLayout(btns)
 
         self._tick_timer = QTimer(self)
@@ -252,7 +283,7 @@ class ActiveCallWindow(QDialog):
             pass
         event.accept()
 
-class OutgoingCallWindow(QDialog):
+class OutgoingCallWindow(CallPanel):
     """Ringing state tied to the server call identity; cancelling is a real action."""
     def __init__(self, peer, cancel, parent=None):
         super().__init__(parent)
@@ -262,13 +293,17 @@ class OutgoingCallWindow(QDialog):
         self.resize(440, 370)
         root = QVBoxLayout(self)
         root.setContentsMargins(32,32,32,32)
+        title=QLabel('Звоним…');title.setAlignment(Qt.AlignCenter);title.setObjectName('FieldHeading');root.addWidget(title)
+        root.addStretch()
         avatar = AvatarLabel(96)
         avatar.set_avatar(login=peer, nickname=peer)
         root.addWidget(avatar,0,Qt.AlignCenter)
         name = QLabel(peer);name.setObjectName('CallPeerName');name.setAlignment(Qt.AlignCenter)
         root.addWidget(name)
         hint = QLabel('Вызываем…');hint.setAlignment(Qt.AlignCenter);root.addWidget(hint)
-        button = Button('Отменить звонок','end');button.clicked.connect(self.close);root.addWidget(button)
+        root.addStretch()
+        button = Button('Отменить звонок','end');button.setProperty('danger',True);button.clicked.connect(self.close);root.addWidget(button,0,Qt.AlignHCenter)
+        root.addStretch()
     def closeEvent(self,event):
         if not self.finished_by_server:
             self.cancel()
