@@ -820,7 +820,16 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         # Settings page (stage 2)
         self.settings_page = QWidget()
-        sp_root = QVBoxLayout(self.settings_page)
+        settings_outer = QVBoxLayout(self.settings_page)
+        settings_outer.setContentsMargins(0, 0, 0, 0)
+        self.settings_scroll = QScrollArea()
+        self.settings_scroll.setWidgetResizable(True)
+        self.settings_scroll.setFrameShape(QFrame.NoFrame)
+        settings_content = QWidget()
+        self.settings_scroll.setWidget(settings_content)
+        settings_outer.addWidget(self.settings_scroll)
+        sp_root = QVBoxLayout(settings_content)
+        sp_root.setSizeConstraint(QVBoxLayout.SetMinimumSize)
         sp_root.setContentsMargins(0, 0, 0, 0)
         sp_root.setSpacing(10)
 
@@ -1011,6 +1020,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.members_scroll = QScrollArea()
         self.members_scroll.setObjectName("ChannelMembersScroll")
+        self.members_scroll.setMinimumHeight(180)
         self.members_scroll.setWidgetResizable(True)
 
         self.members_container = QWidget()
@@ -1926,7 +1936,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self._voice_participants_signature = ""
                     self._clear_voice_members_list()
                     self.hide_settings_confirm()
-                    self.main_stack.setCurrentWidget(self.placeholder_page)
+                    if self.main_stack.currentWidget() not in (self.create_page, self.join_page):
+                        self.main_stack.setCurrentWidget(self.placeholder_page)
                     if self.messages_timer.isActive():
                         self.messages_timer.stop()
                     self._apply_channel_permissions_ui()
@@ -1936,9 +1947,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 current_page = self.main_stack.currentWidget()
                 if self.active_channel and current_page in (self.placeholder_page,):
                     self.open_channel(self.active_channel)
-                elif self.active_channel and current_page == self.settings_page and not self._loading_channel_details:
-                    # keep settings page in sync with periodic refresh
-                    self.load_channel_details(silent=True)
 
                 self._apply_channel_permissions_ui()
 

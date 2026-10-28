@@ -43,6 +43,9 @@ class RegisterWindow(QWidget):
 
         layout.addWidget(self.btn_register)
         layout.addWidget(self.btn_back)
+        self.status_label = QLabel()
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
         layout.addStretch()
 
     def register_user(self):
@@ -66,7 +69,7 @@ class RegisterWindow(QWidget):
             if callable(self.on_registered):
                 self.on_registered()
         else:
-            QMessageBox.warning(self, "Ошибка", resp.get("message", "Не удалось зарегистрироваться"))
+            self.status_label.setText(resp.get("message", "Не удалось зарегистрироваться"))
 
     def back_to_auth(self):
         if callable(self.on_back):

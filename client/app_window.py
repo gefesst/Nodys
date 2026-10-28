@@ -116,9 +116,10 @@ class AppWindow(QWidget):
             })
             self.show_main()
         else:
-            # Сессия недействительна — чистим конфиг и показываем вход
+            # Preserve credentials on transient network failures.
             try:
-                clear_config()
+                if resp.get("code") == "session_invalid":
+                    clear_config()
             except Exception:
                 pass
             self.show_auth()

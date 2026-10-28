@@ -1,3 +1,13 @@
+try:
+    from .storage.database import connect as database_connection
+except ImportError:
+    from storage.database import connect as database_connection
+
+try:
+    from .domain.authorization import session_valid, channel_voice_allowed
+except ImportError:
+    from domain.authorization import session_valid, channel_voice_allowed
+
 import base64
 import datetime as dt
 import hashlib
@@ -31,8 +41,8 @@ def resolve_db_path(filename: str) -> str:
     return base_path
 
 
-DB_FILE = resolve_db_path("users.db")
-CHAT_DB = resolve_db_path("voice_chat.db")
+DB_FILE = os.environ.get("NODYS_DB_FILE") or resolve_db_path("users.db")
+CHAT_DB = os.environ.get("NODYS_CHAT_DB") or resolve_db_path("voice_chat.db")
 
 # -------------------- Presence / Sessions --------------------
 SESSION_TTL_SEC = 60 * 60 * 24 * 30  # 30 days
@@ -158,7 +168,7 @@ def send_response(conn: socket.socket, obj: Dict[str, Any]) -> None:
 
 def init_db() -> None:
     os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         c = conn.cursor()
         try:
             c.execute("PRAGMA journal_mode=WAL")
@@ -298,7 +308,7 @@ def init_db() -> None:
 
 def init_chat_db() -> None:
     os.makedirs(os.path.dirname(CHAT_DB), exist_ok=True)
-    with sqlite3.connect(CHAT_DB, timeout=10) as conn:
+    with database_connection(CHAT_DB, timeout=10) as conn:
         c = conn.cursor()
         try:
             c.execute("PRAGMA journal_mode=WAL")
@@ -351,7 +361,7 @@ def _iso(ts: dt.datetime) -> str:
 
 def cleanup_expired_sessions() -> None:
     now = _now_utc()
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         conn.execute("DELETE FROM sessions WHERE expires_at < ?", (_iso(now),))
         conn.commit()
 
@@ -360,7 +370,7 @@ def create_session(login: str) -> Tuple[str, str]:
     token = secrets.token_urlsafe(32)
     now = _now_utc()
     expires = now + dt.timedelta(seconds=SESSION_TTL_SEC)
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         conn.execute(
             "INSERT OR REPLACE INTO sessions(token, login, created_at, last_seen, expires_at) VALUES(?,?,?,?,?)",
             (token, login, _iso(now), _iso(now), _iso(expires)),
@@ -373,7 +383,7 @@ def get_session_by_token(token: str) -> Optional[Dict[str, str]]:
     if not token:
         return None
     cleanup_expired_sessions()
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT token, login, created_at, last_seen, expires_at FROM sessions WHERE token=?",
@@ -381,14 +391,7 @@ def get_session_by_token(token: str) -> Optional[Dict[str, str]]:
         ).fetchone()
         if not row:
             return None
-        # check expiry
-        try:
-            expires = dt.datetime.fromisoformat(row["expires_at"])
-            if expires.tzinfo is None:
-                expires = expires.replace(tzinfo=dt.timezone.utc)
-            if expires < _now_utc():
-                return None
-        except Exception:
+        if not session_valid(conn, row["login"], token):
             return None
         return dict(row)
 
@@ -409,7 +412,7 @@ def touch_session(token: str) -> None:
 
     now_iso = _iso(now_dt)
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        with database_connection(DB_FILE, timeout=10) as conn:
             conn.execute("UPDATE sessions SET last_seen=? WHERE token=?", (now_iso, token))
             conn.commit()
     except Exception:
@@ -421,7 +424,7 @@ def delete_session(token: str) -> None:
     if not token:
         return
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        with database_connection(DB_FILE, timeout=10) as conn:
             conn.execute("DELETE FROM sessions WHERE token=?", (token,))
             conn.commit()
     except Exception:
@@ -442,7 +445,7 @@ def set_session_offline(token: str) -> None:
     # move last_seen outside online window
     old_seen = _iso(_now_utc() - dt.timedelta(seconds=ONLINE_WINDOW_SEC + 5))
     try:
-        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        with database_connection(DB_FILE, timeout=10) as conn:
             conn.execute("UPDATE sessions SET last_seen=? WHERE token=?", (old_seen, token))
             conn.commit()
     except Exception:
@@ -458,17 +461,17 @@ def is_online(login: str) -> bool:
         return False
     cleanup_expired_sessions()
     window_start = _now_utc() - dt.timedelta(seconds=ONLINE_WINDOW_SEC)
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         row = conn.execute(
             """
             SELECT 1
             FROM sessions
             WHERE login=?
               AND expires_at >= ?
-              AND (last_seen >= ? OR created_at >= ?)
+              AND last_seen >= ?
             LIMIT 1
             """,
-            (login, _iso(_now_utc()), _iso(window_start), _iso(window_start)),
+            (login, _iso(_now_utc()), _iso(window_start)),
         ).fetchone()
         return bool(row)
 
@@ -523,7 +526,7 @@ def pop_events(login: str) -> list:
 # -------------------- User operations --------------------
 
 def user_exists(login: str) -> bool:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM users WHERE login=?", (login,))
         return cur.fetchone() is not None
@@ -532,7 +535,7 @@ def user_exists(login: str) -> bool:
 def add_user(login: str, password: str, nickname: str, avatar: str) -> bool:
     if user_exists(login):
         return False
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO users(login, password, nickname, avatar) VALUES (?,?,?,?)",
@@ -543,7 +546,7 @@ def add_user(login: str, password: str, nickname: str, avatar: str) -> bool:
 
 
 def authenticate(login: str, password: str) -> bool:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("SELECT password FROM users WHERE login=?", (login,))
         row = cur.fetchone()
@@ -557,7 +560,7 @@ def authenticate(login: str, password: str) -> bool:
 
 
 def get_user_info(login: str) -> Optional[Dict[str, str]]:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("SELECT login, nickname, avatar FROM users WHERE login=?", (login,))
         row = cur.fetchone()
@@ -567,7 +570,7 @@ def get_user_info(login: str) -> Optional[Dict[str, str]]:
 
 
 def update_user_profile(login: str, nickname: str, password: Optional[str], avatar: Optional[str]) -> bool:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         if password:
             cur.execute(
@@ -591,7 +594,7 @@ def send_friend_request(from_user: str, to_user: str) -> bool:
     if not user_exists(to_user):
         return False
 
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         # already friends?
         cur.execute(
@@ -612,7 +615,7 @@ def send_friend_request(from_user: str, to_user: str) -> bool:
 
 
 def get_friend_requests(to_user: str) -> list:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("SELECT from_user FROM friend_requests WHERE to_user=?", (to_user,))
         return [r[0] for r in cur.fetchall()]
@@ -622,7 +625,7 @@ def accept_friend_request(from_user: str, to_user: str) -> bool:
     if (not from_user) or (not to_user) or (from_user == to_user):
         return False
 
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("DELETE FROM friend_requests WHERE from_user=? AND to_user=?", (from_user, to_user))
         # Принять можно только существующую заявку.
@@ -640,14 +643,14 @@ def decline_friend_request(from_user: str, to_user: str) -> bool:
     if (not from_user) or (not to_user) or (from_user == to_user):
         return False
 
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.execute("DELETE FROM friend_requests WHERE from_user=? AND to_user=?", (from_user, to_user))
         conn.commit()
     return cur.rowcount > 0
 
 
 def get_friends(login: str) -> list:
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute("SELECT friend_login FROM friends WHERE user_login=? AND friend_login<>?", (login, login))
         return [r[0] for r in cur.fetchall()]
@@ -656,7 +659,7 @@ def get_friends(login: str) -> list:
 def are_friends(user_a: str, user_b: str) -> bool:
     if not user_a or not user_b or user_a == user_b:
         return False
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         row = conn.execute(
             """
             SELECT 1
@@ -675,7 +678,7 @@ def remove_friend(current_user: str, friend_login: str) -> bool:
     if (not current_user) or (not friend_login) or (current_user == friend_login):
         return False
 
-    with sqlite3.connect(DB_FILE) as conn:
+    with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
 
         # remove accepted friendship in both directions
@@ -700,7 +703,7 @@ def remove_friend(current_user: str, friend_login: str) -> bool:
 # -------------------- Chat (messages) --------------------
 
 def save_message(from_user: str, to_user: str, text: str) -> bool:
-    with sqlite3.connect(CHAT_DB) as conn:
+    with database_connection(CHAT_DB) as conn:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO messages(from_user, to_user, text, is_read) VALUES(?,?,?,0)",
@@ -712,7 +715,7 @@ def save_message(from_user: str, to_user: str, text: str) -> bool:
 
 def get_messages(user_a: str, user_b: str, limit: int = 50) -> list:
     lim = max(1, min(500, int(limit or 50)))
-    with sqlite3.connect(CHAT_DB) as conn:
+    with database_connection(CHAT_DB) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(
@@ -729,7 +732,7 @@ def get_messages(user_a: str, user_b: str, limit: int = 50) -> list:
 
 
 def mark_chat_read(current_user: str, friend: str) -> None:
-    with sqlite3.connect(CHAT_DB) as conn:
+    with database_connection(CHAT_DB) as conn:
         conn.execute(
             "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0",
             (friend, current_user),
@@ -738,7 +741,7 @@ def mark_chat_read(current_user: str, friend: str) -> None:
 
 
 def get_unread_counts(current_user: str) -> Dict[str, int]:
-    with sqlite3.connect(CHAT_DB) as conn:
+    with database_connection(CHAT_DB) as conn:
         cur = conn.cursor()
         cur.execute(
             """SELECT from_user, COUNT(*)
@@ -768,7 +771,7 @@ def create_channel(owner_login: str, name: str, avatar: str = "") -> Dict[str, A
     if not channel_name:
         raise ValueError("Название канала не может быть пустым")
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         code = _generate_channel_code(conn)
         cur = conn.cursor()
@@ -797,7 +800,7 @@ def create_channel(owner_login: str, name: str, avatar: str = "") -> Dict[str, A
 
 
 def list_user_channels(login: str) -> list:
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         _cleanup_channel_voice_presence(conn)
         rows = conn.execute(
@@ -820,7 +823,7 @@ def list_user_channels(login: str) -> list:
 
 
 def get_channel_by_id(channel_id: int) -> Optional[Dict[str, Any]]:
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
@@ -830,7 +833,7 @@ def get_channel_by_id(channel_id: int) -> Optional[Dict[str, Any]]:
 
 
 def is_channel_member(channel_id: int, login: str) -> bool:
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         row = conn.execute(
             "SELECT 1 FROM channel_members WHERE channel_id=? AND login=? LIMIT 1",
             (int(channel_id), login),
@@ -843,7 +846,7 @@ def join_channel_by_code(login: str, code: str) -> Tuple[bool, str, Optional[Dic
     if not code_norm:
         return False, "Укажите код канала", None
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE UPPER(code)=?",
@@ -869,7 +872,7 @@ def send_channel_invite(actor_login: str, channel_id: int, target_login: str) ->
     if actor_login == to_login:
         return False, "Нельзя пригласить самого себя"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
 
         target_user = conn.execute("SELECT 1 FROM users WHERE login=?", (to_login,)).fetchone()
@@ -911,7 +914,7 @@ def send_channel_invite(actor_login: str, channel_id: int, target_login: str) ->
 
 
 def get_incoming_channel_invites(login: str) -> List[Dict[str, Any]]:
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             """
@@ -941,7 +944,7 @@ def respond_channel_invite(login: str, invite_id: int, accept: bool) -> Tuple[bo
     if iid <= 0:
         return False, "Некорректное приглашение", None
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         inv = conn.execute(
             "SELECT id, channel_id, to_user, status FROM channel_invites WHERE id=?",
@@ -993,7 +996,7 @@ def respond_channel_invite(login: str, invite_id: int, accept: bool) -> Tuple[bo
 
 def get_channel_messages(channel_id: int, limit: int = 200) -> list:
     lim = max(1, min(500, int(limit or 200)))
-    with sqlite3.connect(CHAT_DB, timeout=10) as conn:
+    with database_connection(CHAT_DB, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
             """
@@ -1013,7 +1016,7 @@ def save_channel_message(channel_id: int, from_user: str, text: str) -> bool:
     msg = (text or "").strip()
     if not msg:
         return False
-    with sqlite3.connect(CHAT_DB, timeout=10) as conn:
+    with database_connection(CHAT_DB, timeout=10) as conn:
         conn.execute(
             "INSERT INTO channel_messages(channel_id, from_user, text) VALUES(?,?,?)",
             (int(channel_id), from_user, msg),
@@ -1197,11 +1200,7 @@ def _can_send_text(conn: sqlite3.Connection, channel_id: int, login: str) -> boo
 
 
 def _can_join_voice(conn: sqlite3.Connection, channel_id: int, login: str) -> bool:
-    ch, my_role = _get_channel_and_my_role(conn, channel_id, login)
-    if not ch or not my_role:
-        return False
-    need = ch.get("voice_min_role", "member")
-    return _has_min_role(my_role, need)
+    return channel_voice_allowed(conn, login, channel_id)
 
 
 def _cleanup_channel_voice_presence(conn: sqlite3.Connection, channel_id: Optional[int] = None) -> None:
@@ -1220,7 +1219,7 @@ def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = Fal
     if cid <= 0:
         return False, "Не указан канал"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         if not is_channel_member(cid, login):
             return False, "Нет доступа к каналу"
         if joined and not _can_join_voice(conn, cid, login):
@@ -1253,7 +1252,7 @@ def leave_channel_voice(login: str, channel_id: int) -> Tuple[bool, str]:
     cid = int(channel_id or 0)
     if cid <= 0:
         return False, "Не указан канал"
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.execute(
             "DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?",
             (cid, login),
@@ -1267,7 +1266,7 @@ def get_channel_voice_participants(channel_id: int, login: str) -> Tuple[bool, s
     if cid <= 0:
         return False, "Не указан канал", []
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         if not is_channel_member(cid, login):
             return False, "Нет доступа к каналу", []
@@ -1322,7 +1321,7 @@ def get_channel_details_for_user(channel_id: int, login: str) -> Tuple[bool, str
     if cid <= 0:
         return False, "Не указан канал", None
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
@@ -1361,7 +1360,7 @@ def update_channel_settings(actor_login: str, channel_id: int, name: str, avatar
     if not new_name:
         return False, "Введите название канала", None
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute(
             "SELECT id, code, name, avatar, owner_login, text_min_role, voice_min_role, created_at FROM channels WHERE id=?",
@@ -1393,7 +1392,7 @@ def regenerate_channel_code(actor_login: str, channel_id: int) -> Tuple[bool, st
     if cid <= 0:
         return False, "Не указан канал", None
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute(
             "SELECT id, owner_login FROM channels WHERE id=?",
@@ -1423,7 +1422,7 @@ def set_channel_member_role(actor_login: str, channel_id: int, target_login: str
     if cid <= 0 or not tgt:
         return False, "Некорректные данные"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
         if not ch:
@@ -1468,7 +1467,7 @@ def remove_channel_member(actor_login: str, channel_id: int, target_login: str) 
     if cid <= 0 or not tgt:
         return False, "Некорректные данные"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
         if not ch:
@@ -1510,7 +1509,7 @@ def leave_channel(login: str, channel_id: int) -> Tuple[bool, str]:
     if cid <= 0:
         return False, "Не указан канал"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
         if not ch:
@@ -1538,7 +1537,7 @@ def delete_channel(actor_login: str, channel_id: int) -> Tuple[bool, str]:
     if cid <= 0:
         return False, "Не указан канал"
 
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.row_factory = sqlite3.Row
         ch = conn.execute("SELECT owner_login FROM channels WHERE id=?", (cid,)).fetchone()
         if not ch:
@@ -1555,7 +1554,7 @@ def delete_channel(actor_login: str, channel_id: int) -> Tuple[bool, str]:
 
     # delete channel chat history in separate DB
     try:
-        with sqlite3.connect(CHAT_DB, timeout=10) as chat_conn:
+        with database_connection(CHAT_DB, timeout=10) as chat_conn:
             chat_conn.execute("DELETE FROM channel_messages WHERE channel_id=?", (cid,))
             chat_conn.commit()
     except Exception:
@@ -1573,7 +1572,7 @@ def _canon_call_pair(a: str, b: str) -> Tuple[str, str]:
 def _db_set_call_pair(a: str, b: str, status: str) -> None:
     ua, ub = _canon_call_pair(a, b)
     now_iso = _iso(_now_utc())
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.execute(
             """
             INSERT INTO active_call_pairs(user_a, user_b, status, created_at, updated_at)
@@ -1589,7 +1588,7 @@ def _db_set_call_pair(a: str, b: str, status: str) -> None:
 
 def _db_remove_call_pair(a: str, b: str) -> None:
     ua, ub = _canon_call_pair(a, b)
-    with sqlite3.connect(DB_FILE, timeout=10) as conn:
+    with database_connection(DB_FILE, timeout=10) as conn:
         conn.execute(
             "DELETE FROM active_call_pairs WHERE user_a=? AND user_b=?",
             (ua, ub),
@@ -1991,7 +1990,7 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
             return {"status": "error", "message": "Не указан канал"}
         if not text_msg:
             return {"status": "error", "message": "Пустое сообщение"}
-        with sqlite3.connect(DB_FILE, timeout=10) as conn:
+        with database_connection(DB_FILE, timeout=10) as conn:
             if not is_channel_member(channel_id, current_user):
                 return {"status": "error", "message": "Нет доступа к каналу"}
             if not _can_send_text(conn, channel_id, current_user):
@@ -2110,6 +2109,7 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_client(conn: socket.socket, addr):
     try:
+        conn.settimeout(5.0)
         data = recv_request(conn)
         if not data:
             send_response(conn, {"status": "error", "message": "Пустой запрос"})

@@ -10,6 +10,9 @@ LEGACY_CONFIG_FILE = "config.json"  # старое расположение (cwd
 
 def _get_user_config_dir() -> str:
     """Папка настроек пользователя (кросс‑платформенно)."""
+    override = os.environ.get("NODYS_CONFIG_DIR")
+    if override:
+        return override
     if os.name == "nt":
         base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
         if not base:
@@ -30,6 +33,8 @@ def get_config_path() -> str:
 
 def _migrate_legacy_config_if_needed() -> None:
     """Мягкая миграция старого config.json из cwd в user-config dir."""
+    if os.environ.get("NODYS_CONFIG_DIR"):
+        return
     try:
         new_path = get_config_path()
         if os.path.exists(new_path):
@@ -48,7 +53,7 @@ def load_config() -> Dict[str, Any]:
     path = get_config_path()
     if not os.path.exists(path):
         # fallback to legacy (если по какой-то причине не мигрировалось)
-        if os.path.exists(LEGACY_CONFIG_FILE):
+        if not os.environ.get("NODYS_CONFIG_DIR") and os.path.exists(LEGACY_CONFIG_FILE):
             try:
                 with open(LEGACY_CONFIG_FILE, "r", encoding="utf-8") as f:
                     return json.load(f)
@@ -65,16 +70,25 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(data: Dict[str, Any]) -> None:
     path = get_config_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+    existing = load_config()
+    existing.update(data)
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=4)
+    os.replace(temporary, path)
 
 
 def clear_config() -> None:
-    # Удаляем и новый, и legacy-конфиг, чтобы авто-логин не восстанавливался из старого файла.
-    for path in (get_config_path(), LEGACY_CONFIG_FILE):
+    # Session removal must preserve connection preferences.
+    existing = load_config()
+    preferences = {key: value for key, value in existing.items()
+                   if key in {"api_host", "api_port", "voice_host", "voice_port"}}
+    paths = [get_config_path()]
+    if not os.environ.get("NODYS_CONFIG_DIR"):
+        paths.append(LEGACY_CONFIG_FILE)
+    for path in paths:
         try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except Exception:
+            os.remove(path)
+        except FileNotFoundError:
             pass
+    save_config(preferences)

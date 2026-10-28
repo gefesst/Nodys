@@ -1,24 +1,29 @@
+try:
+    from .storage.database import connect as database_connection
+except ImportError:
+    from storage.database import connect as database_connection
+
 import socket
 import threading
 import sqlite3
 import time
 import os
 from collections import deque
+try:
+    from .domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
+except ImportError:
+    from domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
 from typing import Dict, Tuple, Optional
 
 # Shared DB with TCP server for token validation / channel ACL
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
+DB_FILE = os.environ.get("NODYS_DB_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
 
 HOST = "0.0.0.0"
 PORT = 5556
 
-# Security mode:
-#   0 (default): strictly require token for join/control.
-#   1: allow legacy insecure join without token (for debugging only).
-ALLOW_INSECURE_JOIN = os.environ.get("VOICECHAT_ALLOW_INSECURE", "0") == "1"
-
 # login -> (ip, port, last_seen)
 clients: Dict[str, Tuple[str, int, float]] = {}
+client_tokens: Dict[str, str] = {}
 # (ip,port) -> login
 addr_to_login: Dict[Tuple[str, int], str] = {}
 # frozenset({a,b}) -> True
@@ -48,28 +53,26 @@ def validate_token(login: str, token: str) -> bool:
     if not login or not token:
         return False
     try:
-        conn = sqlite3.connect(DB_FILE)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT expires_at FROM sessions WHERE token=? AND login=?",
-            (token, login),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            return False
+        with database_connection(DB_FILE, timeout=0.2) as connection:
+            return session_valid(connection, login, token)
+    except sqlite3.Error:
+        return False
 
-        expires_at = row[0]
-        try:
-            import datetime as dt
-            exp = dt.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=dt.timezone.utc)
-            return exp.timestamp() > time.time()
-        except Exception:
-            # If timestamp format changed, trust existing DB session row as valid.
-            return True
-    except Exception:
+
+def _authorized_audio(login, room=None, peer=None):
+    """Revalidate sender and recipients against authoritative state.
+
+    No positive cache: revocations apply to the next packet. Optimize only with
+    explicit invalidation, never an unbounded permission cache.
+    """
+    try:
+        with database_connection(DB_FILE, timeout=0.2) as connection:
+            if not session_valid(connection, login, client_tokens.get(login, '')):
+                return False
+            if room is not None:
+                return channel_voice_allowed(connection, login, room)
+            return peer is not None and private_call_allowed(connection, login, peer)
+    except sqlite3.Error:
         return False
 
 
@@ -153,7 +156,7 @@ def _active_pair_table_exists() -> bool:
 def _is_active_call_pair(user_a: str, user_b: str) -> bool:
     # Compatibility fallback for older DB schema.
     if not _active_pair_table_exists():
-        return True
+        return False
 
     ua, ub = (user_a, user_b) if user_a <= user_b else (user_b, user_a)
     try:
@@ -173,64 +176,19 @@ def _is_active_call_pair(user_a: str, user_b: str) -> bool:
 
 
 def _can_join_channel_voice(login: str, room_id: str) -> bool:
-    # room_id can arrive either as plain numeric id ("12")
-    # or namespaced format from client ("channel:12").
-    raw = (room_id or "").strip()
-    if not raw:
-        return False
-
-    cid: Optional[int] = None
-    if raw.isdigit():
-        cid = int(raw)
-    else:
-        low = raw.lower()
-        if low.startswith("channel:"):
-            tail = low.split(":", 1)[1].strip()
-            if tail.isdigit():
-                cid = int(tail)
-
-    if cid is None or cid <= 0:
-        return False
-
     try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT c.owner_login,
-                   c.voice_min_role,
-                   m.role
-            FROM channels c
-            LEFT JOIN channel_members m ON m.channel_id=c.id AND m.login=?
-            WHERE c.id=?
-            LIMIT 1
-            """,
-            (login, cid),
-        )
-        row = cur.fetchone()
-        conn.close()
-
-        if not row:
-            return False
-
-        owner_login, min_role, member_role = row[0], row[1], row[2]
-        need = _norm_role(min_role or "member")
-
-        if owner_login == login:
-            have = "owner"
-        else:
-            if member_role is None:
-                return False
-            have = _norm_role(member_role)
-
-        return _ROLE_RANK.get(have, 0) >= _ROLE_RANK.get(need, 1)
-    except Exception:
+        with database_connection(DB_FILE, timeout=0.2) as connection:
+            return channel_voice_allowed(connection, login, room_id)
+    except sqlite3.Error:
         return False
 
 
 def _mark_seen(login: str, addr):
     now_ts = time.time()
     with lock:
+        previous = clients.get(login)
+        if previous and previous[:2] != addr[:2]:
+            addr_to_login.pop(previous[:2], None)
         clients[login] = (addr[0], addr[1], now_ts)
         addr_to_login[(addr[0], addr[1])] = login
 
@@ -286,6 +244,7 @@ def cleanup_loop(timeout_sec: int = 20):
 
             for login in dead:
                 clients.pop(login, None)
+                client_tokens.pop(login, None)
                 # remove reverse addr mapping
                 for k, v in list(addr_to_login.items()):
                     if v == login:
@@ -323,9 +282,9 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
             if not validate_token(login, token):
                 return
         else:
-            if not ALLOW_INSECURE_JOIN:
-                return
+            return
 
+        client_tokens[login] = token
         _mark_seen(login, addr)
         return
 
@@ -346,12 +305,13 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
             if not validate_token(login, token):
                 return
         else:
-            if not ALLOW_INSECURE_JOIN:
-                return
+            return
 
         if not _can_join_channel_voice(login, room_id):
             return
 
+        client_tokens[login] = token
+        room_id = f"channel:{channel_id(room_id)}"
         _mark_seen(login, addr)
         with lock:
             _join_room(login, room_id)
@@ -417,8 +377,7 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
                 if not validate_token(sender, token):
                     return
             else:
-                if not ALLOW_INSECURE_JOIN:
-                    return
+                return
 
             if flag == "1":
                 # Private pair can be established only for friends and active calls.
@@ -466,7 +425,11 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
                     targets = None
 
             if targets is not None:
-                for tgt in targets:
+                if not _authorized_audio(from_user, room=room_id):
+                    return
+                for recipient, tgt in zip(recips, targets):
+                    if not _authorized_audio(recipient, room=room_id):
+                        continue
                     if not tgt:
                         continue
                     ip, port, _ = tgt
@@ -479,6 +442,8 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
             # 2) private pair
             to_user = other_user_in_pair(from_user)
             if not to_user:
+                return
+            if not (_authorized_audio(from_user, peer=to_user) and _authorized_audio(to_user, peer=from_user)):
                 return
 
             with lock:
@@ -496,8 +461,6 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((HOST, PORT))
     print(f"[VOICE] UDP listening on {HOST}:{PORT}")
-    if ALLOW_INSECURE_JOIN:
-        print("[VOICE] WARNING: insecure join mode enabled (VOICECHAT_ALLOW_INSECURE=1)")
 
     threading.Thread(target=cleanup_loop, daemon=True).start()
 
