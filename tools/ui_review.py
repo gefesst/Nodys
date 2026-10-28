@@ -22,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     parser.add_argument("--synthetic-voice", action="store_true")
+    parser.add_argument("--relogin-cycles", type=int, default=1)
     args = parser.parse_args()
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
@@ -552,23 +553,24 @@ def main():
                 duration=160,
                 loop=0,
             )
-            previous_token = m.ctx.session_token
-            c.editor.setPlainText('Private draft before logout')
-            m.perform_logout()
-            self.wait(predicate=lambda: w.stack.currentWidget() == w.auth_page)
-            yield
-            self.shot('38-logged-out')
-            assert not m.ctx.session_token
-            w.auth_page.login.setText(lab.me)
-            w.auth_page.password.setText('review-password')
-            w.auth_page.login_user()
-            self.wait(predicate=lambda: w.stack.currentWidget() == w.main_page and bool(m.ctx.session_token))
-            yield
-            assert m.ctx.session_token != previous_token
-            assert not m.chats_page.conversation.drafts
-            assert not m.chats_page.conversation.editor.toPlainText()
-            self.workflow_checks.append('logout_relogin_clears_private_drafts')
-            self.shot('39-relogged-in')
+            for cycle in range(max(1, args.relogin_cycles)):
+                previous_token = m.ctx.session_token
+                c.editor.setPlainText('Private draft before logout')
+                m.perform_logout()
+                self.wait(predicate=lambda: w.stack.currentWidget() == w.auth_page)
+                yield
+                self.shot('38-logged-out')
+                assert not m.ctx.session_token
+                w.auth_page.login.setText(lab.me)
+                w.auth_page.password.setText('review-password')
+                w.auth_page.login_user()
+                self.wait(predicate=lambda: w.stack.currentWidget() == w.main_page and bool(m.ctx.session_token))
+                yield
+                assert m.ctx.session_token != previous_token
+                assert not m.chats_page.conversation.drafts
+                assert not m.chats_page.conversation.editor.toPlainText()
+                self.workflow_checks.append('logout_relogin_clears_private_drafts')
+                self.shot('39-relogged-in')
 
         def finish(self):
             self.timer.stop()
