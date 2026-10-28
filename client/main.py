@@ -1,3 +1,7 @@
+# Preserve direct script entry points while sharing the wire protocol package.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from application.qt_runtime import prepare_platform_plugins
 import sys
 from PySide6.QtWidgets import QApplication

@@ -25,7 +25,7 @@ Database context managers commit or roll back and always close. Preview data liv
 4. Secure control/audio transport, media storage, acknowledged events and multi-speaker mixing.
 5. Lock dependencies and package for target platforms, with hardware audio acceptance.
 
-Do not present this first extraction as completion of the entire architecture migration. Encrypted remote UDP, real audio and network failure matrices remain release gates.
+Do not present this first extraction as completion of the entire architecture migration. Real audio, external network failure matrices and public-server hardening remain release gates.
 
 ## Channel state and portable avatars (second change set)
 
@@ -44,4 +44,15 @@ Avatars now travel as bounded 128-pixel PNG thumbnails in existing avatar fields
 - `server/server_transport/tls.py`: server certificate configuration and loopback-only plaintext policy. TLS handshake timeout and a bounded worker count constrain resource use.
 - `client/application/qt_runtime.py`: macOS platform-plugin visibility preparation before Qt startup; resolves hidden plugin flags observed in the local development environment.
 
-Remote voice is blocked until authenticated encrypted audio transport exists. Do not interpret TLS control support as encryption of voice packets.
+The third-stage remote-voice block is superseded by the authenticated datagram transport below.
+
+## Encrypted voice (fourth change set)
+
+- `shared/voice_protocol.py` owns the versioned binary envelope and AES-GCM primitive via PyCA cryptography. Header: `NV1`, 16-byte transport ID, 64-bit sequence. Header is authenticated; nonce is four zero bytes plus sequence. Directional 256-bit keys are independently random. Replay window is 128 packets and advances only after authentication. Maximum datagram is 1200 bytes; PCM is exactly 640 bytes (16 kHz, mono, 20 ms, signed 16-bit little endian).
+- `server/storage/voice_tickets.py` issues channel/call-scoped one-hour grants after session and ACL checks. One grant per login session. A persistent one-use claim prevents reuse of server send keys after relay restart or in-memory eviction. Fresh credentials are mandatory, even when the old grant has not expired. Login tokens are never part of the UDP envelope.
+- `server/voice_server.py` is now a single-loop encrypted relay instead of a global mutable legacy protocol dispatcher. It accepts only authenticated join, heartbeat, leave and audio messages. Source address changes require a newer authenticated sequence. It bounds live routes to 1024, evicts inactive routes, limits each route to 100 messages/second and checks authoritative sender/receiver permissions for every forwarded audio packet.
+- `client/transport/voice.py` requests scoped keys through verified control transport, validates the encrypted join acknowledgement and owns the UDP socket. `client/voice_client.py` owns audio devices and the reconnect worker. Audio callbacks queue bounded outgoing frames; encryption and socket I/O happen in the network worker. Failure to start an audio device closes partial streams and the transport.
+
+Cryptographic API reference: https://cryptography.io/en/stable/hazmat/primitives/aead/ . Never reconstruct a cipher with previously used send keys; the persistent claim and client credential renewal are required invariants. This is a Nodys-specific encrypted transport using a standard AEAD primitive, not DTLS, SRTP or an independently audited protocol. It is not E2EE.
+
+Known limits: SQLite reads per sender/recipient remain a scalability cost; packet sequencing prevents replay but the playback buffer does not yet reorder audio or implement loss concealment. Client reconnection is automatic, but initial connection still runs in the existing UI voice-start path and can wait for the network timeout. Transport keys are stored in the protected server DB and may survive in backups. Public admission throttling, migration versioning, load tests and hardware/network acceptance remain follow-up work.

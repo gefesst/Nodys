@@ -21,9 +21,7 @@ class RequestScopeTests(unittest.TestCase):
         self.assertFalse(scope.accepts(old,1))
         self.assertTrue(scope.accepts(new,1))
 
-class PresenceOrderTests(unittest.TestCase):
-    setUp = fixtures.VoiceAuthorizationTests.setUp
-    packet = fixtures.VoiceAuthorizationTests.packet
+class PresenceOrderTests(fixtures.VoiceFixture, unittest.TestCase):
     def test_late_join_does_not_undo_leave(self):
         cid = self.channel['id']; token = self.tokens['bob']
         self.server.set_channel_voice_presence('bob',cid,token=token,sequence=10)

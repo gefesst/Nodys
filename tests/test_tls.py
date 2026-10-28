@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
-import shutil
 import socket
 import ssl
-import subprocess
 import tempfile
 import threading
 import unittest
@@ -26,16 +24,14 @@ class TlsPolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):server_context('0.0.0.0')
             self.assertIsNone(server_context('127.0.0.1'))
 
-@unittest.skipUnless(shutil.which('openssl'),'OpenSSL required for temporary TLS test certificates')
 class TlsHandshakeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.folder=tempfile.TemporaryDirectory()
         cls.cert=Path(cls.folder.name)/'certificate.pem'
         cls.key=Path(cls.folder.name)/'key.pem'
-        subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
-            '-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost',
-            '-keyout',str(cls.key),'-out',str(cls.cert)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        from tls_fixture import create_certificate
+        create_certificate(cls.cert,cls.key)
     @classmethod
     def tearDownClass(cls):cls.folder.cleanup()
 
