@@ -10,7 +10,7 @@ import random
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot, Qt, QCoreApplication, QTimer
 
 from user_context import UserContext
 from settings import get_api_endpoint
@@ -181,6 +181,11 @@ class NetworkThread(QObject):
     """
 
     finished = Signal(dict)
+    _completed = Signal(dict)
+    _settled = Signal()
+    _inflight = set()
+    _quitting = False
+    _hooked_application = None
 
     def __init__(self, host: Optional[str], port: Optional[int], data: Dict[str, Any]):
         super().__init__()
@@ -196,12 +201,20 @@ class NetworkThread(QObject):
 
         self._abort_event = threading.Event()
         self._thread = None
+        self._completed.connect(self._deliver, Qt.QueuedConnection)
+        self._settled.connect(self._release, Qt.QueuedConnection)
 
     # ---------------- compatibility API ----------------
     def start(self):
         if self._thread and self._thread.is_alive():
             return
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        application = QCoreApplication.instance()
+        if application is not None and NetworkThread._hooked_application is not application:
+            NetworkThread._quitting = False
+            NetworkThread._hooked_application = application
+            application.aboutToQuit.connect(NetworkThread._shutdown)
+        NetworkThread._inflight.add(self)
+        self._thread = threading.Thread(target=self._worker, daemon=True)
         self._thread.start()
 
     def isRunning(self):
@@ -223,10 +236,39 @@ class NetworkThread(QObject):
     def quit(self):
         self.abort()
 
+    @staticmethod
+    def _shutdown():
+        NetworkThread._quitting = True
+        for request in tuple(NetworkThread._inflight):
+            request.abort()
+
+    @Slot(dict)
+    def _deliver(self, payload):
+        # All public callbacks now originate on this QObject's GUI thread.
+        if not self._abort_event.is_set() and not NetworkThread._quitting:
+            self.finished.emit(payload)
+
+    @Slot()
+    def _release(self):
+        if self.isRunning():
+            QTimer.singleShot(0, self._release)
+            return
+        NetworkThread._inflight.discard(self)
+
+    def _worker(self):
+        try:
+            self._run()
+        finally:
+            if not NetworkThread._quitting:
+                try:
+                    self._settled.emit()
+                except RuntimeError:
+                    pass  # Application teardown has already destroyed Qt objects.
+
     # ---------------- internal ----------------
     def _emit_if_alive(self, payload: dict):
-        if not self._abort_event.is_set():
-            self.finished.emit(payload)
+        if not self._abort_event.is_set() and not NetworkThread._quitting:
+            self._completed.emit(payload)
 
     def _prepare_payload(self) -> Dict[str, Any]:
         obj = dict(self.data or {})

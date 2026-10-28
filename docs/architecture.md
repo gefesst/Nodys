@@ -43,7 +43,7 @@ UDP v2 (`NV2`) uses independent directional AES-GCM keys, authenticated transpor
 
 Voice is 16 kHz mono PCM, 20 ms / 640 bytes per frame. Playback starts with a two-frame prebuffer, keeps at most eight frames per speaker and 32 speakers, reorders arrivals, rejects duplicates/late frames and fades the previous frame for at most two missing frames. This is fixed jitter buffering and simple concealment, not an adaptive codec. Server-readable audio is encrypted in transit; this is not E2EE or an independently audited DTLS/SRTP implementation.
 
-Network and audio lifecycle work runs outside Qt. Request generations prevent old sessions/screens from applying stale results. Logout records a private local retry entry before sending; retries preserve the original endpoint/TLS configuration. Entries expire with the maximum session lifetime. Disk failure or forced termination before the queue write can still prevent durable delivery.
+Network and audio lifecycle work runs outside Qt. Network requests remain retained until the worker exits and their queued completion has been processed; public callbacks are emitted from a GUI-thread slot and recheck cancellation before delivery. Request generations prevent old sessions/screens from applying stale results. Logout records a private local retry entry before sending; retries preserve the original endpoint/TLS configuration. Entries expire with the maximum session lifetime. Disk failure or forced termination before the queue write can still prevent durable delivery.
 
 ## Development and validation
 
