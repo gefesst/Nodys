@@ -1,4 +1,4 @@
-"""Nodys v1 authenticated datagrams; keys are issued over verified TLS.
+"""Nodys v2 authenticated datagrams; keys are issued over verified TLS.
 
 Separate directional keys, monotonic 64-bit nonces, authenticated headers and a
 128-packet replay window. A cipher instance must never be recreated with keys
@@ -8,7 +8,7 @@ import struct
 import threading
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-MAGIC = b'NV1'
+MAGIC = b'NV2'
 HEADER = struct.Struct('!3s16sQ')
 MAX_PACKET = 1200
 PCM_BYTES = 640
@@ -57,3 +57,9 @@ class DatagramCipher:
             else:
                 self.seen |= 1 << offset
             return sequence, payload
+
+
+def audio_frame(sequence, pcm):
+    if len(pcm) != PCM_BYTES:
+        raise ValueError('Invalid PCM frame')
+    return b'A' + struct.pack('!Q', sequence) + pcm

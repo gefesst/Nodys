@@ -7,13 +7,12 @@ import secrets
 import socket
 import sqlite3
 import time
+from contextlib import contextmanager
 from cryptography.exceptions import InvalidTag
 from shared.voice_protocol import DatagramCipher, HEADER, MAGIC, MAX_PACKET, PCM_BYTES
 try:
-    from .storage.database import connect as database_connection
     from .storage import voice_tickets
 except ImportError:
-    from storage.database import connect as database_connection
     from storage import voice_tickets
 
 DB_FILE = os.environ.get('NODYS_DB_FILE') or str(Path(__file__).with_name('users.db'))
@@ -24,10 +23,24 @@ PORT = int(os.environ.get('NODYS_VOICE_PORT', '5556'))
 class VoiceRelay:
     """Single socket-loop owner; no concurrent mutation of crypto or routes."""
     def __init__(self, database):
-        self.database = database
+        self.database_path = database
         self.process_id = secrets.token_hex(16)
         self.connections = {}
         self.last_cleanup = 0
+        self._connection = None
+
+    @contextmanager
+    def database(self):
+        if self._connection is None:
+            self._connection = sqlite3.connect(self.database_path, timeout=0.2, check_same_thread=False)
+        # Commit each packet. Never retain a read snapshot or cache positive ACLs.
+        with self._connection:
+            yield self._connection
+
+    def close(self):
+        if self._connection is not None:
+            self._connection.close()
+            self._connection = None
 
     def _valid(self, connection, identity):
         ticket = voice_tickets.read(connection, identity)
@@ -43,7 +56,7 @@ class VoiceRelay:
             self.last_cleanup = now
         identity = HEADER.unpack_from(packet)[1]
         try:
-            with database_connection(self.database, timeout=0.2) as connection:
+            with self.database() as connection:
                 ticket = self._valid(connection, identity)
                 if not ticket:
                     self.connections.pop(identity, None)
@@ -63,7 +76,7 @@ class VoiceRelay:
                     self.connections[identity] = state
                 else:
                     sequence, payload = state['cipher'].open(packet)
-                if payload not in (b'J', b'H', b'L') and not (payload[:1] == b'A' and len(payload) == PCM_BYTES+1):
+                if payload not in (b'J', b'H', b'L') and not (payload[:1] == b'A' and len(payload) == PCM_BYTES+9):
                     return
                 # Only a newer authenticated packet may move the NAT endpoint.
                 if sequence >= state['address_sequence']:
@@ -86,7 +99,7 @@ class VoiceRelay:
                 sender_name = ticket['login'].encode('utf-8')
                 if len(sender_name) > 255:
                     return
-                output = b'R' + bytes([len(sender_name)]) + sender_name + payload[1:]
+                output = b'R' + bytes([len(sender_name)]) + sender_name + identity + payload[1:]
                 for other_id, target in list(self.connections.items()):
                     other = target['ticket']
                     if other['login'] == ticket['login']:
@@ -107,12 +120,15 @@ class VoiceRelay:
 
 def main():
     relay = VoiceRelay(DB_FILE)
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        sock.bind((HOST, PORT))
-        print(f'[VOICE] Encrypted UDP listening on {HOST}:{PORT}', flush=True)
-        while True:
-            packet, address = sock.recvfrom(MAX_PACKET+1)
-            relay.handle(sock, packet, address)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.bind((HOST, PORT))
+            print(f'[VOICE] Encrypted UDP listening on {HOST}:{PORT}', flush=True)
+            while True:
+                packet, address = sock.recvfrom(MAX_PACKET+1)
+                relay.handle(sock, packet, address)
+    finally:
+        relay.close()
 
 
 if __name__ == '__main__':

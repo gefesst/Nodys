@@ -72,10 +72,12 @@ class CallService:
             self.emit(connection,notifications,callee,dict(type='call_started',with_user=caller))
         return True
 
-    def finish(self, user, peer=None, decline=False):
+    def finish(self, user, peer=None, decline=False, expected_id=None):
         with self.transaction() as (connection, notifications):
-            row=connection.execute('SELECT user_a,user_b,status,caller_login FROM active_call_pairs WHERE user_a=? OR user_b=?',(user,user)).fetchone()
+            row=connection.execute('SELECT user_a,user_b,status,caller_login,created_at FROM active_call_pairs WHERE user_a=? OR user_b=?',(user,user)).fetchone()
             if not row:
+                return False
+            if expected_id is not None and row[4] != expected_id:
                 return False
             other=row[1] if row[0] == user else row[0]
             if peer is not None and other != peer:

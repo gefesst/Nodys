@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QTimer
 from network import NetworkThread
 from PySide6.QtGui import QIcon
 import os
@@ -27,6 +27,12 @@ class AppWindow(QWidget):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
+        from application.logout_outbox import retry_pending
+        retry_pending()
+        self._logout_retry_timer = QTimer(self)
+        self._logout_retry_timer.setInterval(30000)
+        self._logout_retry_timer.timeout.connect(retry_pending)
+        self._logout_retry_timer.start()
         self.ctx = UserContext()
         self._resume_token = None
         self._resume_thread = None

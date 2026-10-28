@@ -10,22 +10,28 @@ _workers=ThreadPoolExecutor(max_workers=2,thread_name_prefix='nodys-session-clea
 _slots=threading.BoundedSemaphore(8)
 
 
-def submit(endpoint, payload, timeout=1):
+def submit(endpoint, payload, timeout=1, pending=None):
     # Copy identity now; later login/logout must not change the request's user.
     request=dict(payload)
+    if request.get('action') == 'logout' and pending is None:
+        from application.logout_outbox import remember
+        try:
+            pending = remember(endpoint, request)
+        except OSError:
+            pass  # Still attempt immediate revocation if local storage is unavailable.
     if not _slots.acquire(blocking=False):
         return None
     try:
-        return _workers.submit(_send,tuple(endpoint),request,timeout)
+        return _workers.submit(_send,tuple(endpoint),request,timeout,pending)
     except RuntimeError:
         _slots.release()
         return None
 
 
-def _send(endpoint, payload, timeout):
+def _send(endpoint, payload, timeout, pending=None):
     try:
         data=json.dumps(payload).encode('utf-8')
-        with connect_api(*endpoint,timeout=timeout) as connection:
+        with connect_api(*endpoint,timeout=timeout,configuration=pending[1]['configuration'] if pending else None) as connection:
             connection.sendall(struct.pack('!I',len(data))+data)
             deadline=time.monotonic()+timeout
             def exact(count):
@@ -40,7 +46,11 @@ def _send(endpoint, payload, timeout):
                 return result
             size=struct.unpack('!I',exact(4))[0]
             if 0<size<=4096:
-                return json.loads(exact(size))
+                result = json.loads(exact(size))
+                if pending and (result.get('status') == 'ok' or result.get('code') == 'session_invalid'):
+                    from application.logout_outbox import acknowledge
+                    acknowledge(pending[0], payload['token'])
+                return result
     except Exception:
         return None
     finally:

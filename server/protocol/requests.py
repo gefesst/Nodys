@@ -3,7 +3,7 @@ ACTIONS = frozenset({'get_messages', 'decline_call', 'heartbeat', 'set_channel_v
 TEXT_LIMITS = {
     'action':64, 'login':128, 'target_login':128, 'friend_login':128,
     'from_user':128, 'to_user':128, 'with_user':128, 'peer':128,
-    'password':1024, 'nickname':128, 'name':256, 'avatar':150000,
+    'call_id':128, 'current_password':1024, 'request_id':64, 'password':1024, 'nickname':128, 'name':256, 'avatar':150000,
     'token':512, 'session_token':512, 'code':128, 'decision':32,
     'role':32, 'text_min_role':32, 'voice_min_role':32,
     'text':8000, 'message':8000,
@@ -36,4 +36,9 @@ def validate(data):
                 raise ValueError('Некорректный канал')
         else:
             raise ValueError(f'Неизвестное поле: {key}')
+    for field in ('role','text_min_role','voice_min_role'):
+        if field in data and data[field] not in ('member','moderator','admin'):
+            raise ValueError('Некорректная роль')
+    if 'decision' in data and data['decision'] not in ('accept','decline'):
+        raise ValueError('Некорректное решение')
     return data

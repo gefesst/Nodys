@@ -800,8 +800,13 @@ class MainWindow(QWidget):
                 endpoint = get_api_endpoint()
             except (ValueError, TypeError):
                 return
-            submit_session_cleanup(endpoint,
-                {"action":action, "login":login, "token":token}, timeout=timeout_sec)
+            payload = {"action":action, "login":login, "token":token}
+            if action == "release_call_state":
+                state = getattr(self, "_applied_call_state", None)
+                if not state or state[0] != token or not state[1]:
+                    return
+                payload["call_id"] = state[1][0]
+            submit_session_cleanup(endpoint, payload, timeout=timeout_sec)
 
     def _queue_presence_offline(self, timeout_sec=0.7):
         self._queue_session_cleanup("presence_offline", timeout_sec)

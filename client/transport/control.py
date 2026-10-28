@@ -13,8 +13,8 @@ def is_loopback(host):
 
 
 @contextmanager
-def connect_api(host, port, timeout=3.0):
-    config = load_config()
+def connect_api(host, port, timeout=3.0, configuration=None):
+    config = load_config() if configuration is None else configuration
     tls = config.get('api_tls', not is_loopback(host))
     if not tls and not is_loopback(host):
         raise ValueError('Удалённый сервер требует TLS')

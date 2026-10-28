@@ -162,9 +162,21 @@ def _call_heartbeats(connection):
             connection.execute(f'UPDATE active_call_pairs SET {name}=updated_at')
 
 
+def _receipts(connection):
+    try:
+        from ..services.mutations import initialize
+    except ImportError:
+        from services.mutations import initialize
+    initialize(connection)
+
+
+def _channel_cleanup(connection):
+    connection.execute("CREATE TABLE channel_cleanup (channel_id INTEGER PRIMARY KEY)")
+
+
 MIGRATIONS = {
-    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats)],
-    'chat': [('baseline', _chat_baseline)],
+    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup)],
+    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts)],
 }
 
 

@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 import unittest
 from test_foundation import load
-from shared.voice_protocol import DatagramCipher
+from shared.voice_protocol import DatagramCipher, audio_frame
 
 class Sink:
     def __init__(self): self.packets = []
@@ -27,6 +27,8 @@ class VoiceFixture:
         self.sink = Sink()
         self.relay = self.voice.VoiceRelay(self.server.DB_FILE)
         self.ciphers = {}
+        self.audio_sequence = {}
+        self.addCleanup(self.relay.close)
         for login in self.addresses:
             self.connect(login, room=str(self.channel['id']))
 
@@ -39,6 +41,10 @@ class VoiceFixture:
         self.packet(login, b'J')
 
     def packet(self, login, data):
+        if data[:1] == b'A':
+            seq = self.audio_sequence.get(login,0)
+            self.audio_sequence[login] = seq + 1
+            data = audio_frame(seq, data[1:])
         packet = self.ciphers[login].seal(data)
         self.relay.handle(self.sink, packet, self.addresses[login])
         return packet
@@ -53,7 +59,8 @@ class VoiceAuthorizationTests(VoiceFixture, unittest.TestCase):
     def test_authorized_audio_and_room_canonicalization(self):
         self.assertEqual(self.audio('alice'),1)
         payload = self.ciphers['bob'].open(self.sink.packets[0][0])[1]
-        self.assertEqual(payload, b'R\x05alice'+b'\0'*640)
+        self.assertEqual(payload[:7], b'R\x05alice')
+        self.assertEqual(payload[-640:], b'\0'*640)
         self.assertEqual(self.audio('bob'),1)
 
     def test_kick_revokes_sender_and_recipient(self):
@@ -93,7 +100,9 @@ class VoiceAuthorizationTests(VoiceFixture, unittest.TestCase):
         self.assertEqual(self.audio('bob'),0)
 
     def test_restart_cannot_reuse_claimed_keys(self):
+        self.relay.close()
         self.relay = self.voice.VoiceRelay(self.server.DB_FILE)
+        self.addCleanup(self.relay.close)
         self.sink.packets.clear()
         self.packet('alice',b'J')
         self.assertEqual(self.sink.packets,[])
@@ -103,7 +112,7 @@ class VoiceAuthorizationTests(VoiceFixture, unittest.TestCase):
     def test_plaintext_and_tampered_packets_are_silent(self):
         self.sink.packets.clear()
         self.relay.handle(self.sink,b'J|alice|'+self.tokens['alice'].encode(),self.addresses['alice'])
-        packet=self.ciphers['alice'].seal(b'A'+b'\0'*640)
+        packet=self.ciphers['alice'].seal(audio_frame(999,b'\0'*640))
         self.relay.handle(self.sink,packet[:-1]+bytes([packet[-1]^1]),self.addresses['alice'])
         self.assertEqual(self.sink.packets,[])
         self.relay.handle(self.sink,packet,self.addresses['alice'])
@@ -123,7 +132,7 @@ class VoiceAuthorizationTests(VoiceFixture, unittest.TestCase):
         old=self.ciphers['alice']
         self.connect('alice',room=self.channel['id'])
         self.sink.packets.clear()
-        self.relay.handle(self.sink,old.seal(b'A'+b'\0'*640),self.addresses['alice'])
+        self.relay.handle(self.sink,old.seal(audio_frame(999,b'\0'*640)),self.addresses['alice'])
         self.assertEqual(self.sink.packets,[])
         self.assertEqual(self.audio('alice'),1)
 

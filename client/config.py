@@ -1,6 +1,19 @@
 import json
 import os
 import shutil
+import tempfile
+import threading
+from functools import wraps
+
+_lock = threading.RLock()
+
+def _locked(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        with _lock:
+            return function(*args, **kwargs)
+    return wrapped
+
 from typing import Any, Dict
 
 
@@ -43,11 +56,13 @@ def _migrate_legacy_config_if_needed() -> None:
             # Если файл уже рядом — переносим
             os.makedirs(os.path.dirname(new_path), exist_ok=True)
             shutil.copy2(LEGACY_CONFIG_FILE, new_path)
+            os.chmod(new_path, 0o600)
             # старый не удаляем насильно (на всякий случай)
     except Exception:
         pass
 
 
+@_locked
 def load_config() -> Dict[str, Any]:
     _migrate_legacy_config_if_needed()
     path = get_config_path()
@@ -56,28 +71,36 @@ def load_config() -> Dict[str, Any]:
         if not os.environ.get("NODYS_CONFIG_DIR") and os.path.exists(LEGACY_CONFIG_FILE):
             try:
                 with open(LEGACY_CONFIG_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    value = json.load(f)
+                    return value if isinstance(value, dict) else {}
             except Exception:
                 return {}
         return {}
 
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            value = json.load(f)
+            return value if isinstance(value, dict) else {}
     except Exception:
         return {}
 
 
+@_locked
 def save_config(data: Dict[str, Any]) -> None:
     path = get_config_path()
     existing = load_config()
     existing.update(data)
-    temporary = path + ".tmp"
-    with open(temporary, "w", encoding="utf-8") as f:
-        json.dump(existing, f, ensure_ascii=False, indent=4)
-    os.replace(temporary, path)
+    descriptor, temporary = tempfile.mkstemp(prefix='.config-', dir=os.path.dirname(path))
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
+            json.dump(existing, output, ensure_ascii=False, indent=4)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
 
 
+@_locked
 def clear_config() -> None:
     # Session removal must preserve connection preferences.
     existing = load_config()

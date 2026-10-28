@@ -1,4 +1,5 @@
 from transport.control import connect_api
+import uuid
 import socket
 import json
 import threading
@@ -219,7 +220,13 @@ class NetworkThread(QObject):
         super().__init__()
         self.host = host
         self.port = port
-        self.data = data
+        self.data = dict(data)
+        if self.data.get('action') in {
+            'delete_channel','update_profile','send_message','send_channel_message','create_channel','join_channel',
+            'send_channel_invite','respond_channel_invite','update_channel_settings',
+            'regenerate_channel_code','set_channel_member_role','remove_channel_member',
+            'leave_channel','send_friend_request','accept_friend_request','decline_friend_request'}:
+            self.data.setdefault('request_id',str(uuid.uuid4()))
 
         self._abort_event = threading.Event()
         self._thread = None

@@ -26,7 +26,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(connection.execute('SELECT password,avatar FROM users').fetchone(),('existing-hash','existing-avatar'))
             self.assertEqual(connection.execute('SELECT role FROM channel_members').fetchone(),('member',))
             self.assertEqual(connection.execute('SELECT voice_min_role FROM channels').fetchone(),('member',))
-            self.assertEqual(connection.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0],2)
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0],len(migrations.MIGRATIONS['users']))
         backups=list((self.database.parent/'backups').glob('*.sqlite3'))
         self.assertEqual(len(backups),1)
         with connect(backups[0]) as connection:
@@ -45,12 +45,12 @@ class MigrationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):migrations.migrate(self.database,'users')
         with connect(self.database) as connection:
             self.assertIsNone(connection.execute("SELECT name FROM sqlite_master WHERE name='should_rollback'").fetchone())
-            self.assertEqual(connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0],2)
+            self.assertEqual(connection.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0],len(migrations.MIGRATIONS['users']))
 
     def test_future_schema_is_rejected_without_changes(self):
         migrations.migrate(self.database,'users')
         with connect(self.database) as connection:
-            connection.execute("INSERT INTO schema_migrations VALUES(3,'future')")
+            connection.execute("INSERT INTO schema_migrations VALUES(?,'future')",(len(migrations.MIGRATIONS['users'])+1,))
         with self.assertRaises(RuntimeError):migrations.migrate(self.database,'users')
         self.assertFalse((self.database.parent/'backups').exists())
 

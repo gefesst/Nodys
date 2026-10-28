@@ -4,7 +4,7 @@ import socket
 import struct
 import time
 from cryptography.exceptions import InvalidTag
-from shared.voice_protocol import DatagramCipher, MAX_PACKET
+from shared.voice_protocol import DatagramCipher, MAX_PACKET, audio_frame
 from transport.control import connect_api
 from settings import get_api_endpoint
 
@@ -38,6 +38,7 @@ class SecureVoiceTransport:
         self.cipher = DatagramCipher(bytes.fromhex(ticket['id']), bytes.fromhex(ticket['client_key']),
                                      bytes.fromhex(ticket['server_key']))
         self.expires = ticket['expires']
+        self.audio_sequence = 0
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             self.socket.connect((host, port))
@@ -57,6 +58,9 @@ class SecureVoiceTransport:
             raise
 
     def send(self, payload):
+        if payload[:1] == b'A':
+            payload = audio_frame(self.audio_sequence, payload[1:])
+            self.audio_sequence += 1
         self.socket.send(self.cipher.seal(payload))
 
     def receive(self):

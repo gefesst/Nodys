@@ -84,6 +84,10 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         self.pass_title.setObjectName("FieldTitle")
         card_l.addWidget(self.pass_title)
 
+        self.current_password_edit = QLineEdit()
+        self.current_password_edit.setEchoMode(QLineEdit.Password)
+        self.current_password_edit.setPlaceholderText("Текущий пароль (для смены пароля)")
+        card_l.addWidget(self.current_password_edit)
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.Password)
         self.password_edit.setPlaceholderText("Новый пароль (необязательно)")
@@ -311,7 +315,8 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             "action": "update_profile",
             "login": self.login,
             "nickname": nickname,
-            "password": self.password_edit.text().strip(),  # можно пустым
+            "password": self.password_edit.text(),
+            "current_password": self.current_password_edit.text(),
             "avatar": avatar_for_server
         }
 
@@ -330,6 +335,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
             self._apply_avatar(self.avatar_path)
             self.password_edit.clear()
+            self.current_password_edit.clear()
 
             # Важно: чтобы ник сразу обновился в мини-карточке слева (MainWindow)
             self._sync_context_and_parent()

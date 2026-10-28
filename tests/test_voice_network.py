@@ -22,6 +22,7 @@ class VoiceNetworkTests(fixtures.VoiceFixture, unittest.TestCase):
         create_certificate(cert,key)
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER);context.load_cert_chain(cert,key)
         self.stop=threading.Event()
+        self.old_relays=[]
         tcp=socket.socket();tcp.bind(('127.0.0.1',0));tcp.listen();tcp.settimeout(.1)
         udp=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);udp.bind(('127.0.0.1',0));udp.settimeout(.1)
         self.port=udp.getsockname()[1]
@@ -43,6 +44,8 @@ class VoiceNetworkTests(fixtures.VoiceFixture, unittest.TestCase):
             self.stop.set()
             for worker in workers: worker.join(5)
             tcp.close();udp.close()
+            self.relay.close()
+            for old in self.old_relays: old.close()
             self.assertTrue(all(not worker.is_alive() for worker in workers))
         self.addCleanup(cleanup)
         self.enterContext(patch('transport.voice.get_api_endpoint',return_value=('localhost',tcp.getsockname()[1])))
@@ -58,8 +61,10 @@ class VoiceNetworkTests(fixtures.VoiceFixture, unittest.TestCase):
         alice,bob=self.transport('alice'),self.transport('bob')
         pcm=b'\x21\x03'*320
         alice.send(b'A'+pcm)
-        self.assertEqual(bob.receive(),b'R\x05alice'+pcm)
-        self.assertTrue(all(p.startswith(b'NV1') and pcm not in p and self.tokens['alice'].encode() not in p for p in self.wire))
+        received=bob.receive()
+        self.assertEqual(received[:7],b'R\x05alice')
+        self.assertEqual(received[-640:],pcm)
+        self.assertTrue(all(p.startswith(b'NV2') and pcm not in p and self.tokens['alice'].encode() not in p for p in self.wire))
         self.server.remove_channel_member('alice',self.channel['id'],'bob')
         alice.send(b'A'+pcm)
         with self.assertRaises(socket.timeout):bob.receive()
@@ -97,7 +102,9 @@ class VoiceNetworkTests(fixtures.VoiceFixture, unittest.TestCase):
         with patch.object(client,'_start_audio'):
             client.start(room_id=self.channel['id'])
         identity=client.transport.cipher.transport_id
+        old_relay=self.relay
         self.relay=self.voice.VoiceRelay(self.server.DB_FILE)
+        self.old_relays.append(old_relay)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
             if client.transport and client.transport.cipher.transport_id != identity:

@@ -1,6 +1,7 @@
 from transport.voice import SecureVoiceTransport
 import socket
 import queue
+import struct
 import threading
 import time
 from audio.mixer import PcmMixer
@@ -235,8 +236,12 @@ class VoiceClient:
             speaker = data[2:2+size].decode('utf-8', errors='replace')
             if self.peer and speaker != self.peer:
                 continue
-            pcm = data[2+size:]
-            if not self.mixer.push(speaker, pcm):
+            body = data[2+size:]
+            if len(body) != 664:
+                continue
+            stream_id, sequence = body[:16], struct.unpack('!Q', body[16:24])[0]
+            pcm = body[24:]
+            if not self.mixer.push(speaker, pcm, sequence=sequence, stream_id=stream_id):
                 continue
             now_ts = time.time()
             previous = self._speaker_arrivals.get(speaker, 0)
