@@ -63,8 +63,22 @@ class FocusRing(QWidget):
 
 
 class MotionFilter(QObject):
+    def watch(self, widget):
+        if not isinstance(widget, QWidget) or getattr(widget, '_nodus_motion_watched', False):
+            return
+        widget._nodus_motion_watched = True
+        widget.installEventFilter(self)
+        for child in widget.findChildren(QWidget):
+            self.watch(child)
+
     def eventFilter(self, widget, event):
         kind = event.type()
+        if kind == QEvent.ChildPolished:
+            self.watch(event.child())
+            return False
+        if kind not in (QEvent.Enter, QEvent.Leave, QEvent.FocusIn,
+                        QEvent.FocusOut, QEvent.Resize, QEvent.Show):
+            return False
         if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit)) and kind in (
             QEvent.Enter,
             QEvent.Leave,
@@ -103,7 +117,15 @@ def install(app):
 
     app.setProperty("reduce_motion", bool(load_config().get("reduce_motion", False)))
     app._nodus_motion = MotionFilter(app)
-    app.installEventFilter(app._nodus_motion)
+    # Only watch finished application widgets. An application-wide filter also
+    # wraps Qt's internal objects while they are being constructed/destroyed.
+
+
+def watch(window):
+    app = QApplication.instance()
+    controller = getattr(app, '_nodus_motion', None)
+    if controller is not None:
+        controller.watch(window)
 
 
 class PageOverlay(QWidget):

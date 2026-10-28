@@ -14,9 +14,10 @@ def main():
     app = QApplication(sys.argv)
     prepare_application_fonts(app)
     apply_app_styles(app, "base", "auth", "main", "friends", "chats", "channels", "profile", "call")
-    from ui.design.motion import install
+    from ui.design.motion import install, watch
     install(app)
     w = AppWindow()
+    watch(w)
     w.show()
     sys.exit(app.exec())
 

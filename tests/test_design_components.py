@@ -177,3 +177,22 @@ class DesignGeometryTests(unittest.TestCase):
                 self.assertTrue(ICONS[(path.stem, '#ACB9CC')].isValid())
                 self.assertTrue(any(image.pixelColor(x,y).alpha() for y in range(32) for x in range(32)))
             gc.collect()
+
+    def test_motion_tracks_late_fields_without_application_global_filter(self):
+        from PySide6.QtWidgets import QWidget, QLineEdit, QVBoxLayout
+        from PySide6.QtCore import QEvent, QChildEvent
+        from PySide6.QtGui import QFocusEvent
+        from ui.design.motion import MotionFilter, FocusRing
+        window = QWidget()
+        layout = QVBoxLayout(window)
+        controller = MotionFilter(window)
+        controller.watch(window)
+        field = QLineEdit(window)
+        layout.addWidget(field)
+        self.app.sendEvent(window, QChildEvent(QEvent.ChildPolished, field))
+        self.app.sendEvent(field, QFocusEvent(QEvent.FocusIn))
+        self.assertIsInstance(field._focus_ring, FocusRing)
+        self.assertEqual(field._focus_ring.animation.endValue(), 1.0)
+        self.app.sendEvent(field, QFocusEvent(QEvent.FocusOut))
+        self.assertEqual(field._focus_ring.animation.endValue(), 0.0)
+        window.close()

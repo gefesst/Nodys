@@ -564,8 +564,9 @@ def main():
                 w.auth_page.login.setText(lab.me)
                 w.auth_page.password.setText('review-password')
                 w.auth_page.login_user()
-                self.wait(predicate=lambda: w.stack.currentWidget() == w.main_page and bool(m.ctx.session_token))
+                self.wait(predicate=lambda: w.auth_page.btn_login.isEnabled())
                 yield
+                assert w.stack.currentWidget() == w.main_page and m.ctx.session_token, w.auth_page.status_label.text()
                 assert m.ctx.session_token != previous_token
                 assert not m.chats_page.conversation.drafts
                 assert not m.chats_page.conversation.editor.toPlainText()

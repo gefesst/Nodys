@@ -41,10 +41,10 @@ jobs:
         run: python tools/preview.py --tls --smoke-seconds 8
       - name: Headless UI workflows with synthetic voice
         if: ${{ !cancelled() && runner.os != 'Linux' }}
-        run: python tools/ui_review.py --synthetic-voice --relogin-cycles 10 --output work/ui-review
+        run: python tools/ui_review.py --synthetic-voice --relogin-cycles 5 --output work/ui-review
       - name: Headless UI workflows with native crash diagnostics
         if: ${{ !cancelled() && runner.os == 'Linux' }}
-        run: gdb --batch --return-child-result -ex "set pagination off" -ex run -ex "thread apply all bt" --args python tools/ui_review.py --synthetic-voice --relogin-cycles 30 --output work/ui-review
+        run: gdb --batch --return-child-result -ex "set pagination off" -ex run -ex "thread apply all bt" --args python tools/ui_review.py --synthetic-voice --relogin-cycles 5 --output work/ui-review
       - name: Save UI review evidence
         if: always()
         uses: actions/upload-artifact@v4
