@@ -1,7 +1,7 @@
 import base64
 import os
 from PySide6.QtWidgets import QLabel
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont
+from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont, QPen
 from PySide6.QtCore import Qt
 
 
@@ -18,7 +18,7 @@ class AvatarLabel(QLabel):
 
         self.setFixedSize(size, size)
         self.setAlignment(Qt.AlignCenter)
-        self.setStyleSheet("border:2px solid #5865F2; border-radius:%dpx; background:transparent;" % (size//2))
+        self.setStyleSheet("border:0px solid #91ADFF; border-radius:%dpx; background:transparent;" % (size//2))
 
         self._dot = QLabel(self)
         self._dot.hide()
@@ -33,7 +33,7 @@ class AvatarLabel(QLabel):
             pix = self._make_initials_avatar(nickname or login or "U")
 
         # Делаем внутреннее изображение немного меньше, чтобы обводка была хорошо видна
-        inner = max(8, self.size_px - 8)
+        inner = max(8, self.size_px - 2)
         self.setPixmap(self._to_circle(pix, inner))
 
     def set_online(self, online: bool | None, ring_color: str | None = None):
@@ -57,7 +57,7 @@ class AvatarLabel(QLabel):
         self._dot.setFixedSize(dot, dot)
         self._dot.move(x, y)
 
-        color = "#43b581" if online else "#747f8d"
+        color = "#67D5AD" if online else "#747f8d"
         self._dot.setStyleSheet(
             f"background-color:{color}; border:{border}px solid {self._ring_color}; border-radius:{dot // 2}px;"
         )
@@ -67,6 +67,17 @@ class AvatarLabel(QLabel):
     def _reposition_dot(self):
         if self._online is not None:
             self.set_online(self._online, self._ring_color)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.property('speaking'):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            color = QColor('#67D5AD')
+            color.setAlpha(int(self.property('pulse_alpha') or 160))
+            painter.setPen(QPen(color, 3))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(self.rect().adjusted(2,2,-2,-2))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -135,7 +146,7 @@ class AvatarLabel(QLabel):
 
         hue = (sum(ord(c) for c in name) * 7) % 360
         bg = QColor()
-        bg.setHsl(hue, 140, 110)
+        bg.setHsl(215 + hue % 30, 45, 80)
 
         painter.setPen(Qt.NoPen)
         painter.setBrush(bg)
@@ -143,7 +154,7 @@ class AvatarLabel(QLabel):
 
         initials = self._initials(name)
         painter.setPen(QColor("white"))
-        font = QFont("Segoe UI", max(8, size // 3), QFont.Bold)
+        font = QFont("Arial", max(8, size // 4), QFont.DemiBold)
         painter.setFont(font)
         painter.drawText(out.rect(), Qt.AlignCenter, initials)
 

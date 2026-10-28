@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit,
-    QMenu, QApplication
+    QMenu, QApplication, QDialog
 )
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
@@ -29,7 +29,7 @@ class FriendItem(QFrame):
         super().__init__()
         self.setObjectName("FriendItem")
         self.setProperty("request", request_from is not None)
-        self.setFixedHeight(64)
+        self.setFixedHeight(88)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -57,19 +57,20 @@ class FriendItem(QFrame):
 
         if request_from is None:
             # Монохромный символ лучше читается на зелёной кнопке.
-            self.call_btn = QPushButton("☎️")
+            from ui.design.widgets import Button
+            self.call_btn = Button('Позвонить','phone')
             self.call_btn.setObjectName("FriendCallButton")
             btn_size = 34
-            self.call_btn.setFixedSize(btn_size, btn_size)
+            self.call_btn.setFixedSize(150, 42)
             self.call_btn.setToolTip("Позвонить")
             if on_call:
                 self.call_btn.clicked.connect(lambda: on_call(login))
             layout.addWidget(self.call_btn)
             install_opacity_feedback(self.call_btn, hover_opacity=0.99, pressed_opacity=0.93, duration_ms=80)
 
-            self.more_btn = QPushButton("...")
+            self.more_btn = Button('', 'more')
             self.more_btn.setObjectName("FriendMoreButton")
-            self.more_btn.setFixedSize(btn_size, btn_size)
+            self.more_btn.setFixedSize(42, 42)
             self.more_btn.setCursor(self.call_btn.cursor())
             f = self.more_btn.font()
             f.setBold(True)
@@ -125,8 +126,20 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         self.setObjectName("FriendsPage")
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
+        self.view_mode = 'all'
+        from ui.design.tokens import LIST_WIDTH
+        outer = QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
+        sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(20,30,20,20);side.setSpacing(10)
+        eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
+        heading=QLabel('Друзья');heading.setObjectName('PageTitle');side.addWidget(heading);side.addSpacing(15)
+        self.view_buttons={}
+        for mode,text in [('all','Все друзья'),('online','В сети'),('requests','Заявки'),('add','Добавить друга')]:
+            button=QPushButton(text);button.setCheckable(True);button.setChecked(mode=='all');button.clicked.connect(lambda checked=False,m=mode:self.set_view(m));side.addWidget(button);self.view_buttons[mode]=button
+        side.addStretch();outer.addWidget(sidebar)
+        work=QWidget();outer.addWidget(work,1)
+        root = QVBoxLayout(work)
+        root.setContentsMargins(32, 28, 32, 20)
         root.setSpacing(12)
 
         # ---------- Top bar card ----------
@@ -139,13 +152,16 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         title = QLabel("Друзья")
         title.setObjectName("FriendsTitle")
         head.addWidget(title)
+        self.heading = title
         head.addStretch()
 
 
         self.add_btn = QPushButton("Добавить друга")
         self.add_btn.setObjectName("AddFriendButton")
         self.add_btn.clicked.connect(self.toggle_add_friend_panel)
-        head.addWidget(self.add_btn)
+        self.add_btn.hide()
+        self.filter_input=QLineEdit();self.filter_input.setPlaceholderText('Найти друга');self.filter_input.setMaximumWidth(260)
+        self.filter_input.textChanged.connect(lambda:self._render_if_needed(force=True));head.addWidget(self.filter_input)
         install_opacity_feedback(self.add_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         root.addWidget(topbar)
@@ -201,6 +217,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         # ---------- Main content card ----------
         body_card = QFrame()
+        self.body_card = body_card
         body_card.setObjectName("FriendsContentCard")
         body_lay = QVBoxLayout(body_card)
         body_lay.setContentsMargins(10, 10, 10, 10)
@@ -335,16 +352,19 @@ class FriendsPage(QWidget, ThreadSafeMixin):
     # ==================================================
     # UI helpers
     # ==================================================
-    def toggle_add_friend_panel(self):
-        visible = not self.add_panel.isVisible()
-        self.add_panel.setVisible(visible)
-        self.add_btn.setText("Скрыть добавление" if visible else "Добавить друга")
-        if not visible:
-            self._reset_add_panel_state()
+    def set_view(self, mode):
+        self.view_mode=mode
+        for key,button in self.view_buttons.items():button.setChecked(key==mode)
+        self.heading.setText({'all':'Друзья','online':'Друзья в сети','requests':'Заявки','add':'Добавить друга'}[mode])
+        self.add_panel.setVisible(mode=='add');self.body_card.setVisible(mode!='add')
+        self.filter_input.setVisible(mode!='add')
+        self._render_if_needed(force=True)
+        if mode=='add':self.login_input.setFocus()
+
+    def toggle_add_friend_panel(self):self.set_view('add')
 
     def hide_add_friend_panel(self):
-        self.add_panel.setVisible(False)
-        self.add_btn.setText("Добавить друга")
+        self.set_view('all')
         self._reset_add_panel_state()
 
     def _reset_add_panel_state(self):
@@ -411,77 +431,31 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         return req_key, fr_key
 
     def _render_if_needed(self, force: bool = False):
-        # Чтобы не мигать "пустым" списком на старте, ждём обе загрузки.
         if not self._has_loaded_friends_once or not self._has_loaded_requests_once:
-            if not self._skeleton_visible:
-                self._show_skeleton(count=6)
             return
-
-        self._skeleton_visible = False
-        key = self._state_key()
-        if (not force) and key == self._render_key:
-            return
-        self._render_key = key
-
+        key=(self._state_key(),self.view_mode,self.filter_input.text())
+        if not force and key==self._render_key:return
+        self._render_key=key;self._skeleton_visible=False
         self.scroll.setUpdatesEnabled(False)
-        try:
-            self.clear_list()
-
-            # Requests
-            if self._requests_data:
-                self._add_section_header(f"Заявки в друзья — {len(self._requests_data)}")
-                for req_login in self._requests_data:
-                    item = FriendItem(
-                        login=req_login,
-                        nickname=req_login,
-                        request_from=req_login,
-                        on_accept=self.accept_request,
-                        on_decline=self.decline_request,
-                    )
-                    self.list_layout.insertWidget(self.list_layout.count() - 1, item)
-
-            # Friends
-            friends = sorted(
-                self._friends_data,
-                key=lambda f: (0 if f.get("online", False) else 1, f.get("nickname", "").lower())
-            )
-            online_friends = [f for f in friends if f.get("online", False)]
-            offline_friends = [f for f in friends if not f.get("online", False)]
-
-            if online_friends:
-                self._add_section_header(f"В сети — {len(online_friends)}")
-                for friend in online_friends:
-                    item = FriendItem(
-                        login=friend.get("login", ""),
-                        nickname=friend.get("nickname", friend.get("login", "")),
-                        avatar_path=friend.get("avatar", ""),
-                        online=True,
-                        on_call=self.call_friend,
-                        on_manage=self.show_friend_actions_menu,
-                    )
-                    self.list_layout.insertWidget(self.list_layout.count() - 1, item)
-
-            if offline_friends:
-                self._add_section_header(f"Не в сети — {len(offline_friends)}")
-                for friend in offline_friends:
-                    item = FriendItem(
-                        login=friend.get("login", ""),
-                        nickname=friend.get("nickname", friend.get("login", "")),
-                        avatar_path=friend.get("avatar", ""),
-                        online=False,
-                        on_call=self.call_friend,
-                        on_manage=self.show_friend_actions_menu,
-                    )
-                    self.list_layout.insertWidget(self.list_layout.count() - 1, item)
-
-            if not friends and not self._requests_data:
-                empty = self._make_empty_state(
-                    title="Пока нет друзей",
-                    subtitle="Добавьте друзей по логину — и можно будет начать переписку и звонки.",
-                )
-                self.list_layout.insertWidget(self.list_layout.count() - 1, empty)
-        finally:
-            self.scroll.setUpdatesEnabled(True)
+        self.clear_list()
+        query=self.filter_input.text().casefold()
+        count=0
+        if self.view_mode=='requests':
+            for login in self._requests_data:
+                if query not in login.casefold():continue
+                item=FriendItem(login,login,request_from=login,on_accept=self.accept_request,on_decline=self.decline_request)
+                self.list_layout.insertWidget(self.list_layout.count()-1,item);count+=1
+        else:
+            for friend in sorted(self._friends_data,key=lambda f:(not f.get('online'),f.get('nickname','').casefold())):
+                if self.view_mode=='online' and not friend.get('online'):continue
+                if query not in (friend.get('nickname','')+' '+friend['login']).casefold():continue
+                item=FriendItem(friend['login'],friend.get('nickname',friend['login']),friend.get('avatar',''),friend.get('online',False),on_call=self.call_friend,on_manage=self.show_friend_actions_menu)
+                self.list_layout.insertWidget(self.list_layout.count()-1,item);count+=1
+        if not count:
+            empty=self._make_empty_state('Ничего не найдено' if query else ('Нет заявок' if self.view_mode=='requests' else 'Пока здесь никого нет'),'Попробуйте другой поиск или добавьте друга по логину.')
+            self.list_layout.insertWidget(self.list_layout.count()-1,empty)
+        self.view_buttons['requests'].setText('Заявки'+(f' · {len(self._requests_data)}' if self._requests_data else ''))
+        self.scroll.setUpdatesEnabled(True)
 
     # ==================================================
     # refresh
@@ -652,18 +626,32 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         self.start_request(data, cb)
 
-    def show_friend_actions_menu(self, friend_login: str, anchor_btn: QPushButton):
-        if not friend_login or not anchor_btn:
-            return
+    def show_friend_actions_menu(self, friend_login, anchor_btn):
+        menu=QMenu(self);menu.setAttribute(Qt.WA_DeleteOnClose)
+        menu.addAction('Мини-профиль',lambda:self.show_mini_profile(friend_login))
+        menu.addAction('Написать сообщение',lambda:self.open_friend_chat(friend_login))
+        menu.addAction('Позвонить',lambda:self.call_friend(friend_login))
+        menu.addSeparator();menu.addAction('Удалить друга',lambda:self.confirm_and_remove_friend(friend_login))
+        menu.popup(anchor_btn.mapToGlobal(anchor_btn.rect().bottomLeft()));self._actions_menu=menu
 
-        menu = QMenu(self)
-        menu.setObjectName("FriendActionsMenu")
-        act_remove = menu.addAction("Удалить друга")
+    def open_friend_chat(self, login):
+        host=self.parentWidget()
+        while host is not None and not hasattr(host,'chats_page'):host=host.parentWidget()
+        friend=next((f for f in self._friends_data if f['login']==login),None)
+        if host and friend:host.show_chats();host.chats_page.open_chat(friend)
 
-        pos = anchor_btn.mapToGlobal(anchor_btn.rect().bottomLeft())
-        chosen = menu.exec(pos)
-        if chosen == act_remove:
-            self.confirm_and_remove_friend(friend_login)
+    def show_mini_profile(self, login):
+        friend=next((f for f in self._friends_data if f['login']==login),None)
+        if not friend:return
+        from ui.design.widgets import Button
+        dialog=QDialog(self);dialog.setWindowTitle('Профиль');dialog.setMinimumWidth(340);dialog.setAttribute(Qt.WA_DeleteOnClose)
+        layout=QVBoxLayout(dialog);layout.setContentsMargins(28,28,28,28);layout.setSpacing(16)
+        avatar=AvatarLabel(size=72);avatar.set_avatar(friend.get('avatar',''),login,friend.get('nickname',''));layout.addWidget(avatar,0,Qt.AlignHCenter)
+        name=QLabel(friend.get('nickname',login));name.setObjectName('PageTitle');layout.addWidget(name)
+        layout.addWidget(QLabel('@'+login+' · '+('В сети' if friend.get('online') else 'Не в сети')))
+        for text,icon,action in [('Написать','chat',lambda:self.open_friend_chat(login)),('Позвонить','phone',lambda:self.call_friend(login))]:
+            button=Button(text,icon);button.clicked.connect(lambda checked=False,action=action:(dialog.close(),action()));layout.addWidget(button)
+        dialog.show();self._mini_profile=dialog
 
     def confirm_and_remove_friend(self, friend_login: str):
         if not friend_login:

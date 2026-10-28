@@ -1,7 +1,9 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton, QSizeGrip
 from PySide6.QtCore import Qt, Slot, QTimer
 from network import NetworkThread
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPainter, QColor
+from ui.design.shell import TitleBar
+from ui.design.tokens import BACKGROUND_ALPHA
 import os
 
 from auth_window import AuthWindow
@@ -9,6 +11,8 @@ from register_window import RegisterWindow
 from ui.main_window import MainWindow
 from config import load_config, save_config, clear_config
 from user_context import UserContext
+
+from ui.design.motion import TransitionStack as QStackedWidget
 
 
 class AppWindow(QWidget):
@@ -18,7 +22,11 @@ class AppWindow(QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Nodys")
+        self.setWindowTitle("Nodus")
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.resize(1440, 900)
+        self.setProperty('translucent_background',load_config().get('translucent_background',True))
         # Стартовый минимум: шире, но чуть ниже по высоте.
         self.setMinimumSize(1120, 620)
 
@@ -40,9 +48,13 @@ class AppWindow(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        root.addWidget(TitleBar(self))
 
         self.stack = QStackedWidget(self)
         root.addWidget(self.stack)
+        self.grip = QSizeGrip(self)
+        self.grip.setFixedSize(16,16)
 
         # Создаем auth/register сразу, а MainWindow — лениво после успешной авторизации.
         # Это убирает фоновую активность (таймеры/запросы) до логина.
@@ -87,6 +99,22 @@ class AppWindow(QWidget):
         self._resume_thread = NetworkThread(None, None, {"action":"resume_session", "token":token})
         self._resume_thread.finished.connect(self._handle_resume_response, Qt.QueuedConnection)
         self._resume_thread.start()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not hasattr(self, "backdrop_description"):
+            from ui.design.backdrop import install
+            QTimer.singleShot(0, lambda: install(self))
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(17,25,35,BACKGROUND_ALPHA if self.property('translucent_background') is not False else 255))
+
+    def resizeEvent(self, event):
+        if hasattr(self, 'grip'):
+            self.grip.move(self.width()-18,self.height()-18)
+            self.grip.raise_()
+        super().resizeEvent(event)
 
     def _cancel_resume(self):
         self._resume_token = None

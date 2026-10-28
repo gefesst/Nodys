@@ -9,3 +9,7 @@ Pillow==13.0.0
 cryptography==50.0.2
 cffi==2.1.1
 pycparser==3.12
+
+# Native macOS backdrop; other platforms do not install Cocoa.
+pyobjc-core==12.2.2; sys_platform == "darwin"
+pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"

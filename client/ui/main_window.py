@@ -26,6 +26,8 @@ from config import clear_config
 from settings import get_voice_endpoint, get_api_endpoint
 from ui.micro_interactions import install_opacity_feedback
 
+from ui.design.motion import TransitionStack as QStackedWidget
+
 
 class MainWindow(QWidget):
     def __init__(self, controller=None):
@@ -67,61 +69,57 @@ class MainWindow(QWidget):
         self.stack.addWidget(self.channels_page)
         self.stack.addWidget(self.profile_page)
 
-        # ---------------- Sidebar ----------------
+        # Shared narrow navigation rail from the approved design.
+        from ui.design.shell import NavButton
+        from ui.design.widgets import Button
+        from ui.design.tokens import RAIL_WIDTH
         sidebar = QWidget()
-        sidebar.setObjectName("Sidebar")
+        sidebar.setObjectName('Sidebar')
+        sidebar.setFixedWidth(RAIL_WIDTH)
         menu_layout = QVBoxLayout(sidebar)
-        menu_layout.setContentsMargins(10, 10, 10, 10)
-        menu_layout.setSpacing(10)
-
-        # Мини-карточка пользователя
-        self.user_card = QFrame()
-        self.user_card.setObjectName("UserMiniCard")
-        uc_l = QHBoxLayout(self.user_card)
-        uc_l.setContentsMargins(8, 8, 8, 8)
-        uc_l.setSpacing(8)
-        self.user_avatar = AvatarLabel(size=34)
-        self.user_avatar.set_avatar(path=getattr(self.ctx, "avatar", ""), login=self.ctx.login, nickname=self.ctx.nickname)
-        self.user_avatar.set_online(None if not self.ctx.login else False, ring_color="#2f3136")
-        uc_l.addWidget(self.user_avatar)
-        txt_col = QVBoxLayout()
-        txt_col.setContentsMargins(0,0,0,0)
-        txt_col.setSpacing(0)
-        self.user_nick_lbl = QLabel(self.ctx.nickname or "Гость")
-        self.user_nick_lbl.setObjectName("UserMiniNick")
-        self.user_login_lbl = QLabel(self.ctx.login or "")
-        self.user_login_lbl.setObjectName("UserMiniLogin")
-        txt_col.addWidget(self.user_nick_lbl)
-        txt_col.addWidget(self.user_login_lbl)
-        uc_l.addLayout(txt_col)
-        menu_layout.addWidget(self.user_card)
-        install_opacity_feedback(self.user_card, hover_opacity=0.995, pressed_opacity=0.975, duration_ms=90)
-
-        def make_button(text, callback):
-            btn = QPushButton(text)
-            btn.setFixedHeight(50)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            btn.setObjectName("NavButton")
-            btn.clicked.connect(callback)
-            install_opacity_feedback(btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-            return btn
-
-        self.btn_friends = make_button("Друзья", self.show_friends)
-        self.btn_chats = make_button("Чаты", self.show_chats)
-        self.btn_channels = make_button("Каналы", self.show_channels)
-        self.btn_profile = make_button("Мой профиль", self.show_profile)
-
-        menu_layout.addWidget(self.btn_friends)
-        menu_layout.addWidget(self.btn_chats)
-        menu_layout.addWidget(self.btn_channels)
-        menu_layout.addWidget(self.btn_profile)
+        menu_layout.setContentsMargins(12,24,12,16)
+        menu_layout.setSpacing(18)
+        brand = Button('', 'n', True)
+        brand.setFixedSize(50,50)
+        brand.clicked.connect(self.show_friends)
+        menu_layout.addWidget(brand,0,Qt.AlignHCenter)
+        wordmark = QLabel('nodus');wordmark.setAlignment(Qt.AlignCenter)
+        menu_layout.addWidget(wordmark)
+        self.btn_friends = NavButton('Друзья','users')
+        self.btn_chats = NavButton('Чаты','chat')
+        self.btn_channels = NavButton('Каналы','hash')
+        for button, action in ((self.btn_friends,self.show_friends),(self.btn_chats,self.show_chats),(self.btn_channels,self.show_channels)):
+            button.clicked.connect(action);menu_layout.addWidget(button)
         menu_layout.addStretch()
-
-        # ---------------- Root layout ----------------
-        root = QHBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.addWidget(sidebar, 1)
-        root.addWidget(self.stack, 4)
+        self.quick_button = Button('', 'keyboard');self.quick_button.setToolTip('Найти диалог')
+        self.quick_button.clicked.connect(self.open_quick_switch)
+        from PySide6.QtGui import QShortcut, QKeySequence
+        self.quick_shortcut = QShortcut(QKeySequence('Meta+K' if __import__('sys').platform=='darwin' else 'Ctrl+K'),self)
+        self.quick_shortcut.activated.connect(self.open_quick_switch)
+        menu_layout.addWidget(self.quick_button)
+        self.settings_button = Button('', 'settings');self.settings_button.setToolTip('Настройки приложения')
+        self.settings_button.clicked.connect(self.show_settings)
+        menu_layout.addWidget(self.settings_button)
+        divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);menu_layout.addWidget(divider)
+        self.user_card=QFrame();self.user_card.setObjectName('UserMiniCard')
+        user_layout=QVBoxLayout(self.user_card);user_layout.setContentsMargins(0,0,0,0);user_layout.setSpacing(2)
+        self.user_avatar=AvatarLabel(size=40);user_layout.addWidget(self.user_avatar,0,Qt.AlignHCenter)
+        self.user_nick_lbl=QLabel('Вы');self.user_nick_lbl.setObjectName('UserMiniNick');self.user_nick_lbl.setAlignment(Qt.AlignCenter)
+        self.user_login_lbl=QLabel();self.user_login_lbl.hide()
+        user_layout.addWidget(self.user_nick_lbl)
+        self.user_card.mousePressEvent=lambda event:self.show_profile()
+        menu_layout.addWidget(self.user_card)
+        self.btn_profile=NavButton('Профиль','profile');self.btn_profile.hide()
+        self.btn_profile.clicked.connect(self.show_profile)
+        root=QHBoxLayout(self);root.setContentsMargins(0,0,0,0);root.setSpacing(0)
+        root.addWidget(sidebar)
+        workspace=QWidget();workspace_layout=QVBoxLayout(workspace);workspace_layout.setContentsMargins(0,0,0,0);workspace_layout.setSpacing(0)
+        workspace_layout.addWidget(self.stack,1)
+        self.voice_dock=QFrame();self.voice_dock.setObjectName('CallCard');dock=QHBoxLayout(self.voice_dock)
+        self.voice_dock_label=QLabel();dock.addWidget(self.voice_dock_label,1)
+        open_voice=Button('Открыть','wave');open_voice.clicked.connect(self.open_voice_surface);dock.addWidget(open_voice)
+        end_voice=Button('Отключиться','end');end_voice.clicked.connect(self.end_voice_surface);dock.addWidget(end_voice)
+        workspace_layout.addWidget(self.voice_dock);self.voice_dock.hide();root.addWidget(workspace,1)
 
         # Политика polling (инициализируем до первого переключения вкладок).
         self._poll_state = {
@@ -583,10 +581,26 @@ class MainWindow(QWidget):
     # ==================================================
 
     def set_active_nav(self, active_btn):
+        self.settings_button.primary = active_btn is None
+        self.settings_button.update()
         for b in (self.btn_friends, self.btn_chats, self.btn_channels, self.btn_profile):
             b.setProperty("active", b is active_btn)
             b.style().unpolish(b); b.style().polish(b)
 
+
+    def open_quick_switch(self):
+        from ui.design.quick_switch import QuickSwitch
+        self.quick_switch = QuickSwitch(self)
+        self.quick_switch.show()
+
+    def show_settings(self):
+        self.set_active_nav(None)
+        from ui.design.settings_page import SettingsPage
+        if not hasattr(self,'settings_page'):
+            self.settings_page=SettingsPage(self)
+            self.stack.addWidget(self.settings_page)
+        self.stack.setCurrentWidget(self.settings_page)
+        self._apply_polling_policy(force=True)
 
     def show_friends(self):
         self.set_active_nav(self.btn_friends)
@@ -683,6 +697,31 @@ class MainWindow(QWidget):
 
     def poll_call_events(self):
         self.calls.poll()
+        self.refresh_voice_dock()
+
+    def refresh_voice_dock(self):
+        private = bool(self.voice_client)
+        channel = bool(getattr(self.channels_page,'_voice_joined',False))
+        self.voice_dock.setVisible(private or channel)
+        if private:
+            activity=self.voice_client.get_activity()
+            peer=self.current_call_user or 'Собеседник'
+            self.voice_dock_label.setText(f'Звонок · {peer} · {activity.get("quality","Подключение")}')
+        elif channel:
+            self.voice_dock_label.setText('Голосовой канал · '+str((self.channels_page.active_channel or {}).get('name','')))
+
+    def open_voice_surface(self):
+        if self.call_window:
+            self.call_window.show();self.call_window.raise_()
+        else:
+            self.show_channels();self.channels_page.switch_to_voice_tab()
+
+    def end_voice_surface(self):
+        if self.call_window:
+            self.call_window._end_clicked()
+        else:
+            self.channels_page.stop_voice_session()
+        self.voice_dock.hide()
 
     def handle_call_events(self, response):
         self.calls.receive(response)
@@ -694,6 +733,11 @@ class MainWindow(QWidget):
         if getattr(self, "_rendered_call_key", None) == key:
             return
         self._rendered_call_key = key
+        outgoing = getattr(self, 'outgoing_window', None)
+        if outgoing is not None:
+            outgoing.finished_by_server = True
+            outgoing.close()
+            self.outgoing_window = None
         if state is None:
             self._hide_incoming_inline()
             if self.current_call_user or self.voice_client or self.call_window:
@@ -711,6 +755,11 @@ class MainWindow(QWidget):
             self._open_call_window(peer)
         elif state.get("status") == "ringing" and state.get("incoming"):
             self._show_incoming_inline(peer)
+        elif state.get('status') == 'ringing':
+            from ui.call_window import OutgoingCallWindow
+            call_id = state['call_id']
+            self.outgoing_window = OutgoingCallWindow(peer, lambda: self.calls.end_call(call_id, peer), self)
+            self.outgoing_window.show()
 
     def _start_voice_for_peer(self, peer_login: str):
         try:
@@ -897,7 +946,8 @@ class MainWindow(QWidget):
             if hasattr(self.profile_page, "set_user_data"):
                 self.profile_page.set_user_data(self.ctx.login, self.ctx.nickname, getattr(self.ctx, "avatar", ""))
 
-            self.user_nick_lbl.setText(self.ctx.nickname or "Гость")
+            self.user_nick_lbl.setText("Вы")
+            self.user_card.setToolTip(self.ctx.nickname or self.ctx.login)
             self.user_login_lbl.setText(self.ctx.login or "")
             self.user_avatar.set_avatar(path=getattr(self.ctx, "avatar", ""), login=self.ctx.login, nickname=self.ctx.nickname)
             self.user_avatar.set_online(None if not self.ctx.login else False, ring_color="#2f3136")

@@ -4,7 +4,7 @@ import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QFrame
+    QPushButton, QFileDialog, QFrame, QHBoxLayout, QScrollArea
 )
 from PySide6.QtCore import Qt
 
@@ -38,79 +38,40 @@ class ProfilePage(QWidget, ThreadSafeMixin):
     # ==================================================
 
     def _build_ui(self):
-        self.layout = QVBoxLayout(self)
-        self.layout.setSpacing(12)
-        self.layout.setContentsMargins(18, 18, 18, 18)
-
-        self.setObjectName("ProfilePage")
-
-        # Внешняя карточка
-        self.card = QFrame()
-        self.card.setObjectName("ProfileCard")
-        card_l = QVBoxLayout(self.card)
-        card_l.setSpacing(12)
-        card_l.setContentsMargins(20, 20, 20, 20)
-
-        # Аватар
-        self.avatar_label = AvatarLabel(size=110)
-        card_l.addWidget(self.avatar_label, alignment=Qt.AlignHCenter)
-
-        # Статус
-        self.status_label = QLabel("● Offline")
-        self.status_label.setObjectName("ProfileStatusOffline")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.status_label)
-
-        # Логин
-        self.login_title = QLabel("Логин")
-        self.login_title.setObjectName("FieldTitle")
-        card_l.addWidget(self.login_title)
-
-        self.login_label = QLabel(self.login)
-        self.login_label.setObjectName("ProfileLogin")
-        card_l.addWidget(self.login_label)
-
-        # Никнейм
-        self.nick_title = QLabel("Никнейм")
-        self.nick_title.setObjectName("FieldTitle")
-        card_l.addWidget(self.nick_title)
-
-        self.nickname_edit = QLineEdit(self.nickname)
-        self.nickname_edit.setPlaceholderText("Никнейм")
-        card_l.addWidget(self.nickname_edit)
-
-        # Пароль
-        self.pass_title = QLabel("Изменение пароля")
-        self.pass_title.setObjectName("FieldTitle")
-        card_l.addWidget(self.pass_title)
-
-        self.current_password_edit = QLineEdit()
-        self.current_password_edit.setEchoMode(QLineEdit.Password)
-        self.current_password_edit.setPlaceholderText("Текущий пароль (для смены пароля)")
-        card_l.addWidget(self.current_password_edit)
-        self.password_edit = QLineEdit()
-        self.password_edit.setEchoMode(QLineEdit.Password)
-        self.password_edit.setPlaceholderText("Новый пароль (необязательно)")
-        card_l.addWidget(self.password_edit)
-
-        # Кнопки
-        btn_avatar = QPushButton("Изменить аватар")
-        btn_avatar.setObjectName("ProfilePrimaryButton")
-        btn_avatar.clicked.connect(self.choose_avatar)
-        card_l.addWidget(btn_avatar)
-
-        btn_save = QPushButton("Сохранить изменения")
-        btn_save.setObjectName("ProfilePrimaryButton")
-        btn_save.clicked.connect(self.save_changes)
-        card_l.addWidget(btn_save)
-
-        btn_logout = QPushButton("Выйти из аккаунта")
-        btn_logout.setObjectName("ProfileDangerButton")
-        btn_logout.clicked.connect(self.logout)
-        card_l.addWidget(btn_logout)
-
-        self.layout.addWidget(self.card)
-        self.layout.addStretch()
+        from ui.design.tokens import LIST_WIDTH
+        from ui.design.widgets import Button
+        self.setObjectName('ProfilePage')
+        outer=QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
+        sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(20,30,20,20);side.setSpacing(10)
+        eyebrow=QLabel('АККАУНТ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
+        title=QLabel('Мой профиль');title.setObjectName('PageTitle');side.addWidget(title);side.addSpacing(14)
+        self.profile_tabs={}
+        for key,text in [('main','Профиль'),('edit','Редактирование'),('password','Пароль')]:
+            button=QPushButton(text);button.setCheckable(True);button.clicked.connect(lambda checked=False,k=key:self.show_section(k));side.addWidget(button);self.profile_tabs[key]=button
+        side.addStretch();logout=QPushButton('Выйти из аккаунта');logout.setObjectName('ProfileDangerButton');logout.clicked.connect(self.confirm_logout);side.addWidget(logout)
+        outer.addWidget(sidebar)
+        scroll=QScrollArea();scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
+        content=QWidget();scroll.setWidget(content);self.layout=QVBoxLayout(content);self.layout.setContentsMargins(40,30,40,30);self.layout.setSpacing(20)
+        self.page_title=QLabel('Мой профиль');self.page_title.setObjectName('PageTitle');self.layout.addWidget(self.page_title)
+        self.card=QFrame();self.card.setObjectName('ProfileCard');self.card.setMaximumWidth(720)
+        card_l=QVBoxLayout(self.card);card_l.setContentsMargins(30,28,30,28);card_l.setSpacing(14)
+        self.avatar_label=AvatarLabel(size=96);card_l.addWidget(self.avatar_label,0,Qt.AlignHCenter)
+        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('PageTitle');self.display_name.setAlignment(Qt.AlignCenter);card_l.addWidget(self.display_name)
+        self.login_label=QLabel(self.login);self.login_label.setAlignment(Qt.AlignCenter);card_l.addWidget(self.login_label)
+        self.status_label=QLabel('Не в сети');self.status_label.setObjectName('ProfileStatusOffline');self.status_label.setAlignment(Qt.AlignCenter);card_l.addWidget(self.status_label)
+        self.edit_block=QWidget();edit=QVBoxLayout(self.edit_block);edit.setContentsMargins(0,12,0,0)
+        self.nick_title=QLabel('Имя в Nodus');self.nick_title.setObjectName('FieldTitle');edit.addWidget(self.nick_title)
+        self.nickname_edit=QLineEdit(self.nickname);edit.addWidget(self.nickname_edit)
+        avatar=Button('Изменить аватар','profile');avatar.clicked.connect(self.choose_avatar);edit.addWidget(avatar);card_l.addWidget(self.edit_block)
+        self.password_block=QWidget();password=QVBoxLayout(self.password_block);password.setContentsMargins(0,12,0,0)
+        self.current_password_edit=QLineEdit();self.current_password_edit.setEchoMode(QLineEdit.Password);self.current_password_edit.setPlaceholderText('Текущий пароль');password.addWidget(self.current_password_edit)
+        self.password_edit=QLineEdit();self.password_edit.setEchoMode(QLineEdit.Password);self.password_edit.setPlaceholderText('Новый пароль');password.addWidget(self.password_edit);card_l.addWidget(self.password_block)
+        self.save_button=Button('Сохранить изменения',primary=True);self.save_button.clicked.connect(self.save_changes);card_l.addWidget(self.save_button)
+        self.edit_button=Button('Редактировать профиль','profile');self.edit_button.clicked.connect(lambda:self.show_section('edit'));card_l.addWidget(self.edit_button)
+        self.layout.addWidget(self.card,0,Qt.AlignHCenter);self.layout.addStretch()
+        self._saving=False
+        self.show_section('main')
 
         # toast-уведомления внутри страницы (единый компонент)
         self._toast = InlineToast(
@@ -121,6 +82,16 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             horizontal_margin=12,
             bottom_margin=14,
         )
+
+    def show_section(self,key):
+        for name,button in self.profile_tabs.items():button.setChecked(name==key)
+        self.edit_block.setVisible(key=='edit');self.password_block.setVisible(key=='password')
+        self.save_button.setVisible(key!='main');self.edit_button.setVisible(key=='main')
+        self.page_title.setText({'main':'Мой профиль','edit':'Редактирование профиля','password':'Изменение пароля'}[key])
+
+    def confirm_logout(self):
+        from ui.design.dialogs import confirm
+        confirm(self,'Выйти из аккаунта?','Текущий звонок будет завершён. Вы сможете войти снова.','Выйти',self.logout)
 
     def _reposition_toast(self):
         if getattr(self, "_toast", None):
@@ -229,6 +200,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         """
         self.login = login or ""
         self.nickname = nickname or ""
+        self.display_name.setText(self.nickname)
         self.avatar_path = avatar or ""
 
         try:
@@ -298,6 +270,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         self._apply_avatar(self.avatar_path)
 
     def save_changes(self):
+        if self._saving:return
         nickname = self.nickname_edit.text().strip()
         if not nickname:
             self.show_toast("Никнейм не может быть пустым", msec=2800)
@@ -320,11 +293,23 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             "avatar": avatar_for_server
         }
 
+        self.edit_block.setEnabled(False)
+        self.password_block.setEnabled(False)
+        self._saving=True
+        self.save_button.setEnabled(False)
+        self.save_button.setText('Сохраняем…')
+        self._submitted_profile=dict(data)
         self.start_request(data, self.handle_save_response)
 
     def handle_save_response(self, resp):
+        self.edit_block.setEnabled(True)
+        self.password_block.setEnabled(True)
+        self._saving=False
+        self.save_button.setEnabled(True)
+        self.save_button.setText('Сохранить изменения')
         if resp.get("status") == "ok":
-            self.nickname = self.nickname_edit.text().strip()
+            self.nickname = getattr(self,'_submitted_profile',{}).get('nickname',self.nickname_edit.text().strip())
+            self.display_name.setText(self.nickname)
 
             # Обновляем локальный config для автологина
             cfg = load_config()
@@ -346,11 +331,11 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def update_status(self, online: bool):
         if online:
-            self.status_label.setText("● Online")
+            self.status_label.setText("В сети")
             self.status_label.setObjectName("ProfileStatusOnline")
             self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
         else:
-            self.status_label.setText("● Offline")
+            self.status_label.setText("Не в сети")
             self.status_label.setObjectName("ProfileStatusOffline")
             self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
 

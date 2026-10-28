@@ -1,6 +1,8 @@
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
 from ui.avatar_widget import AvatarLabel
+from ui.design.widgets import Button
+from ui.design.motion import reduced
 
 
 class ActiveCallWindow(QDialog):
@@ -98,15 +100,15 @@ class ActiveCallWindow(QDialog):
         btns = QHBoxLayout()
         btns.setSpacing(10)
 
-        self.btn_end = QPushButton("⛔")
+        self.btn_end = Button('', 'end')
         self.btn_end.setObjectName("CallRoundEndButton")
         self.btn_end.clicked.connect(self._end_clicked)
 
-        self.btn_mic = QPushButton("🎙")
+        self.btn_mic = Button('', 'mic')
         self.btn_mic.setObjectName("CallRoundControlButton")
         self.btn_mic.clicked.connect(self._mic_clicked)
 
-        self.btn_sound = QPushButton("🔊")
+        self.btn_sound = Button('', 'headphones')
         self.btn_sound.setObjectName("CallRoundControlButton")
         self.btn_sound.clicked.connect(self._sound_clicked)
 
@@ -141,9 +143,9 @@ class ActiveCallWindow(QDialog):
 
     def _bars_for_quality(self, quality_score: float):
         if quality_score >= 75:
-            return "▁▃▅█", "#43b581"
+            return "▁▃▅█", "#67D5AD"
         if quality_score >= 50:
-            return "▁▃▅▆", "#8ea1e1"
+            return "▁▃▅▆", "#ACB9CC"
         if quality_score >= 30:
             return "▁▂▄▅", "#faa61a"
         return "▁▂▃▄", "#f04747"
@@ -162,19 +164,19 @@ class ActiveCallWindow(QDialog):
         if peer and me:
             self.speaking_lbl.setText("Сейчас: говорите оба")
             self.state_lbl.setText("Двусторонний разговор")
-            self.state_lbl.setStyleSheet("color:#43b581; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet("color:#67D5AD; font-size:12px; font-weight:700;")
         elif peer:
             self.speaking_lbl.setText(f"Сейчас говорит: {self.peer_nickname}")
             self.state_lbl.setText("Собеседник говорит")
-            self.state_lbl.setStyleSheet("color:#43b581; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet("color:#67D5AD; font-size:12px; font-weight:700;")
         elif me:
             self.speaking_lbl.setText("Сейчас говорите: вы")
             self.state_lbl.setText("Вы говорите")
-            self.state_lbl.setStyleSheet("color:#5865F2; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet("color:#91ADFF; font-size:12px; font-weight:700;")
         else:
             self.speaking_lbl.setText("Сейчас: тишина")
             self.state_lbl.setText("Соединение активно")
-            self.state_lbl.setStyleSheet("color:#8ea1e1; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet("color:#ACB9CC; font-size:12px; font-weight:700;")
 
         quality = a.get("quality")
         lat = a.get("latency_ms")
@@ -195,28 +197,11 @@ class ActiveCallWindow(QDialog):
             self._avatar_mode = "idle"
 
     def _pulse_avatar(self):
-        mode = getattr(self, "_avatar_mode", "idle")
-        if mode == "idle":
-            self.avatar.setProperty("speaking","idle")
-            self.avatar.style().unpolish(self.avatar)
-            self.avatar.style().polish(self.avatar)
-            return
-
-        self._pulse += self._pulse_dir
-        if self._pulse >= 5:
-            self._pulse_dir = -1
-        elif self._pulse <= 0:
-            self._pulse_dir = 1
-
-        alpha = 55 + self._pulse * 20
-        # Для градиентной подсветки используем динамические свойства из QSS
-        if mode == "peer":
-            self.avatar.setProperty("speaking", "peer")
-        else:
-            self.avatar.setProperty("speaking", "me")
-        self.avatar.setProperty("pulse", str(alpha))
-        self.avatar.style().unpolish(self.avatar)
-        self.avatar.style().polish(self.avatar)
+        mode = getattr(self, '_avatar_mode', 'idle')
+        self._pulse = (self._pulse + 1) % 20
+        self.avatar.setProperty('speaking', mode != 'idle')
+        self.avatar.setProperty('pulse_alpha', 160 if reduced() else 100 + abs(10-self._pulse)*10)
+        self.avatar.update()
 
     def _end_clicked(self):
         self._ending = True
@@ -226,7 +211,9 @@ class ActiveCallWindow(QDialog):
 
     def _mic_clicked(self):
         self.mic_enabled = not self.mic_enabled
-        self.btn_mic.setText("🎙" if self.mic_enabled else "🚫")
+        self.btn_mic.setToolTip("Выключить микрофон" if self.mic_enabled else "Включить микрофон")
+        self.btn_mic.primary = not self.mic_enabled
+        self.btn_mic.update()
         self.btn_mic.setProperty("off", "false" if self.mic_enabled else "true")
         self.btn_mic.style().unpolish(self.btn_mic)
         self.btn_mic.style().polish(self.btn_mic)
@@ -235,7 +222,9 @@ class ActiveCallWindow(QDialog):
 
     def _sound_clicked(self):
         self.sound_enabled = not self.sound_enabled
-        self.btn_sound.setText("🔊" if self.sound_enabled else "🔇")
+        self.btn_sound.setToolTip("Выключить звук" if self.sound_enabled else "Включить звук")
+        self.btn_sound.primary = not self.sound_enabled
+        self.btn_sound.update()
         self.btn_sound.setProperty("off", "false" if self.sound_enabled else "true")
         self.btn_sound.style().unpolish(self.btn_sound)
         self.btn_sound.style().polish(self.btn_sound)
@@ -267,4 +256,26 @@ class ActiveCallWindow(QDialog):
                 self.on_end()
         except Exception:
             pass
+        event.accept()
+
+class OutgoingCallWindow(QDialog):
+    """Ringing state tied to the server call identity; cancelling is a real action."""
+    def __init__(self, peer, cancel, parent=None):
+        super().__init__(parent)
+        self.cancel = cancel
+        self.finished_by_server = False
+        self.setWindowTitle('Исходящий звонок')
+        self.resize(440, 370)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(32,32,32,32)
+        avatar = AvatarLabel(96)
+        avatar.set_avatar(login=peer, nickname=peer)
+        root.addWidget(avatar,0,Qt.AlignCenter)
+        name = QLabel(peer);name.setObjectName('CallPeerName');name.setAlignment(Qt.AlignCenter)
+        root.addWidget(name)
+        hint = QLabel('Вызываем…');hint.setAlignment(Qt.AlignCenter);root.addWidget(hint)
+        button = Button('Отменить звонок','end');button.clicked.connect(self.close);root.addWidget(button)
+    def closeEvent(self,event):
+        if not self.finished_by_server:
+            self.cancel()
         event.accept()

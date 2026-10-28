@@ -3,12 +3,12 @@ ACTIONS = frozenset({'get_messages', 'decline_call', 'heartbeat', 'set_channel_v
 TEXT_LIMITS = {
     'action':64, 'login':128, 'target_login':128, 'friend_login':128,
     'from_user':128, 'to_user':128, 'with_user':128, 'peer':128,
-    'call_id':128, 'current_password':1024, 'request_id':64, 'password':1024, 'nickname':128, 'name':256, 'avatar':150000,
+    'client_message_id':64, 'call_id':128, 'current_password':1024, 'request_id':64, 'password':1024, 'nickname':128, 'name':256, 'avatar':150000,
     'token':512, 'session_token':512, 'code':128, 'decision':32,
     'role':32, 'text_min_role':32, 'voice_min_role':32,
     'text':8000, 'message':8000,
 }
-INTEGER_LIMITS = {'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
+INTEGER_LIMITS = {'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
                   'sequence':(0,2**63-1), 'after_event_id':(0,2**63-1), 'limit':(1,500)}
 
 
@@ -28,7 +28,7 @@ def validate(data):
             low,high=INTEGER_LIMITS[key]
             if type(value) is not int or not low<=value<=high:
                 raise ValueError(f'Некорректное поле: {key}')
-        elif key in ('speaking','joined'):
+        elif key in ('speaking','joined','paged'):
             if type(value) is not bool:
                 raise ValueError(f'Некорректное поле: {key}')
         elif key == 'room':

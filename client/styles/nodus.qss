@@ -1,0 +1,69 @@
+/* Nodus 3.3. Palette values are supplied only by ui.design.tokens. */
+QWidget { color: @FG@; font-family: Arial; font-size:14px; background:transparent; }
+QLabel { background:transparent; border:0; }
+QFrame#SectionSidebar,QFrame#ChannelsSidebarCard { background:@SIDEBAR@; border:0; border-right:1px solid @EDGE@; border-radius:0; }
+QFrame#Divider,QFrame#ChannelsSidebarSeparator { background:@EDGE@; border:0; }
+QLabel#PageTitle,QLabel#FriendsTitle,QLabel#ChannelOpenTitle,QLabel#ProfileTitle {font-size:25px;font-weight:600;}
+QLabel#Eyebrow {color:@ACC@;font-size:10px;font-weight:600;}
+QLabel#Muted,QLabel#FriendItemSub,QLabel#AddPanelHint,QLabel#ChannelAccessHint,QLabel#ChannelTextEmptyHint {color:@MUT@;font-size:12px;}
+QLineEdit,QPlainTextEdit,QTextEdit {background:@BACKGROUND@;border:1px solid @EDGE@;border-radius:10px;padding:11px 14px;selection-background-color:#405A7C;min-height:20px;}
+QLineEdit:focus,QPlainTextEdit:focus,QTextEdit:focus {border-color:@ACC@;}
+QLineEdit:disabled,QPlainTextEdit:disabled {color:@MUT@;}
+QPushButton {background:#28364A;border:1px solid @EDGE@;border-radius:10px;padding:10px 16px;font-weight:600;min-height:20px;}
+QPushButton:hover {background:#33465F;border-color:#536D92;}
+QPushButton:pressed {background:#354866;}
+QPushButton:focus {border:1px solid @ACC@;}
+QPushButton:disabled {color:@MUT@;background:#202B39;border-color:@EDGE@;}
+QPushButton:checked,QPushButton[active="true"] {background:#2B3B51;border-color:#536D92;}
+QPushButton#PrimaryButton,QPushButton#ChannelPrimaryButton,QPushButton#ProfilePrimaryButton,QPushButton#SendRequestButton,QPushButton#AcceptButton,QPushButton#FindUserButton {background:@ACC@;color:#142039;border-color:@ACC@;}
+QPushButton#PrimaryButton:hover,QPushButton#ChannelPrimaryButton:hover,QPushButton#ProfilePrimaryButton:hover {background:#ACC0FF;}
+QPushButton#ChannelDangerButton,QPushButton#ProfileDangerButton,QPushButton#InlineConfirmDeleteButton,QPushButton#DeclineButton {color:@RED@;background:#392C38;border-color:#634451;}
+QFrame#FriendItem,QFrame#AddFriendPanel,QFrame#ProfileCard,QFrame#AuthCard,QFrame#InlineConfirmCard,QFrame#ChannelConfirmCard,QFrame#ChannelSettingsCard,QFrame#ChannelCreateCard,QFrame#ChannelJoinCard,QFrame#ChannelVoiceMemberItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+QFrame#FriendItem:hover {border-color:#536D92;}
+QLabel#FriendItemName {font-size:15px;font-weight:600;}
+QLabel#FieldTitle {color:@SUB@;font-size:12px;font-weight:600;}
+QFrame#ChannelListItem {border:0;border-radius:12px;background:transparent;}
+QFrame#ChannelListItem:hover {background:#273446;}
+QFrame#ChannelListItem[active="true"] {background:#2B3B51;border-left:3px solid @ACC@;}
+QLabel#ChannelListItemName {font-weight:600;}
+QLabel#InlineToast {background:#2B3B51;border:1px solid #536D92;border-radius:10px;padding:13px 18px;}
+QScrollArea,QListView,QStackedWidget {border:0;background:transparent;outline:0;}
+QScrollArea > QWidget > QWidget {background:transparent;}
+QScrollBar:vertical {background:transparent;width:7px;margin:2px;}
+QScrollBar::handle:vertical {background:#53627A;border-radius:3px;min-height:30px;}
+QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}
+QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical {background:transparent;}
+QScrollBar:horizontal {height:7px;background:transparent;}
+QScrollBar::handle:horizontal {background:#53627A;border-radius:3px;min-width:30px;}
+QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal {width:0;}
+QMenu {background:@SURFACE@;border:1px solid #485B76;border-radius:10px;padding:7px;}
+QMenu::item {padding:10px 24px;}
+QMenu::item:selected {background:#3A4D67;border-radius:6px;}
+QToolTip {background:@SURFACE@;color:@FG@;border:1px solid #536D92;padding:7px;}
+QComboBox {background:#253244;border:1px solid @EDGE@;border-radius:8px;padding:9px 12px;min-height:20px;}
+QComboBox QAbstractItemView {background:#253244;selection-background-color:#3A4D67;}
+QCheckBox {spacing:10px;}
+QCheckBox::indicator {width:18px;height:18px;border:1px solid #536D92;border-radius:5px;background:@BACKGROUND@;}
+QCheckBox::indicator:checked {background:@ACC@;}
+QDialog,QMessageBox {background:@BACKGROUND@;}
+QLabel#AuthTitle,QLabel#RegisterTitle {font-size:30px;font-weight:600;}
+QLabel#AuthHero {font-size:44px;font-weight:700;}
+QLabel#AuthSubtitle {color:@SUB@;font-size:16px;}
+QLabel#ErrorLabel {color:@RED@;}
+QFrame#UserMiniCard {background:transparent;border:0;}
+QLabel#UserMiniNick {font-size:10px;color:@SUB@;}
+QLabel#ProfileStatusOnline {color:@GREEN@;}
+QLabel#ProfileStatusOffline {color:@MUT@;}
+QLabel#CallPeerName {font-size:28px;font-weight:600;}
+QLabel#CallState {color:@SUB@;}
+QFrame#ChannelFormCard,QFrame#ChannelAccessCard,QFrame#CallCard,QFrame#ChannelsInvitesDropdown {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+QLabel#ChannelFormTitle,QLabel#ChannelSettingsSectionTitle,QLabel#CallTitle {font-size:20px;font-weight:600;}
+QLabel#ChannelFormHint,QLabel#ChannelOpenCode,QLabel#CallPeerLogin,QLabel#CallQuality {color:@SUB@;font-size:12px;}
+QLabel#ChannelsListHeader {color:@MUT@;font-size:10px;padding-top:12px;}
+QFrame#ChannelVoiceMemberRow {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
+QWidget#Sidebar {background:#121923;}
+
+QFrame#IncomingCallInlineCard,QFrame#CallInlineNoticeCard,QFrame#ChannelInlineConfirm {background:@SURFACE@;border:1px solid #536D92;border-radius:14px;}
+QLabel#IncomingCallInlineTitle {font-size:20px;font-weight:600;}
+QPushButton#IncomingCallInlineAcceptBtn {background:@ACC@;color:#142039;}
+QPushButton#IncomingCallInlineDeclineBtn,QPushButton#ChannelTinyDangerButton {color:@RED@;}

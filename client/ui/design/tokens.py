@@ -1,0 +1,17 @@
+"""Approved Nodus 3.3 palette and common dimensions."""
+
+ACC = "#91ADFF"
+FG = "#EDF2FA"
+SUB = "#ACB9CC"
+MUT = "#9AA9BE"
+EDGE = "#354152"
+GREEN = "#67D5AD"
+RED = "#FFA7AE"
+BACKGROUND = "#111923"
+SURFACE = "#222E3D"
+SIDEBAR = "#19222D"
+RAIL = "#121923"
+RAIL_WIDTH = 88
+LIST_WIDTH = 340
+RADIUS = 12
+BACKGROUND_ALPHA = round(255 * 0.96)

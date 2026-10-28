@@ -12,6 +12,7 @@ class PcmMixer:
         self.prebuffer=prebuffer
         self.streams={}
         self.lock=threading.Lock()
+        self.counters=dict(received=0,late_or_duplicate=0,backlog_dropped=0,missing=0,concealed=0,mixed=0)
 
     def push(self, speaker, pcm, sequence=None, stream_id=None):
         if not speaker or len(pcm)!=self.frame_samples*2:
@@ -40,6 +41,7 @@ class PcmMixer:
                 if type(sequence) is not int or sequence<0:return False
                 delay=self.prebuffer
             if sequence<=state['last_played'] or sequence in state['frames']:
+                self.counters['late_or_duplicate']+=1
                 return False
             if state['expected'] is None:
                 state['expected']=sequence
@@ -47,11 +49,14 @@ class PcmMixer:
             elif not state['started']:
                 state['expected']=min(state['expected'],sequence)
             elif sequence<state['expected']:
+                self.counters['late_or_duplicate']+=1
                 return False
+            self.counters['received']+=1
             state['seen']=now
             state['frames'][sequence]=bytes(pcm)
             # Drop oldest backlog rather than allowing latency to grow unbounded.
             floor=max(state['expected'],sequence-self.max_frames+1)
+            self.counters['backlog_dropped']+=sum(key<floor for key in state['frames'])
             state['frames']={key:value for key,value in state['frames'].items() if key>=floor}
             state['expected']=floor
             return True
@@ -69,12 +74,15 @@ class PcmMixer:
                 state['expected']+=1
                 frame=state['frames'].pop(sequence,None)
                 if frame is not None:
+                    self.counters['mixed']+=1
                     sample=np.frombuffer(frame,dtype='<i2').astype(np.int32)
                     state.update(last=sample,last_played=sequence,lost=0)
                     combined+=sample
                 else:
+                    self.counters['missing']+=1
                     state['lost']+=1
                     if state['conceal'] and state['last'] is not None and state['lost']<=2:
+                        self.counters['concealed']+=1
                         combined+=(state['last']*(0.5**state['lost'])).astype(np.int32)
                     if state['lost']>=self.max_frames and not state['frames']:
                         state.update(expected=None,started=False,last=None)
@@ -85,3 +93,7 @@ class PcmMixer:
 
     def queued_frames(self):
         with self.lock:return sum(len(state['frames']) for state in self.streams.values())
+
+    def diagnostic_snapshot(self):
+        with self.lock:
+            return dict(self.counters, speakers=len(self.streams), queued_frames=sum(len(s['frames']) for s in self.streams.values()))

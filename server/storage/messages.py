@@ -9,15 +9,23 @@ class MessageRepository:
     def __init__(self, database):
         self.database = database
 
-    def save_message(self, from_user: str, to_user: str, text: str) -> bool:
+    def save_message(self, from_user: str, to_user: str, text: str, client_message_id=None):
         with database_connection(self.database) as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO messages(from_user, to_user, text, is_read) VALUES(?,?,?,0)",
-                (from_user, to_user, text),
-            )
-            conn.commit()
-        return True
+            if client_message_id:
+                previous = conn.execute('SELECT id,to_user,text FROM messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                if previous:
+                    if previous[1:] != (to_user,text):
+                        raise ValueError('Идентификатор сообщения уже использован')
+                    return previous[0]
+            cursor = conn.execute('INSERT INTO messages(from_user,to_user,text,is_read,client_message_id) VALUES(?,?,?,0,?)', (from_user,to_user,text,client_message_id))
+            return cursor.lastrowid
+
+    def get_page(self, user_a, user_b, limit=80, before_id=None, after_id=None):
+        from .pagination import page
+        with database_connection(self.database) as conn:
+            result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id)
+            result['read_through_id'] = conn.execute('SELECT COALESCE(MAX(id),0) FROM messages WHERE from_user=? AND to_user=? AND is_read=1', (user_a,user_b)).fetchone()[0]
+            return result
 
     def get_messages(self, user_a: str, user_b: str, limit: int = 50) -> list:
         lim = max(1, min(500, int(limit or 50)))

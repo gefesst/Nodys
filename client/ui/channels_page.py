@@ -31,6 +31,8 @@ from ui.toast import InlineToast
 from application.voice_session import VoiceSession
 from settings import get_voice_endpoint
 
+from ui.design.motion import TransitionStack as QStackedWidget
+
 
 class ChannelListItem(QFrame):
     def __init__(self, channel: dict, active: bool = False, on_click=None):
@@ -402,33 +404,36 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.setObjectName("ChannelsPage")
 
         root = QHBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
-        root.setSpacing(12)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
         # ===== Left: channels sidebar =====
         sidebar = QFrame()
         sidebar.setObjectName("ChannelsSidebarCard")
-        sidebar.setMinimumWidth(250)
-        sidebar.setMaximumWidth(300)
+        from ui.design.tokens import LIST_WIDTH
+        sidebar.setFixedWidth(LIST_WIDTH)
         sb_l = QVBoxLayout(sidebar)
-        sb_l.setContentsMargins(10, 10, 10, 10)
+        sb_l.setContentsMargins(20, 30, 20, 20)
         sb_l.setSpacing(10)
 
+        eyebrow=QLabel('ПРОСТРАНСТВА');eyebrow.setObjectName('Eyebrow');sb_l.addWidget(eyebrow)
+        heading=QLabel('Каналы');heading.setObjectName('PageTitle');sb_l.addWidget(heading);sb_l.addSpacing(12)
         actions_row = QHBoxLayout()
         actions_row.setSpacing(10)
 
-        self.create_channel_btn = QPushButton("Создать\nканал")
+        self.create_channel_btn = QPushButton("Создать")
         self.create_channel_btn.setObjectName("ChannelCircleButton")
         self.create_channel_btn.setProperty("variant", "create")
-        self.create_channel_btn.setFixedSize(96, 96)
+        self.create_channel_btn.setFixedHeight(42)
+        self.create_channel_btn.setObjectName("ChannelPrimaryButton")
         self.create_channel_btn.clicked.connect(self.open_create_page)
         actions_row.addWidget(self.create_channel_btn)
         install_opacity_feedback(self.create_channel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
-        self.join_channel_btn = QPushButton("Подключ\nиться")
+        self.join_channel_btn = QPushButton("Подключиться")
         self.join_channel_btn.setObjectName("ChannelCircleButton")
         self.join_channel_btn.setProperty("variant", "join")
-        self.join_channel_btn.setFixedSize(96, 96)
+        self.join_channel_btn.setFixedHeight(42)
         self.join_channel_btn.clicked.connect(self.open_join_page)
         actions_row.addWidget(self.join_channel_btn)
         install_opacity_feedback(self.join_channel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
@@ -510,6 +515,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.channels_scroll.setWidget(self.channels_container)
         sb_l.addWidget(self.channels_scroll, 1)
+        sb_l.removeWidget(invites_header);sb_l.addWidget(invites_header)
+        sb_l.removeWidget(self.invites_dropdown);sb_l.addWidget(self.invites_dropdown)
 
         root.addWidget(sidebar, 1)
 
@@ -517,7 +524,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         right = QFrame()
         right.setObjectName("ChannelsMainCard")
         right_l = QVBoxLayout(right)
-        right_l.setContentsMargins(12, 12, 12, 12)
+        right_l.setContentsMargins(24, 24, 24, 16)
         right_l.setSpacing(10)
 
         self.main_stack = QStackedWidget()
@@ -543,6 +550,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         create_card = QFrame()
         create_card.setObjectName("ChannelFormCard")
+        create_card.setMinimumWidth(440)
         create_l = QVBoxLayout(create_card)
         create_l.setContentsMargins(16, 16, 16, 16)
         create_l.setSpacing(10)
@@ -599,6 +607,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         join_card = QFrame()
         join_card.setObjectName("ChannelFormCard")
+        join_card.setMinimumWidth(440)
         join_l = QVBoxLayout(join_card)
         join_l.setContentsMargins(16, 16, 16, 16)
         join_l.setSpacing(10)
@@ -679,11 +688,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         nav = QFrame()
         nav.setObjectName("ChannelInnerNav")
-        nav_l = QVBoxLayout(nav)
+        nav_l = QHBoxLayout(nav)
         nav_l.setContentsMargins(8, 8, 8, 8)
         nav_l.setSpacing(6)
 
-        self.voice_tab_btn = QPushButton("🔊 Голосовой")
+        self.voice_tab_btn = QPushButton("Голосовой")
         self.voice_tab_btn.setObjectName("ChannelInnerNavButton")
         self.voice_tab_btn.setCheckable(True)
         self.voice_tab_btn.clicked.connect(self.switch_to_voice_tab)
@@ -696,7 +705,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         nav_l.addWidget(self.text_tab_btn)
 
         nav_l.addStretch()
-        middle.addWidget(nav, 0)
+        ch_root.addWidget(nav)
 
         self.channel_inner_stack = QStackedWidget()
 
@@ -706,33 +715,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         t_l.setContentsMargins(0, 0, 0, 0)
         t_l.setSpacing(8)
 
-        self.channel_messages_scroll = QScrollArea()
-        self.channel_messages_scroll.setWidgetResizable(True)
-        self.channel_messages_scroll.setObjectName("ChannelMessagesScroll")
-
-        self.channel_messages_container = QWidget()
-        self.channel_messages_layout = QVBoxLayout(self.channel_messages_container)
-        self.channel_messages_layout.setContentsMargins(8, 10, 8, 10)
-        self.channel_messages_layout.setSpacing(10)
-        self.channel_messages_layout.addStretch()
-
-        self.channel_messages_scroll.setWidget(self.channel_messages_container)
-        t_l.addWidget(self.channel_messages_scroll, 1)
-
-        msg_row = QHBoxLayout()
-        self.channel_msg_input = QLineEdit()
-        self.channel_msg_input.setObjectName("ChannelInput")
-        self.channel_msg_input.setPlaceholderText("Сообщение в канал...")
-        self.channel_msg_input.returnPressed.connect(self.send_channel_message)
-        msg_row.addWidget(self.channel_msg_input, 1)
-
-        self.channel_send_btn = QPushButton("Отправить")
-        self.channel_send_btn.setObjectName("ChannelPrimaryButton")
-        self.channel_send_btn.clicked.connect(self.send_channel_message)
-        install_opacity_feedback(self.channel_send_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-        msg_row.addWidget(self.channel_send_btn)
-
-        t_l.addLayout(msg_row)
+        from ui.design.conversation import Conversation
+        self.conversation = Conversation(self, channel=True)
+        self.conversation.notice.connect(self.show_toast)
+        self.channel_messages_scroll = self.conversation.view
+        self.channel_msg_input = self.conversation.editor
+        self.channel_send_btn = self.conversation.send_button
+        self.channel_msg_input.setPlaceholderText('Сообщение в канал…')
+        t_l.addWidget(self.conversation, 1)
 
         self.channel_inner_stack.addWidget(text_tab)
 
@@ -1073,6 +1063,19 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         sp_root.addWidget(self.settings_confirm)
 
+        sections = QHBoxLayout()
+        self.settings_sections = {}
+        for key, label in [('general','Основное'),('access','Разрешения'),('members','Участники и роли')]:
+            button = QPushButton(label)
+            button.setCheckable(True)
+            button.clicked.connect(lambda checked=False, key=key: self.show_settings_section(key))
+            self.settings_sections[key] = button
+            sections.addWidget(button)
+        settings_outer.insertLayout(0, sections)
+        g_actions.removeWidget(self.settings_save_btn)
+        settings_outer.addWidget(self.settings_save_btn, 0, Qt.AlignRight)
+        self.show_settings_section('general')
+
         self._settings_revision = 0
         self.settings_name_input.textEdited.connect(self._mark_settings_edited)
         self.settings_text_perm_combo.activated.connect(self._mark_settings_edited)
@@ -1197,6 +1200,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.stop()
 
     def reset_for_user(self):
+        self.conversation.reset()
         self._invalidate_channel_requests()
         self._alive = True
         self.stop_auto_update()
@@ -1503,10 +1507,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.invites_layout.insertWidget(self.invites_layout.count() - 1, item)
 
     def _clear_channel_messages(self):
-        for i in reversed(range(self.channel_messages_layout.count() - 1)):
-            item = self.channel_messages_layout.itemAt(i)
-            if item and item.widget():
-                item.widget().deleteLater()
+        self.conversation.select(None)
+
+    def conversation_request(self, data, callback):
+        # Conversation owns dialog epochs; sends remain attached to their original channel.
+        super().start_request(data, callback)
 
     def _clear_members_list(self):
         for i in reversed(range(self.members_layout.count() - 1)):
@@ -1523,7 +1528,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def _set_channel_send_busy(self, busy: bool):
         self._message_send_inflight = bool(busy)
         self.channel_send_btn.setEnabled(not busy and bool((self._settings_permissions or {}).get("can_send_text", True)))
-        self.channel_send_btn.setText("Отправка..." if busy else "Отправить")
+        self.channel_send_btn.setToolTip("Отправка…" if busy else "Отправить")
 
     @staticmethod
     def _messages_digest(messages: list) -> str:
@@ -1608,6 +1613,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         can_join_voice = bool(perms.get("can_join_voice", True))
         voice_req = (perms.get("voice_min_role") or "member").strip().lower()
 
+        self.conversation.can_send = can_send_text
+        self.conversation.update_controls()
         # text controls
         if can_send_text:
             self.channel_msg_input.setEnabled(True)
@@ -1657,7 +1664,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.settings_name_input.setVisible(can_manage)
 
         # Блок политики доступа (текст/голос) доступен только владельцу (manage_channel).
-        self.settings_access_card.setVisible(can_manage)
+        self.settings_access_card.setVisible(can_manage and getattr(self, "_settings_section", "general") == "access")
+        if hasattr(self, "settings_sections"):
+            self.settings_sections["access"].setVisible(can_manage)
 
         # Копирование кода — при наличии права приглашать или редактировать канал.
         self.settings_copy_code_btn.setVisible(can_invite or can_manage)
@@ -1987,6 +1996,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     # ------------------------------------------------------------------
     # Text channel
     # ------------------------------------------------------------------
+    def show_settings_section(self, key):
+        self._settings_section = key
+        for name, card in [('general',self.settings_general_card),('access',self.settings_access_card),('members',self.settings_members_card)]:
+            card.setVisible(name == key)
+            self.settings_sections[name].setChecked(name == key)
+        self.settings_scroll.verticalScrollBar().setValue(0)
+
     def switch_to_text_tab(self):
         self.text_tab_btn.setChecked(True)
         self.voice_tab_btn.setChecked(False)
@@ -2010,125 +2026,24 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.load_voice_participants(force=True)
 
     def load_channel_messages(self, force: bool = False):
-        if not self._alive or self._loading_messages or not self.active_channel:
+        if not self._alive or not self.active_channel:
             return
-        if (not force) and (not self._is_poll_allowed()):
+        if not force and not self._is_poll_allowed():
             return
-        if self.main_stack.currentWidget() != self.channel_page:
+        if self.main_stack.currentWidget() != self.channel_page or self.channel_inner_stack.currentIndex() != 0:
             return
-        if self.channel_inner_stack.currentIndex() != 0:
-            return
-
         channel_id = self._active_channel_id()
-        if channel_id <= 0:
-            return
-
-        self._loading_messages = True
-        if self._messages_signature is None:
-            self._clear_channel_messages()
-            for _ in range(4):
-                sk = QFrame()
-                sk.setObjectName("ChannelMsgSkeleton")
-                self.channel_messages_layout.insertWidget(self.channel_messages_layout.count() - 1, sk)
-
-        payload = {
-            "action": "get_channel_messages",
-            "channel_id": channel_id,
-            "limit": 200,
-        }
-
-        def cb(resp):
-            try:
-                if resp.get("status") != "ok":
-                    return
-
-                messages = resp.get("messages", []) or []
-                digest = self._messages_digest(messages)
-                if digest == self._messages_signature:
-                    return
-
-                # Если пользователь не внизу списка, сохраняем позицию скролла.
-                sb = self.channel_messages_scroll.verticalScrollBar()
-                prev_val = sb.value()
-                was_near_bottom = (sb.maximum() - sb.value()) <= 80
-
-                self.channel_messages_scroll.setUpdatesEnabled(False)
-                self._clear_channel_messages()
-
-                if not messages:
-                    hint = QLabel("Пока нет сообщений. Напишите первым 👋")
-                    hint.setObjectName("ChannelTextEmptyHint")
-                    hint.setAlignment(Qt.AlignCenter)
-                    self.channel_messages_layout.insertWidget(self.channel_messages_layout.count() - 1, hint)
-                    self._messages_signature = digest
-                    return
-
-                for msg in messages:
-                    from_user = msg.get("from_user", "")
-                    is_out = from_user == self.ctx.login
-                    bubble = ChannelMessageBubble(
-                        text=msg.get("text", ""),
-                        author=("Вы" if is_out else from_user),
-                        is_outgoing=is_out,
-                        time_text=self._format_time(msg.get("created_at", "")),
-                    )
-                    self.channel_messages_layout.insertWidget(self.channel_messages_layout.count() - 1, bubble)
-
-                self._messages_signature = digest
-
-                if was_near_bottom:
-                    sb.setValue(sb.maximum())
-                else:
-                    sb.setValue(min(prev_val, sb.maximum()))
-            finally:
-                self.channel_messages_scroll.setUpdatesEnabled(True)
-                self._loading_messages = False
-
-        self.start_request(payload, cb)
+        allowed = bool((self._settings_permissions or {}).get('can_send_text', True))
+        if self.conversation.identity != channel_id:
+            self.conversation.select(channel_id, self.active_channel.get('name',''), allowed)
+        else:
+            self.conversation.can_send = allowed
+            self.conversation.update_controls()
+            self.conversation.load('poll')
 
     def send_channel_message(self):
-        if not self._alive or self._sending_channel_msg or not self.active_channel:
-            return
-
-        if not bool((self._settings_permissions or {}).get("can_send_text", True)):
-            self.show_toast("У вас нет прав писать в этот канал")
-            return
-
-        text = self.channel_msg_input.text().strip()
-        if not text:
-            return
-
-        channel_id = self._active_channel_id()
-        if channel_id <= 0:
-            return
-
-        self._sending_channel_msg = True
-        self._set_channel_send_busy(True)
-        payload = {
-            "action": "send_channel_message",
-            "channel_id": channel_id,
-            "text": text,
-        }
-
-        def cb(resp):
-            try:
-                if resp.get("status") != "ok":
-                    self.show_toast(resp.get("message", "Не удалось отправить сообщение"))
-                    # refresh permissions if server says forbidden
-                    msg = (resp.get("message") or "").lower()
-                    if "прав" in msg or "доступ" in msg:
-                        self.load_channel_details(silent=True)
-                    return
-                # Форсируем перерисовку сразу после отправки.
-                self._messages_signature = None
-                self.load_channel_messages(force=True)
-            finally:
-                self._sending_channel_msg = False
-                self._set_channel_send_busy(False)
-
-        self.start_request(payload, cb)
-        self.channel_msg_input.clear()
-
+        self.conversation.can_send = bool((self._settings_permissions or {}).get('can_send_text', True))
+        self.conversation.send()
 
     def _render_voice_participants(self):
         self._clear_voice_members_list()

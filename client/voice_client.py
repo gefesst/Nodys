@@ -5,6 +5,7 @@ import struct
 import threading
 import time
 from audio.mixer import PcmMixer
+from audio.diagnostics import AudioDiagnostics
 import numpy as np
 import sounddevice as sd
 
@@ -46,6 +47,7 @@ class VoiceClient:
         self._loss_score = 0.0
         self._latency_ms = 0.0
         self._voice_threshold = 0.015
+        self.diagnostics = AudioDiagnostics()
 
     def start(self, peer_login=None, room_id=None, cancel_event=None):
         if self.running:
@@ -144,6 +146,13 @@ class VoiceClient:
         self._speaker_arrivals.clear()
 
     def _capture_cb(self, indata, frames, time_info, status):
+        started = self.diagnostics.begin('capture',status)
+        try:
+            self._capture_frame(indata)
+        finally:
+            self.diagnostics.end('capture',started)
+
+    def _capture_frame(self, indata):
         if not self.running:
             return
         try:
@@ -158,19 +167,28 @@ class VoiceClient:
         if not self.mic_enabled:
             return
         try:
-            pcm = indata.copy().tobytes()
+            pcm = indata.tobytes()
             try:
                 self._outgoing.put_nowait(pcm)
             except queue.Full:
+                self.diagnostics.values['outgoing_dropped'] += 1
                 try:
                     self._outgoing.get_nowait()
                 except queue.Empty:
                     pass
                 self._outgoing.put_nowait(pcm)
+            self.diagnostics.values['outgoing_high_water'] = max(self.diagnostics.values['outgoing_high_water'], self._outgoing.qsize())
         except Exception:
             pass
 
     def _play_cb(self, outdata, frames, time_info, status):
+        started = self.diagnostics.begin('playback',status)
+        try:
+            self._play_frame(outdata)
+        finally:
+            self.diagnostics.end('playback',started)
+
+    def _play_frame(self, outdata):
         chunk = self.mixer.mix()
         outdata[:] = 0
         if self.sound_enabled:
@@ -197,6 +215,7 @@ class VoiceClient:
                     transport.close()
                 self.transport = None
                 self.mixer.clear()
+                self.diagnostics.values['reconnect_attempts'] += 1
                 try:
                     replacement = SecureVoiceTransport(self.login, self.token, self.host, self.port,
                                                        self.room_id, self.peer)
@@ -208,6 +227,7 @@ class VoiceClient:
                     last_ack = time.monotonic()
                     last_ping = 0
                 except Exception:
+                    self.diagnostics.values['reconnect_failures'] += 1
                     self._stop_event.wait(2)
                 continue
             try:
@@ -220,10 +240,12 @@ class VoiceClient:
                     except queue.Empty:
                         break
                     transport.send(b'A' + pcm)
+                    self.diagnostics.values['packets_sent'] += 1
                 data = transport.receive()
             except socket.timeout:
                 continue
             except OSError:
+                self.diagnostics.values['socket_errors'] += 1
                 self._stop_event.wait(0.2)
                 continue
             if data == b'K':
@@ -241,7 +263,9 @@ class VoiceClient:
                 continue
             stream_id, sequence = body[:16], struct.unpack('!Q', body[16:24])[0]
             pcm = body[24:]
+            self.diagnostics.values['packets_received'] += 1
             if not self.mixer.push(speaker, pcm, sequence=sequence, stream_id=stream_id):
+                self.diagnostics.values['rejected_audio'] += 1
                 continue
             now_ts = time.time()
             previous = self._speaker_arrivals.get(speaker, 0)
@@ -270,6 +294,14 @@ class VoiceClient:
 
     def set_sound_enabled(self, enabled: bool):
         self.sound_enabled = bool(enabled)
+
+    def get_diagnostics(self):
+        return dict(self.diagnostics.snapshot(), mixer=self.mixer.diagnostic_snapshot(),
+                    queued_outgoing=self._outgoing.qsize(), sample_rate=self.sample_rate,
+                    frame_samples=self.frame_samples, transport='TLS + AES-GCM UDP',
+                    microphone_enabled=self.mic_enabled, playback_enabled=self.sound_enabled,
+                    heartbeat_rtt_ms=round(self._latency_ms,2),
+                    note='Callback gaps are scheduling observations, not acoustic latency. Missing mixer frames include jitter; silence is not packet loss.')
 
     def get_activity(self):
         now = time.time()

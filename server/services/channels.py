@@ -274,17 +274,27 @@ class ChannelService:
             # Возвращаем в хронологическом порядке для UI.
             return [dict(r) for r in reversed(rows)]
 
-    def save_channel_message(self, channel_id: int, from_user: str, text: str) -> bool:
+    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None):
         msg = (text or "").strip()
         if not msg:
             return False
         with database_connection(self.chat_database, timeout=10) as conn:
-            conn.execute(
-                "INSERT INTO channel_messages(channel_id, from_user, text) VALUES(?,?,?)",
-                (int(channel_id), from_user, msg),
-            )
-            conn.commit()
-        return True
+            if client_message_id:
+                previous = conn.execute('SELECT id,channel_id,text FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                if previous:
+                    if previous[1:] != (int(channel_id),msg):
+                        raise ValueError('Идентификатор сообщения уже использован')
+                    return previous[0]
+            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id) VALUES(?,?,?,?)', (int(channel_id),from_user,msg,client_message_id))
+            return cursor.lastrowid
+
+    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None):
+        try:
+            from ..storage.pagination import page
+        except ImportError:
+            from storage.pagination import page
+        with database_connection(self.chat_database) as conn:
+            return page(conn, 'channel_messages', 'channel_id=?', (int(channel_id),), limit, before_id, after_id)
 
     def _normalize_member_role(self, role: str) -> str:
         r = (role or "").strip().lower()

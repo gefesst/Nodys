@@ -13,6 +13,8 @@ def main():
     prepare_platform_plugins()
     app = QApplication(sys.argv)
     apply_app_styles(app, "base", "auth", "main", "friends", "chats", "channels", "profile", "call")
+    from ui.design.motion import install
+    install(app)
     w = AppWindow()
     w.show()
     sys.exit(app.exec())

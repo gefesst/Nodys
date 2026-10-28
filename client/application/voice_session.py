@@ -88,3 +88,6 @@ class VoiceSession(QObject):
             return self._core.get_activity()
         return dict(quality='Подключение',quality_score=0,mic_level=0,peer_level=0,
                     me_speaking=False,peer_speaking=False,latency_ms=0,jitter_ms=0)
+
+    def get_diagnostics(self):
+        return self._core.get_diagnostics() if self._core else {'state':'Подключение'}
