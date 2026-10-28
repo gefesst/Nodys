@@ -46,7 +46,7 @@ class VoiceClient:
         self._latency_ms = 0.0
         self._voice_threshold = 0.015
 
-    def start(self, peer_login=None, room_id=None):
+    def start(self, peer_login=None, room_id=None, cancel_event=None):
         if self.running:
             return
         if self.recv_thread and self.recv_thread.is_alive():
@@ -61,6 +61,10 @@ class VoiceClient:
         self._stop_event.clear()
         self.transport = SecureVoiceTransport(self.login, self.token, self.host, self.port,
                                               self.room_id, self.peer)
+        if cancel_event is not None and cancel_event.is_set():
+            self.transport.close()
+            self.transport = None
+            return
         self.running = True
         self._reset_runtime_metrics()
         self.recv_thread = threading.Thread(target=self._recv_loop, daemon=True)

@@ -19,7 +19,7 @@ from ui.call_window import ActiveCallWindow
 
 from user_context import UserContext
 from network import NetworkThread, send_json_packet, recv_json_packet
-from voice_client import VoiceClient
+from application.voice_session import VoiceSession
 from config import clear_config
 from settings import get_voice_endpoint, get_api_endpoint
 from ui.micro_interactions import install_opacity_feedback
@@ -750,15 +750,6 @@ class MainWindow(QWidget):
         self.set_active_nav(self.btn_friends)
         self.stack.setCurrentWidget(self.friends_page)
 
-        try:
-            if self._current_call_peer():
-                self._sync_release_call_state(timeout_sec=0.5)
-            if self.voice_client:
-                self.voice_client.stop()
-                self.voice_client = None
-            self._close_call_window()
-        except Exception:
-            pass
         self._apply_polling_policy(force=True)
 
 
@@ -1068,12 +1059,19 @@ class MainWindow(QWidget):
             if self.voice_client:
                 self.voice_client.stop()
             v_host, v_port = get_voice_endpoint()
-            self.voice_client = VoiceClient(
+            self.voice_client = VoiceSession(
                 login=self.ctx.login,
                 token=getattr(self.ctx, "session_token", ""),
                 host=v_host,
                 port=v_port,
             )
+            voice = self.voice_client
+            def failed(message):
+                if self.voice_client is voice:
+                    voice.stop()
+                    self.voice_client = None
+                    self._show_call_notice(f"Не удалось запустить аудио: {message}", timeout_ms=2800)
+            voice.failed.connect(failed)
             self.voice_client.start(peer_login=peer_login)
         except Exception as e:
             if self.voice_client:

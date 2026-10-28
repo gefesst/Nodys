@@ -10,9 +10,13 @@ except ImportError:
 try:
     from .storage import events as event_store
     from .storage import voice_tickets
+    from .storage.migrations import migrate as migrate_database
+    from .services.calls import CallService
 except ImportError:
     from storage import events as event_store
     from storage import voice_tickets
+    from storage.migrations import migrate as migrate_database
+    from services.calls import CallService
 
 try:
     from .domain.avatars import normalize_avatar
@@ -79,10 +83,6 @@ SESSION_TOUCH_MIN_INTERVAL_SEC = 3     # reduce DB write contention on frequent 
 EVENT_MAX_PER_USER = 200
 EVENT_TTL_SEC = 180
 CALL_STALE_SEC = 25  # if one side stops sending heartbeats/polls, auto-release call
-
-active_calls: Dict[str, str] = {}  # user -> peer
-call_activity: Dict[str, float] = {}  # user -> monotonic ts of last call-related activity
-call_lock = threading.Lock()
 
 # per user event queue
 pending_events: Dict[str, deque] = defaultdict(lambda: deque(maxlen=EVENT_MAX_PER_USER))
@@ -193,197 +193,11 @@ def send_response(conn: socket.socket, obj: Dict[str, Any]) -> None:
 # -------------------- DB init --------------------
 
 def init_db() -> None:
-    os.makedirs(os.path.dirname(DB_FILE), exist_ok=True)
-    with database_connection(DB_FILE, timeout=10) as conn:
-        c = conn.cursor()
-        try:
-            c.execute("PRAGMA journal_mode=WAL")
-            c.execute("PRAGMA synchronous=NORMAL")
-        except Exception:
-            pass
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS users (
-                login TEXT PRIMARY KEY,
-                password TEXT NOT NULL,
-                nickname TEXT NOT NULL,
-                avatar TEXT
-            )"""
-        )
-        # Keep backward‑compatible column names (project already uses user_login/friend_login)
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS friends (
-                user_login TEXT,
-                friend_login TEXT,
-                PRIMARY KEY (user_login, friend_login)
-            )"""
-        )
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS friend_requests (
-                from_user TEXT,
-                to_user TEXT,
-                PRIMARY KEY (from_user, to_user)
-            )"""
-        )
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS sessions (
-                token TEXT PRIMARY KEY,
-                login TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                last_seen TEXT NOT NULL,
-                expires_at TEXT NOT NULL
-            )"""
-        )
-
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS active_call_pairs (
-                user_a TEXT NOT NULL,
-                user_b TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'ringing',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (user_a, user_b)
-            )"""
-        )
-
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS channels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                code TEXT UNIQUE NOT NULL,
-                name TEXT NOT NULL,
-                avatar TEXT DEFAULT '',
-                owner_login TEXT NOT NULL,
-                text_min_role TEXT NOT NULL DEFAULT 'member',
-                voice_min_role TEXT NOT NULL DEFAULT 'member',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS channel_members (
-                channel_id INTEGER NOT NULL,
-                login TEXT NOT NULL,
-                joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                role TEXT NOT NULL DEFAULT 'member',
-                PRIMARY KEY (channel_id, login)
-            )"""
-        )
-        # migration for older DBs
-        try:
-            cm_cols = [r[1] for r in c.execute("PRAGMA table_info(channel_members)").fetchall()]
-            if "role" not in cm_cols:
-                c.execute("ALTER TABLE channel_members ADD COLUMN role TEXT NOT NULL DEFAULT 'member'")
-        except Exception:
-            pass
-
-        # migration for channels access policy
-        try:
-            ch_cols = [r[1] for r in c.execute("PRAGMA table_info(channels)").fetchall()]
-            if "text_min_role" not in ch_cols:
-                c.execute("ALTER TABLE channels ADD COLUMN text_min_role TEXT NOT NULL DEFAULT 'member'")
-            if "voice_min_role" not in ch_cols:
-                c.execute("ALTER TABLE channels ADD COLUMN voice_min_role TEXT NOT NULL DEFAULT 'member'")
-        except Exception:
-            pass
-
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS channel_voice_presence (
-                channel_id INTEGER NOT NULL,
-                login TEXT NOT NULL,
-                speaking INTEGER NOT NULL DEFAULT 0,
-                last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (channel_id, login)
-            )"""
-        )
-
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS channel_invites (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                channel_id INTEGER NOT NULL,
-                from_user TEXT NOT NULL,
-                to_user TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-
-        c.execute("""CREATE TABLE IF NOT EXISTS voice_presence_versions (
-            token TEXT NOT NULL, channel_id INTEGER NOT NULL, sequence INTEGER NOT NULL,
-            PRIMARY KEY(token, channel_id))""")
-        c.execute("DELETE FROM voice_presence_versions WHERE token NOT IN (SELECT token FROM sessions)")
-
-        event_store.initialize(conn)
-        voice_tickets.initialize(conn)
-        call_columns = {row[1] for row in c.execute("PRAGMA table_info(active_call_pairs)")}
-        if "caller_login" not in call_columns:
-            c.execute("ALTER TABLE active_call_pairs ADD COLUMN caller_login TEXT NOT NULL DEFAULT ''")
-
-        # Helpful indexes
-        # indexes (compatible with existing DB)
-        c.execute("CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_login)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_login)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_fr_to ON friend_requests(to_user)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_login ON sessions(login)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_channels_owner ON channels(owner_login)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_channel_members_login ON channel_members(login)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_channel_members_channel ON channel_members(channel_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_voice_presence_channel ON channel_voice_presence(channel_id)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_voice_presence_seen ON channel_voice_presence(last_seen)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_inv_to_status ON channel_invites(to_user, status)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_inv_channel_status ON channel_invites(channel_id, status)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_active_call_pairs_updated ON active_call_pairs(updated_at)")
-
-        # На старте процесса очищаем transient-таблицу активных звонков
-        # (в памяти active_calls всё равно пустой после рестарта).
-        try:
-            c.execute("DELETE FROM active_call_pairs")
-        except Exception:
-            pass
-
-        conn.commit()
+    migrate_database(DB_FILE, "users")
 
 
 def init_chat_db() -> None:
-    os.makedirs(os.path.dirname(CHAT_DB), exist_ok=True)
-    with database_connection(CHAT_DB, timeout=10) as conn:
-        c = conn.cursor()
-        try:
-            c.execute("PRAGMA journal_mode=WAL")
-            c.execute("PRAGMA synchronous=NORMAL")
-        except Exception:
-            pass
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                from_user TEXT NOT NULL,
-                to_user TEXT NOT NULL,
-                text TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                is_read INTEGER DEFAULT 0
-            )"""
-        )
-        # Ensure column exists in older DBs
-        try:
-            cols = [r[1] for r in c.execute("PRAGMA table_info(messages)").fetchall()]
-            if "is_read" not in cols:
-                c.execute("ALTER TABLE messages ADD COLUMN is_read INTEGER DEFAULT 0")
-        except Exception:
-            pass
-
-        c.execute(
-            """CREATE TABLE IF NOT EXISTS channel_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                channel_id INTEGER NOT NULL,
-                from_user TEXT NOT NULL,
-                text TEXT NOT NULL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-
-        c.execute("CREATE INDEX IF NOT EXISTS idx_msg_pair_time ON messages(from_user, to_user, timestamp)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_msg_to_read ON messages(to_user, is_read)")
-        c.execute("CREATE INDEX IF NOT EXISTS idx_ch_msg_channel_time ON channel_messages(channel_id, timestamp)")
-        conn.commit()
+    migrate_database(CHAT_DB, "chat")
 
 
 # -------------------- Sessions / Presence helpers --------------------
@@ -535,8 +349,12 @@ def push_event(login: str, event: Dict[str, Any]) -> None:
     ev.setdefault("ts", _iso(_now_utc()))
     with database_connection(DB_FILE, timeout=10) as connection:
         event_store.append(connection, login, ev)
+    _publish_legacy_event(login, ev)
+
+
+def _publish_legacy_event(login, event):
     with events_lock:
-        pending_events[login].append(ev)
+        pending_events[login].append(event)
 
 
 def pop_events(login: str) -> list:
@@ -1612,195 +1430,40 @@ def delete_channel(actor_login: str, channel_id: int) -> Tuple[bool, str]:
 
 # -------------------- Calls --------------------
 
-def _canon_call_pair(a: str, b: str) -> Tuple[str, str]:
-    return (a, b) if a <= b else (b, a)
+def _call_service():
+    return CallService(DB_FILE, _publish_legacy_event, CALL_STALE_SEC, ONLINE_WINDOW_SEC)
 
 
-def _db_set_call_pair(a: str, b: str, status: str) -> None:
-    ua, ub = _canon_call_pair(a, b)
-    now_iso = _iso(_now_utc())
-    with database_connection(DB_FILE, timeout=10) as conn:
-        conn.execute(
-            """
-            INSERT INTO active_call_pairs(user_a, user_b, status, created_at, updated_at, caller_login)
-            VALUES(?,?,?,?,?,?)
-            ON CONFLICT(user_a, user_b) DO UPDATE SET
-                status=excluded.status,
-                updated_at=excluded.updated_at
-            """,
-            (ua, ub, status, now_iso, now_iso, a),
-        )
-        conn.commit()
-
-
-def _db_remove_call_pair(a: str, b: str) -> None:
-    ua, ub = _canon_call_pair(a, b)
-    with database_connection(DB_FILE, timeout=10) as conn:
-        conn.execute(
-            "DELETE FROM active_call_pairs WHERE user_a=? AND user_b=?",
-            (ua, ub),
-        )
-        conn.commit()
-
-
-def start_call(from_user: str, to_user: str) -> Tuple[bool, str]:
+def start_call(from_user, to_user):
     prune_stale_calls()
-
-    if not user_exists(to_user):
-        return False, "Пользователь не найден"
-
-    if not are_friends(from_user, to_user):
-        return False, "Можно звонить только друзьям"
-
-    if not is_online(to_user):
-        return False, "Пользователь не в сети"
-
-    with call_lock:
-        if from_user in active_calls or to_user in active_calls:
-            return False, "Пользователь занят"
-        active_calls[from_user] = to_user
-        active_calls[to_user] = from_user
-        ts = time.time()
-        call_activity[from_user] = ts
-        call_activity[to_user] = ts
-
-    try:
-        _db_set_call_pair(from_user, to_user, "ringing")
-    except Exception:
-        pass
-
-    push_event(to_user, {"type": "incoming_call", "from_user": from_user})
-    return True, "ok"
+    return _call_service().start(from_user, to_user)
 
 
-def mark_call_activity(user: str) -> None:
-    if not user:
-        return
-    with call_lock:
-        if user in active_calls:
-            call_activity[user] = time.time()
+def mark_call_activity(user):
+    if user:
+        _call_service().touch(user)
 
 
-def prune_stale_calls() -> None:
-    """Drop calls where any participant is silent for too long.
-
-    Helps release 'busy' state when the app is force-closed and no explicit
-    end_call/logout request reaches the server.
-    """
-    now_ts = time.time()
-    stale_pairs = []
-
-    with call_lock:
-        seen = set()
-        for a, b in list(active_calls.items()):
-            if (a, b) in seen or (b, a) in seen:
-                continue
-            seen.add((a, b))
-            ta = float(call_activity.get(a, 0.0) or 0.0)
-            tb = float(call_activity.get(b, 0.0) or 0.0)
-            # If either side stopped heartbeats/polls for CALL_STALE_SEC, release pair.
-            if (now_ts - ta) > CALL_STALE_SEC or (now_ts - tb) > CALL_STALE_SEC:
-                stale_pairs.append((a, b))
-
-        for a, b in stale_pairs:
-            active_calls.pop(a, None)
-            active_calls.pop(b, None)
-            call_activity.pop(a, None)
-            call_activity.pop(b, None)
-
-    for a, b in stale_pairs:
-        try:
-            _db_remove_call_pair(a, b)
-        except Exception:
-            pass
-        # notify both sides (best effort)
-        push_event(a, {"type": "call_ended", "with_user": b, "by_user": "system"})
-        push_event(b, {"type": "call_ended", "with_user": a, "by_user": "system"})
+def prune_stale_calls():
+    _call_service().prune()
 
 
-def accept_call(current_user: str, from_user: str) -> bool:
+def accept_call(current_user, from_user):
     prune_stale_calls()
-
-    with call_lock:
-        peer = active_calls.get(current_user)
-        if peer != from_user:
-            return False
-        ts = time.time()
-        call_activity[current_user] = ts
-        call_activity[from_user] = ts
-
-    try:
-        _db_set_call_pair(current_user, from_user, "active")
-    except Exception:
-        pass
-
-    # Звонящий получает подтверждение.
-    push_event(from_user, {
-        "type": "call_accepted",
-        "by_user": current_user,
-        "with_user": current_user,
-    })
-
-    # Принявший звонок тоже должен получить событие старта,
-    # иначе окно разговора/аудио у него не запускаются.
-    push_event(current_user, {
-        "type": "call_started",
-        "with_user": from_user,
-    })
-    return True
+    return _call_service().accept(current_user, from_user)
 
 
-def decline_call(current_user: str, from_user: str) -> bool:
+def decline_call(current_user, from_user):
     prune_stale_calls()
-
-    with call_lock:
-        peer = active_calls.get(current_user)
-        if peer != from_user:
-            return False
-        # clear mapping
-        active_calls.pop(current_user, None)
-        active_calls.pop(from_user, None)
-        call_activity.pop(current_user, None)
-        call_activity.pop(from_user, None)
-    try:
-        _db_remove_call_pair(current_user, from_user)
-    except Exception:
-        pass
-    push_event(from_user, {"type": "call_declined", "by_user": current_user})
-    return True
+    return _call_service().finish(current_user, from_user, decline=True)
 
 
-def end_call(current_user: str, with_user: str) -> bool:
-    prune_stale_calls()
-
-    with call_lock:
-        if active_calls.get(current_user) != with_user:
-            return False
-        active_calls.pop(current_user, None)
-        active_calls.pop(with_user, None)
-        call_activity.pop(current_user, None)
-        call_activity.pop(with_user, None)
-    try:
-        _db_remove_call_pair(current_user, with_user)
-    except Exception:
-        pass
-    push_event(with_user, {"type": "call_ended", "with_user": current_user, "by_user": current_user})
-    return True
+def end_call(current_user, with_user):
+    return _call_service().finish(current_user, with_user)
 
 
-def cleanup_calls_for_user(user: str) -> None:
-    with call_lock:
-        peer = active_calls.get(user)
-        if peer:
-            active_calls.pop(user, None)
-            active_calls.pop(peer, None)
-            call_activity.pop(user, None)
-            call_activity.pop(peer, None)
-            try:
-                _db_remove_call_pair(user, peer)
-            except Exception:
-                pass
-            push_event(peer, {"type": "call_ended", "with_user": user, "by_user": user})
+def cleanup_calls_for_user(user):
+    _call_service().finish(user)
 
 
 # -------------------- Request dispatcher --------------------
@@ -2155,6 +1818,7 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         mark_call_activity(current_user)
         if "after_event_id" in data:
             with database_connection(DB_FILE, timeout=10) as connection:
+                connection.execute("BEGIN")
                 try:
                     events = event_store.read(connection, current_user, data["after_event_id"])
                 except ValueError as error:

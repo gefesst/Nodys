@@ -113,3 +113,36 @@ class UiTests(unittest.TestCase):
         self.assertIsNone(window.current_call_user)
         MainWindow._reconcile_call_state(window,dict(state,call_id='2'))
         self.assertEqual(window._start_voice_for_peer.call_count,2)
+
+    def test_channel_switch_cancels_pending_voice_start(self):
+        from PySide6.QtCore import QObject, Signal
+        from unittest.mock import Mock
+        class PendingVoice(QObject):
+            ready=Signal()
+            failed=Signal(str)
+            def __init__(self):
+                super().__init__()
+                self.start=Mock()
+                self.stop=Mock()
+        voice=PendingVoice()
+        self.page.active_channel={'id':1,'name':'First'}
+        with patch('ui.channels_page.VoiceSession',return_value=voice):
+            self.page.toggle_voice_join()
+        self.assertTrue(self.page._voice_transitioning)
+        self.page.open_channel({'id':2,'name':'Second'})
+        voice.ready.emit()
+        voice.stop.assert_called_once()
+        self.assertFalse(self.page._voice_joined)
+        self.assertFalse(self.page._voice_transitioning)
+
+    def test_friends_navigation_keeps_active_call(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from ui.main_window import MainWindow
+        voice=Mock()
+        window=SimpleNamespace(btn_friends=object(),friends_page=object(),stack=Mock(),
+            set_active_nav=Mock(),_apply_polling_policy=Mock(),voice_client=voice,
+            _sync_release_call_state=Mock(),_close_call_window=Mock(),_current_call_peer=lambda:'bob')
+        MainWindow.show_friends(window)
+        voice.stop.assert_not_called()
+        window._sync_release_call_state.assert_not_called()

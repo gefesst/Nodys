@@ -69,3 +69,13 @@ This is client-to-server transport encryption, **not end-to-end encryption**: th
 4. Close both clients when done. Restart the launcher after further code changes.
 
 Automated tests exercise actual TLS credential requests and encrypted UDP with synthetic PCM, packet tampering/replay, key renewal, UDP relay restart, revocation and audio-device startup failure. They do not validate real microphone/speaker quality or communication between two physical machines.
+
+## Fifth change set: state integrity and responsive voice controls
+
+Call state now lives in SQLite and commits together with its notifications. Concurrent calls cannot reserve the same participant, database failures cannot report a successful call transition, and only the recipient may accept an incoming call. Restarting the server no longer blindly deletes active calls; independent participant heartbeat expiry still clears abandoned calls.
+
+Database updates now use numbered migrations. Existing databases receive an automatic SQLite snapshot in `backups/` beside the database before an upgrade. Failed upgrades roll back; newer unsupported schemas stop startup. Do not remove the snapshots until the upgraded data has been checked. Users and message databases migrate separately.
+
+Voice connection and device startup/shutdown run in the background. Switching channels cancels a pending connection; navigating to Friends keeps an existing call. Manual preview: place a call, switch between Friends/Chats/Channels, and end it. In channel voice, switch channels while connection is pending and confirm the old channel does not reconnect itself.
+
+Application packaging remains deferred; development and manual review continue through the existing local preview launcher and draft PRs.

@@ -28,7 +28,7 @@ from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
 from ui.micro_interactions import install_opacity_feedback
 from ui.toast import InlineToast
-from voice_client import VoiceClient
+from application.voice_session import VoiceSession
 from settings import get_voice_endpoint
 
 
@@ -346,6 +346,7 @@ class ChannelInviteItem(QFrame):
 class ChannelsPage(QWidget, ThreadSafeMixin):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._main_window = parent
         self.ctx = UserContext()
 
         self._threads = []
@@ -1821,7 +1822,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         old_id = self._active_channel_id()
 
         # Switch voice room if needed
-        if self._voice_joined and old_id and new_id and old_id != new_id:
+        if self._voice_client is not None and old_id and new_id and old_id != new_id:
             self.stop_voice_session(show_toast=False)
 
         self._invalidate_channel_requests()
@@ -1969,7 +1970,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self._apply_channel_header()
                 else:
                     # active channel deleted/unavailable
-                    if self._voice_joined:
+                    if self._voice_client is not None:
                         self.stop_voice_session(show_toast=False)
                     self.active_channel = None
                     self._channel_details = {}
@@ -2798,7 +2799,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
 
         # Avoid audio device conflicts with private peer-to-peer calls
-        main_win = self.window()
+        main_win = self._main_window
         try:
             if getattr(main_win, "current_call_user", None):
                 self.show_toast("Сначала завершите личный звонок")
@@ -2820,43 +2821,46 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         try:
             host, port = get_voice_endpoint()
-            self._voice_client = VoiceClient(
-                self.ctx.login,
-                token=getattr(self.ctx, "session_token", "") or "",
-                host=host,
-                port=port,
-            )
-            self._voice_client.start(room_id=room_id)
+        except (ValueError, TypeError) as error:
+            self._voice_transitioning = False
+            self._apply_channel_permissions_ui()
+            self.show_toast(f"Ошибка настроек голосового сервера: {error}")
+            return
+        voice = VoiceSession(self.ctx.login, token=self.ctx.session_token or "", host=host, port=port)
+        self._voice_client = voice
+
+        def ready():
+            if self._voice_client is not voice:
+                return
+            self._voice_transitioning = False
             self._voice_joined = True
             self._last_voice_presence_push_ts = 0.0
             self._apply_voice_local_controls()
-            self.voice_join_btn.setText("Выйти из голосового")
             self.voice_status_lbl.setText("Вы подключены к голосовому каналу")
-            if not self.voice_stats_timer.isActive():
-                self.voice_stats_timer.start()
-            if not self.voice_presence_timer.isActive():
-                self.voice_presence_timer.start()
+            self.voice_stats_timer.start()
+            self.voice_presence_timer.start()
             self._apply_channel_permissions_ui()
             self.sync_voice_presence(force_pull=True)
             self.show_toast("Подключено к голосовому каналу")
-        except Exception as e:
-            self._voice_joined = False
-            if self._voice_client:
-                try:
-                    self._voice_client.stop()
-                except Exception:
-                    pass
+
+        def failed(message):
+            if self._voice_client is not voice:
+                return
+            voice.stop()
             self._voice_client = None
-            self.voice_join_btn.setText("Войти в голосовой")
+            self._voice_transitioning = False
+            self._voice_joined = False
             self.voice_status_lbl.setText("Не удалось подключиться к голосовому каналу")
             self.voice_quality_lbl.setText("Качество: —")
             self._apply_channel_permissions_ui()
-            self.show_toast(f"Ошибка голосового канала: {e}")
-        finally:
-            self._voice_transitioning = False
-            self._apply_channel_permissions_ui()
+            self.show_toast(f"Ошибка голосового канала: {message}")
+
+        voice.ready.connect(ready)
+        voice.failed.connect(failed)
+        voice.start(room_id=room_id)
 
     def stop_voice_session(self, show_toast: bool = False):
+        self._voice_transitioning = False
         self._voice_epoch = getattr(self, "_voice_epoch", 0) + 1
         self._voice_participants_loading = False
         channel_id = self._active_channel_id()
