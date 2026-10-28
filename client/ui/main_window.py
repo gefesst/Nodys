@@ -1,4 +1,4 @@
-from transport.control import connect_api
+from application.session_cleanup import submit as submit_session_cleanup
 from PySide6.QtCore import QTimer, Qt, QRect, QEvent
 import os
 import socket
@@ -18,7 +18,7 @@ from ui.avatar_widget import AvatarLabel
 from ui.call_window import ActiveCallWindow
 
 from user_context import UserContext
-from network import NetworkThread, send_json_packet, recv_json_packet
+from network import NetworkThread
 from application.voice_session import VoiceSession
 from config import clear_config
 from settings import get_voice_endpoint, get_api_endpoint
@@ -789,63 +789,22 @@ class MainWindow(QWidget):
             return
         self.is_logging_out = True
 
-        # Не блокируем UI: делаем короткий синхронный best-effort запрос,
-        # после чего в любом случае завершаем локальный переход на auth.
-        try:
-            self._sync_logout_session(timeout_sec=0.8)
-        except Exception:
-            pass
+        self._queue_session_cleanup("logout")
         self._do_logout_transition()
 
-    def _sync_logout_session(self, timeout_sec: float = 0.8):
-        """Best-effort synchronous logout on server.
-
-        Нужен, чтобы:
-        1) кнопка "Выйти" срабатывала предсказуемо даже при сбоях callback/thread,
-        2) presence у друзей снимался максимально быстро.
-        """
+    def _queue_session_cleanup(self, action, timeout_sec=1):
         token = getattr(self.ctx, "session_token", "")
         login = getattr(self.ctx, "login", "")
-        if not token or not login:
-            return
+        if token and login:
+            try:
+                endpoint = get_api_endpoint()
+            except (ValueError, TypeError):
+                return
+            submit_session_cleanup(endpoint,
+                {"action":action, "login":login, "token":token}, timeout=timeout_sec)
 
-        payload = {
-            "action": "logout",
-            "login": login,
-            "token": token,
-        }
-
-        try:
-            host, port = get_api_endpoint()
-            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
-                send_json_packet(s, payload)
-                _ = recv_json_packet(s)
-        except Exception:
-            pass
-
-    def _sync_set_presence_offline(self, timeout_sec: float = 0.7):
-        """Best-effort: пометить текущую сессию offline, сохранив токен.
-
-        Используется при закрытии приложения (не logout), чтобы не держать
-        пользователя "онлайн" слишком долго до истечения ONLINE_WINDOW на сервере.
-        """
-        token = getattr(self.ctx, "session_token", "")
-        login = getattr(self.ctx, "login", "")
-        if not token or not login:
-            return
-
-        payload = {
-            "action": "presence_offline",
-            "login": login,
-            "token": token,
-        }
-        try:
-            host, port = get_api_endpoint()
-            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
-                send_json_packet(s, payload)
-                _ = recv_json_packet(s)
-        except Exception:
-            pass
+    def _queue_presence_offline(self, timeout_sec=0.7):
+        self._queue_session_cleanup("presence_offline", timeout_sec)
 
     def _do_logout_transition(self):
         # Остановить автообновления
@@ -921,7 +880,7 @@ class MainWindow(QWidget):
             try:
                 page._alive = False
                 if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=1000)
+                    page.shutdown_requests(wait_ms=0)
             except Exception:
                 pass
 
@@ -1153,32 +1112,9 @@ class MainWindow(QWidget):
             pass
         return None
 
-    def _sync_release_call_state(self, timeout_sec: float = 0.8):
-        """Best-effort synchronous call-state release.
-
-        Needed during app shutdown: async threads may not finish before process exits,
-        which could leave stale 'busy' state on the server.
-        """
-        token = getattr(self.ctx, "session_token", "")
-        login = getattr(self.ctx, "login", "")
-        if not token or not login:
-            return
-
-        payload = {
-            "action": "release_call_state",
-            "login": login,
-            "token": token,
-        }
-
-        try:
-            host, port = get_api_endpoint()
-            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
-                send_json_packet(s, payload)
-                _ = recv_json_packet(s)
-        except Exception:
-            pass
-        finally:
-            self.current_call_user = None
+    def _queue_release_call_state(self, timeout_sec=0.8):
+        self._queue_session_cleanup("release_call_state", timeout_sec)
+        self.current_call_user = None
 
     def resizeEvent(self, event):
         try:
@@ -1225,15 +1161,14 @@ class MainWindow(QWidget):
             pass
 
         try:
-            # Важно: на закрытии приложения очищаем call-state синхронно,
-            # иначе сервер может оставить пару как "занят".
-            self._sync_release_call_state(timeout_sec=0.9)
+            # Send best-effort cleanup outside Qt; server heartbeat expiry is the fallback.
+            self._queue_release_call_state(timeout_sec=0.9)
         except Exception:
             pass
 
         try:
             # Сохраняем токен для auto-login, но явно снимаем online presence.
-            self._sync_set_presence_offline(timeout_sec=0.7)
+            self._queue_presence_offline(timeout_sec=0.7)
         except Exception:
             pass
 
@@ -1294,7 +1229,7 @@ class MainWindow(QWidget):
             try:
                 page._alive = False
                 if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=1000)
+                    page.shutdown_requests(wait_ms=0)
             except Exception:
                 pass
 
@@ -1438,12 +1373,12 @@ class MainWindow(QWidget):
         Вызывается контейнером AppWindow при закрытии приложения.
         """
         try:
-            self._sync_release_call_state(timeout_sec=0.9)
+            self._queue_release_call_state(timeout_sec=0.9)
         except Exception:
             pass
 
         try:
-            self._sync_set_presence_offline(timeout_sec=0.7)
+            self._queue_presence_offline(timeout_sec=0.7)
         except Exception:
             pass
 
@@ -1503,7 +1438,7 @@ class MainWindow(QWidget):
             try:
                 page._alive = False
                 if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=1200)
+                    page.shutdown_requests(wait_ms=0)
             except Exception:
                 pass
 

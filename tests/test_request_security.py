@@ -94,3 +94,20 @@ class RequestSecurityTests(unittest.TestCase):
             dispatch.assert_not_called()
         try:self.assertEqual(json.loads(right.recv(4096)[4:])['code'],'rate_limited')
         finally:right.close()
+
+    def test_unicode_legacy_password_can_be_verified(self):
+        server=load('password_server','server/server.py')
+        self.assertTrue(server.verify_password('пароль','пароль'))
+        self.assertFalse(server.verify_password('другой','пароль'))
+
+    def test_concurrent_registration_returns_one_success(self):
+        import tempfile
+        from pathlib import Path
+        from concurrent.futures import ThreadPoolExecutor
+        server=load('register_race','server/server.py')
+        with tempfile.TemporaryDirectory() as folder:
+            server.DB_FILE=str(Path(folder)/'users.db');server.init_db()
+            with patch.object(server,'user_exists',return_value=False):
+                with ThreadPoolExecutor(max_workers=2) as workers:
+                    results=list(workers.map(lambda _:server.add_user('alice','test','Alice',''),range(2)))
+            self.assertEqual(sorted(results),[False,True])

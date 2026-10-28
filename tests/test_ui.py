@@ -146,3 +146,65 @@ class UiTests(unittest.TestCase):
         MainWindow.show_friends(window)
         voice.stop.assert_not_called()
         window._sync_release_call_state.assert_not_called()
+
+    def test_resume_cancel_ignores_late_success(self):
+        from app_window import AppWindow
+        from config import save_config,load_config
+        save_config({'token':'old-token','login':'alice'})
+        window=AppWindow()
+        self.addCleanup(window.deleteLater)
+        self.assertIs(window.stack.currentWidget(),window.resume_page)
+        window._cancel_resume()
+        window._handle_resume_response({'status':'ok','login':'unexpected','nickname':'Wrong'})
+        self.assertIs(window.stack.currentWidget(),window.auth_page)
+        self.assertIsNone(window.main_page)
+        self.assertEqual(load_config()['token'],'old-token')
+
+    def test_resume_cannot_overwrite_new_credentials(self):
+        from app_window import AppWindow
+        from config import save_config,load_config
+        save_config({'token':'old-token'})
+        window=AppWindow();self.addCleanup(window.deleteLater)
+        save_config({'token':'new-token','login':'bob'})
+        window._handle_resume_response({'status':'ok','login':'alice'})
+        self.assertEqual(load_config()['token'],'new-token')
+        self.assertIsNone(window.main_page)
+
+    def test_resume_failure_preserves_token_except_invalid_session(self):
+        from app_window import AppWindow
+        from config import save_config,load_config
+        for response,expected in (({'status':'error','message':'timeout'},'saved'),
+                                  ({'status':'error','code':'session_invalid'},None)):
+            save_config({'token':'saved'})
+            window=AppWindow();self.addCleanup(window.deleteLater)
+            window._handle_resume_response(response)
+            self.assertEqual(load_config().get('token'),expected)
+            self.assertIs(window.stack.currentWidget(),window.auth_page)
+
+    def test_login_error_is_inline(self):
+        from auth_window import AuthWindow
+        window=AuthWindow();self.addCleanup(window.close)
+        with patch('auth_window.QMessageBox.warning') as modal:
+            window.handle_login_response({'status':'error','message':'Слишком много попыток'})
+            modal.assert_not_called()
+        self.assertEqual(window.status_label.text(),'Слишком много попыток')
+        self.assertTrue(window.btn_login.isEnabled())
+
+    def test_shutdown_requests_with_zero_budget_never_waits(self):
+        from utils.thread_safe_mixin import ThreadSafeMixin
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        request=Mock();request.isRunning.return_value=True
+        page=SimpleNamespace(_threads=[request])
+        ThreadSafeMixin.shutdown_requests(page,wait_ms=0)
+        request.abort.assert_called_once()
+        request.wait.assert_not_called()
+
+    def test_logout_captures_identity_before_local_transition(self):
+        from ui.main_window import MainWindow
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        window=SimpleNamespace(is_logging_out=False,_queue_session_cleanup=Mock(),_do_logout_transition=Mock())
+        MainWindow.perform_logout(window)
+        window._queue_session_cleanup.assert_called_once_with('logout')
+        window._do_logout_transition.assert_called_once()

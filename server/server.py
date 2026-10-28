@@ -128,7 +128,7 @@ def verify_password(password: str, stored: str) -> bool:
         except Exception:
             return False
     # legacy plaintext
-    return hmac.compare_digest(password, stored)
+    return hmac.compare_digest(password.encode("utf-8"), stored.encode("utf-8"))
 
 
 def maybe_upgrade_legacy_password(conn: sqlite3.Connection, login: str, stored: str, password: str) -> None:
@@ -365,11 +365,11 @@ def add_user(login: str, password: str, nickname: str, avatar: str) -> bool:
     with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO users(login, password, nickname, avatar) VALUES (?,?,?,?)",
+            "INSERT OR IGNORE INTO users(login, password, nickname, avatar) VALUES (?,?,?,?)",
             (login, hash_password(password), nickname, avatar or ""),
         )
         conn.commit()
-    return True
+        return cur.rowcount == 1
 
 
 def authenticate(login: str, password: str) -> bool:
