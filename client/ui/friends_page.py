@@ -375,7 +375,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
     def clear_list(self):
         for i in reversed(range(self.list_layout.count() - 1)):
-            item = self.list_layout.itemAt(i)
+            item = self.list_layout.takeAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
 

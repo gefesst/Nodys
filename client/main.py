@@ -12,6 +12,8 @@ from style_manager import apply_app_styles
 def main():
     prepare_platform_plugins()
     app = QApplication(sys.argv)
+    from application.gui_gc import install as install_gui_gc
+    install_gui_gc(app)
     prepare_application_fonts(app)
     apply_app_styles(app, "base", "auth", "main", "friends", "chats", "channels", "profile", "call")
     from ui.design.motion import install, watch

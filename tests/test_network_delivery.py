@@ -57,3 +57,24 @@ class NetworkDeliveryTests(unittest.TestCase):
             QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
         self.assertFalse(isValid(request))
         self.assertEqual(events, [('delivered', threading.get_ident()), ('destroyed', threading.get_ident())])
+
+    def test_worker_created_cycles_are_finalized_by_gui_collection(self):
+        import gc
+        from application.gui_gc import GuiGarbageCollector
+        was_enabled = gc.isenabled()
+        collector = GuiGarbageCollector(self.app)
+        finalized = []
+        class Cycle:
+            def __init__(self): self.loop = self
+            def __del__(self): finalized.append(threading.get_ident())
+        try:
+            worker = threading.Thread(target=lambda: Cycle())
+            worker.start(); worker.join()
+            self.assertFalse(gc.isenabled())
+            self.assertEqual(finalized, [])
+            collector.collect(full=True)
+            self.assertEqual(finalized, [threading.get_ident()])
+        finally:
+            collector.timer.stop()
+            collector.deleteLater()
+            if was_enabled: gc.enable()

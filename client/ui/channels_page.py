@@ -1428,7 +1428,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
     def _clear_channels_list(self):
         for i in reversed(range(self.channels_layout.count() - 1)):
-            item = self.channels_layout.itemAt(i)
+            item = self.channels_layout.takeAt(i)
             if item is None:
                 continue
             w = item.widget()
@@ -1470,7 +1470,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
     def _clear_invites_list(self):
         for i in reversed(range(self.invites_layout.count() - 1)):
-            item = self.invites_layout.itemAt(i)
+            item = self.invites_layout.takeAt(i)
             if item is None:
                 continue
             w = item.widget()
@@ -1515,13 +1515,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
     def _clear_members_list(self):
         for i in reversed(range(self.members_layout.count() - 1)):
-            item = self.members_layout.itemAt(i)
+            item = self.members_layout.takeAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
 
     def _clear_voice_members_list(self):
         for i in reversed(range(self.voice_members_layout.count() - 1)):
-            item = self.voice_members_layout.itemAt(i)
+            item = self.voice_members_layout.takeAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
 
