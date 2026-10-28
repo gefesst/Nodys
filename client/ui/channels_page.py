@@ -33,21 +33,20 @@ from settings import get_voice_endpoint
 
 
 class ChannelListItem(QFrame):
-    def __init__(self, channel: dict, active: bool = False, on_click=None, compact: bool = False):
+    def __init__(self, channel: dict, active: bool = False, on_click=None):
         super().__init__()
         self.channel = channel or {}
         self._on_click = on_click
 
         self.setObjectName("ChannelListItem")
         self.setProperty("active", bool(active))
-        self.setProperty("compact", "true" if compact else "false")
-        self.setFixedHeight(54 if compact else 64)
+        self.setFixedHeight(64)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(8 if compact else 10, 7 if compact else 8, 8 if compact else 10, 7 if compact else 8)
-        lay.setSpacing(7 if compact else 10)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(10)
 
-        avatar = AvatarLabel(size=34 if compact else 42)
+        avatar = AvatarLabel(size=42)
         avatar.set_avatar(
             path=self.channel.get("avatar", ""),
             login=f"channel_{self.channel.get('id', '')}",
@@ -80,7 +79,7 @@ class ChannelListItem(QFrame):
             or 0
         )
         parts = [role_text]
-        if (not compact) and participants_count > 0:
+        if participants_count > 0:
             parts.append(f"Участников: {participants_count}")
 
         sub = QLabel(" · ".join(parts))
@@ -375,7 +374,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._messages_signature = None
         self._channels_signature = None
         self._invites_signature = None
-        self._compact_mode = False
         self._channels_loaded_once = False
         self._channels_skeleton_visible = False
 
@@ -497,12 +495,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         list_head.addWidget(list_title)
         list_head.addStretch(1)
 
-        self.compact_toggle_btn = QPushButton("Компактно")
-        self.compact_toggle_btn.setObjectName("ChannelsCompactToggle")
-        self.compact_toggle_btn.setCheckable(True)
-        self.compact_toggle_btn.toggled.connect(self.set_compact_mode)
-        list_head.addWidget(self.compact_toggle_btn)
-        install_opacity_feedback(self.compact_toggle_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         sb_l.addLayout(list_head)
 
@@ -1274,7 +1266,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._clear_members_list()
         self._clear_voice_members_list()
         self.main_stack.setCurrentWidget(self.placeholder_page)
-        self.compact_toggle_btn.setChecked(False)
         self._show_channels_skeleton(count=6)
         self._reposition_overlays()
 
@@ -1373,8 +1364,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         narrow = area_w < 980
         stacked_buttons = area_w < 900
-        compact_rows = area_w < 780
-        mode = (narrow, stacked_buttons, compact_rows)
+        stacked_rows = area_w < 780
+        mode = (narrow, stacked_buttons, stacked_rows)
 
         if (not force) and mode == getattr(self, "_settings_layout_mode", None):
             return
@@ -1390,21 +1381,21 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self._set_box_layout_direction(
             self.settings_invite_row,
-            QBoxLayout.TopToBottom if compact_rows else QBoxLayout.LeftToRight,
+            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
         )
-        self.settings_invite_btn.setMinimumWidth(0 if compact_rows else 112)
+        self.settings_invite_btn.setMinimumWidth(0 if stacked_rows else 112)
 
         self._set_box_layout_direction(
             self.settings_text_perm_row,
-            QBoxLayout.TopToBottom if compact_rows else QBoxLayout.LeftToRight,
+            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
         )
         self._set_box_layout_direction(
             self.settings_voice_perm_row,
-            QBoxLayout.TopToBottom if compact_rows else QBoxLayout.LeftToRight,
+            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
         )
 
-        self.settings_text_perm_combo.setMinimumWidth(0 if compact_rows else 210)
-        self.settings_voice_perm_combo.setMinimumWidth(0 if compact_rows else 210)
+        self.settings_text_perm_combo.setMinimumWidth(0 if stacked_rows else 210)
+        self.settings_voice_perm_combo.setMinimumWidth(0 if stacked_rows else 210)
 
         self.settings_invite_caption.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
@@ -1440,11 +1431,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             if w is not None:
                 w.deleteLater()
 
-    def set_compact_mode(self, enabled: bool):
-        self._compact_mode = bool(enabled)
-        self.compact_toggle_btn.setText("Компактно ✓" if self._compact_mode else "Компактно")
-        self.channels_layout.setSpacing(5 if self._compact_mode else 8)
-        self.render_channels(force=True)
 
     def _show_channels_skeleton(self, count: int = 6):
         self._channels_skeleton_visible = True
@@ -1694,7 +1680,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     # ------------------------------------------------------------------
     def render_channels(self, force: bool = False):
         current_id = self._active_channel_id()
-        digest = f"compact:{int(self._compact_mode)}\n" + self._channels_digest(self.channels, current_id)
+        digest = self._channels_digest(self.channels, current_id)
         if (not force) and digest == self._channels_signature:
             return
         self._channels_signature = digest
@@ -1717,7 +1703,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     channel=ch,
                     active=(int(ch.get("id", 0)) == current_id),
                     on_click=lambda c=ch: self.open_channel(c),
-                    compact=self._compact_mode,
                 )
                 self.channels_layout.insertWidget(self.channels_layout.count() - 1, item)
         finally:

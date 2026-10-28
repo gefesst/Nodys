@@ -25,19 +25,17 @@ class FriendItem(QFrame):
         on_decline=None,
         on_call=None,
         on_manage=None,
-        compact=False,
     ):
         super().__init__()
         self.setObjectName("FriendItem")
         self.setProperty("request", request_from is not None)
-        self.setProperty("compact", "true" if compact else "false")
-        self.setFixedHeight(54 if compact else 64)
+        self.setFixedHeight(64)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(9 if compact else 12, 7 if compact else 8, 9 if compact else 12, 7 if compact else 8)
-        layout.setSpacing(7 if compact else 10)
+        layout.setContentsMargins(12, 8, 12, 8)
+        layout.setSpacing(10)
 
-        avatar = AvatarLabel(size=36 if compact else 44)
+        avatar = AvatarLabel(size=44)
         avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
         avatar.set_online(online if request_from is None else None, ring_color="#2b2d31")
         layout.addWidget(avatar)
@@ -61,7 +59,7 @@ class FriendItem(QFrame):
             # Монохромный символ лучше читается на зелёной кнопке.
             self.call_btn = QPushButton("☎️")
             self.call_btn.setObjectName("FriendCallButton")
-            btn_size = 30 if compact else 34
+            btn_size = 34
             self.call_btn.setFixedSize(btn_size, btn_size)
             self.call_btn.setToolTip("Позвонить")
             if on_call:
@@ -85,7 +83,7 @@ class FriendItem(QFrame):
         if request_from is not None:
             btn_accept = QPushButton("Принять")
             btn_accept.setObjectName("AcceptButton")
-            btn_accept.setFixedHeight(30 if compact else 34)
+            btn_accept.setFixedHeight(34)
             if on_accept:
                 btn_accept.clicked.connect(lambda: on_accept(request_from))
             layout.addWidget(btn_accept)
@@ -93,7 +91,7 @@ class FriendItem(QFrame):
 
             btn_decline = QPushButton("Отклонить")
             btn_decline.setObjectName("DeclineButton")
-            btn_decline.setFixedHeight(30 if compact else 34)
+            btn_decline.setFixedHeight(34)
             if on_decline:
                 btn_decline.clicked.connect(lambda: on_decline(request_from))
             layout.addWidget(btn_decline)
@@ -123,7 +121,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self._has_loaded_friends_once = False
         self._has_loaded_requests_once = False
         self._polling_enabled = True
-        self._compact_mode = False
         self._skeleton_visible = False
 
         self.setObjectName("FriendsPage")
@@ -144,12 +141,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         head.addWidget(title)
         head.addStretch()
 
-        self.compact_toggle_btn = QPushButton("Компактно")
-        self.compact_toggle_btn.setObjectName("FriendsCompactToggle")
-        self.compact_toggle_btn.setCheckable(True)
-        self.compact_toggle_btn.toggled.connect(self.set_compact_mode)
-        head.addWidget(self.compact_toggle_btn)
-        install_opacity_feedback(self.compact_toggle_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         self.add_btn = QPushButton("Добавить друга")
         self.add_btn.setObjectName("AddFriendButton")
@@ -297,7 +288,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self._has_loaded_requests_once = False
 
         self.clear_list()
-        self.compact_toggle_btn.setChecked(False)
         self.hide_add_friend_panel()
         self.hide_inline_delete_confirm()
         self._show_skeleton(count=6)
@@ -374,11 +364,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         header.setObjectName("SectionHeader")
         self.list_layout.insertWidget(self.list_layout.count() - 1, header)
 
-    def set_compact_mode(self, enabled: bool):
-        self._compact_mode = bool(enabled)
-        self.compact_toggle_btn.setText("Компактно ✓" if self._compact_mode else "Компактно")
-        self.list_layout.setSpacing(5 if self._compact_mode else 8)
-        self._render_if_needed(force=True)
 
     def _make_empty_state(self, title: str, subtitle: str) -> QFrame:
         card = QFrame()
@@ -423,7 +408,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             )
             for f in self._friends_data
         ))
-        return req_key, fr_key, int(self._compact_mode)
+        return req_key, fr_key
 
     def _render_if_needed(self, force: bool = False):
         # Чтобы не мигать "пустым" списком на старте, ждём обе загрузки.
@@ -452,7 +437,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                         request_from=req_login,
                         on_accept=self.accept_request,
                         on_decline=self.decline_request,
-                        compact=self._compact_mode,
                     )
                     self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
@@ -474,7 +458,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                         online=True,
                         on_call=self.call_friend,
                         on_manage=self.show_friend_actions_menu,
-                        compact=self._compact_mode,
                     )
                     self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 
@@ -488,7 +471,6 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                         online=False,
                         on_call=self.call_friend,
                         on_manage=self.show_friend_actions_menu,
-                        compact=self._compact_mode,
                     )
                     self.list_layout.insertWidget(self.list_layout.count() - 1, item)
 

@@ -223,24 +223,6 @@ QPushButton#InlineConfirmDeleteButton:hover {
     background: #d83c3c;
 }
 
-/* ===== UI polish package #2 ===== */
-#FriendsCompactToggle {
-    min-height: 30px;
-    padding: 0 12px;
-    border-radius: 9px;
-    border: 1px solid #40444b;
-    background: #2f3136;
-    color: #dcddde;
-    font-size: 12px;
-    font-weight: 600;
-}
-#FriendsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
-#FriendsCompactToggle:checked {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: #ffffff;
-}
-
 #FriendItemName {
     font-size: 14px;
     font-weight: 700;
@@ -249,13 +231,6 @@ QPushButton#InlineConfirmDeleteButton:hover {
 #FriendItemSub {
     font-size: 12px;
     color: #aab0ba;
-}
-#FriendItem[compact="true"] #FriendItemName {
-    font-size: 13px;
-    font-weight: 650;
-}
-#FriendItem[compact="true"] #FriendItemSub {
-    font-size: 11px;
 }
 
 #FriendCallButton {

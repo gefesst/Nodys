@@ -20,14 +20,12 @@ class ChatFriendItem(QFrame):
         is_active=False,
         online=False,
         unread_count=0,
-        compact=False,
     ):
         super().__init__()
 
-        self.setFixedHeight(54 if compact else 64)
+        self.setFixedHeight(64)
         self.setObjectName("ChatFriendItem")
         self.setProperty("active", is_active)
-        self.setProperty("compact", "true" if compact else "false")
 
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -39,11 +37,11 @@ class ChatFriendItem(QFrame):
         content.setObjectName("ChatFriendContent")
 
         row = QHBoxLayout(content)
-        row.setContentsMargins(9 if compact else 12, 7 if compact else 8, 9 if compact else 12, 7 if compact else 8)
-        row.setSpacing(7 if compact else 10)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(10)
 
         # Круглый аватар + online dot
-        avatar = AvatarLabel(size=36 if compact else 44)
+        avatar = AvatarLabel(size=44)
         avatar.set_avatar(path=avatar_path, login=login, nickname=nickname)
         avatar.set_online(online, ring_color="#2f3136")
         row.addWidget(avatar)
@@ -160,7 +158,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         # Render/cache signatures for large lists
         self._friends_signature = ""
         self._messages_signature = None
-        self._compact_mode = False
         self._friends_loaded_once = False
         self._friends_skeleton_visible = False
 
@@ -184,12 +181,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         friends_head.addWidget(self.friends_head_title)
         friends_head.addStretch(1)
 
-        self.compact_toggle_btn = QPushButton("Компактно")
-        self.compact_toggle_btn.setObjectName("ChatsCompactToggle")
-        self.compact_toggle_btn.setCheckable(True)
-        self.compact_toggle_btn.toggled.connect(self.set_compact_mode)
-        friends_head.addWidget(self.compact_toggle_btn)
-        install_opacity_feedback(self.compact_toggle_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         friends_card_l.addLayout(friends_head)
 
@@ -326,7 +317,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
         self._clear_friends()
         self._clear_messages()
-        self.compact_toggle_btn.setChecked(False)
         self._show_friends_skeleton(count=6)
         self._show_messages_placeholder("Выберите диалог, чтобы увидеть сообщения")
 
@@ -381,12 +371,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         header.setObjectName("ChatsSectionHeader")
         self.friends_layout.insertWidget(self.friends_layout.count() - 1, header)
 
-    def set_compact_mode(self, enabled: bool):
-        self._compact_mode = bool(enabled)
-        self.compact_toggle_btn.setText("Компактно ✓" if self._compact_mode else "Компактно")
-        self.friends_layout.setSpacing(4 if self._compact_mode else 6)
-        self._friends_signature = ""
-        self.load_friends(force=True)
 
     def _show_friends_skeleton(self, count: int = 6):
         self._friends_skeleton_visible = True
@@ -541,7 +525,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         friends_sorted = sorted(friends, key=sort_key)
 
         # Сигнатура левого списка (включает unread + online + активный чат)
-        sig_parts = [f"active:{current_login or ''}", f"compact:{int(self._compact_mode)}"]
+        sig_parts = [f"active:{current_login or ''}"]
         for fr in friends_sorted:
             fl = fr.get("login", "")
             sig_parts.append(
@@ -577,7 +561,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                     is_active=(friend.get("login") == current_login),
                     unread_count=count,
                     on_click=lambda f=friend: self.open_chat(f),
-                    compact=self._compact_mode,
                 )
                 self.friends_layout.insertWidget(self.friends_layout.count() - 1, item)
 
@@ -593,7 +576,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                     is_active=(friend.get("login") == current_login),
                     unread_count=count,
                     on_click=lambda f=friend: self.open_chat(f),
-                    compact=self._compact_mode,
                 )
                 self.friends_layout.insertWidget(self.friends_layout.count() - 1, item)
 

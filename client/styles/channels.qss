@@ -586,24 +586,6 @@ QLabel#ChannelVoiceSpeakingBadge[off="true"] {
     border: 1px solid #4a556b;
 }
 
-/* ===== UI polish package #2 ===== */
-#ChannelsCompactToggle {
-    min-height: 28px;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid #40444b;
-    background: #2f3136;
-    color: #dcddde;
-    font-size: 12px;
-    font-weight: 600;
-}
-#ChannelsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
-#ChannelsCompactToggle:checked {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: #ffffff;
-}
-
 #ChannelListItemTitle {
     font-size: 13px;
     font-weight: 700;
@@ -612,12 +594,6 @@ QLabel#ChannelVoiceSpeakingBadge[off="true"] {
 #ChannelListItemSub {
     font-size: 11px;
     color: #a5adba;
-}
-#ChannelListItem[compact="true"] #ChannelListItemTitle {
-    font-size: 12px;
-}
-#ChannelListItem[compact="true"] #ChannelListItemSub {
-    font-size: 10px;
 }
 
 #ChannelsEmptyStateCard {

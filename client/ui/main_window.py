@@ -463,7 +463,7 @@ class MainWindow(QWidget):
 
         if getattr(self, "call_notice", None):
             self.call_notice.adjustSize()
-            # Compact toast width, but constrained by current page width
+            # Toast width, but constrained by current page width
             max_w = max(280, min(420, ow - 44))
             self.call_notice.setFixedWidth(max_w)
             self.call_notice.adjustSize()

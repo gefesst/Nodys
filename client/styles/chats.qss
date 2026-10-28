@@ -135,36 +135,12 @@ QWidget#ChatsPage QScrollBar::sub-line:vertical {
     padding-left: 4px;
 }
 
-#ChatsCompactToggle {
-    min-height: 28px;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid #40444b;
-    background: #2f3136;
-    color: #dcddde;
-    font-size: 12px;
-    font-weight: 600;
-}
-#ChatsCompactToggle:hover { background: #36393f; border-color: #4a4e57; }
-#ChatsCompactToggle:checked {
-    background: #3b82f6;
-    border-color: #3b82f6;
-    color: white;
-}
-
 #ChatsSectionHeader {
     color:#b9bbbe;
     font-size:11px;
     font-weight:700;
     text-transform: uppercase;
     padding:6px 4px 2px 4px;
-}
-
-#ChatFriendItem[compact="true"] #ChatFriendName {
-    font-size: 13px;
-}
-#ChatFriendItem[compact="true"] #ChatFriendStatus {
-    font-size: 11px;
 }
 
 #ChatsSkeletonCard {
