@@ -1,7 +1,7 @@
 """Qt-facing voice lifecycle; network/device work stays off the UI thread."""
 from concurrent.futures import ThreadPoolExecutor
 import threading
-from PySide6.QtCore import QObject, Signal, Slot, Qt
+from PySide6.QtCore import QObject, Signal, Slot, Qt, QCoreApplication, QTimer
 from voice_client import VoiceClient
 
 # One audio-device owner at a time: old stop completes before a new start.
@@ -12,17 +12,20 @@ class VoiceSession(QObject):
     ready = Signal()
     failed = Signal(str)
     _completed = Signal(object)
+    _settled = Signal()
 
     def __init__(self, login, token='', host='127.0.0.1', port=5556):
-        super().__init__()
+        super().__init__(QCoreApplication.instance())
         self._arguments = dict(login=login, token=token, host=host, port=port)
         self._cancelled = threading.Event()
         self._core = None
+        self._stop_future = None
         self._started = False
         self.running = False
         self._mic = True
         self._sound = True
         self._completed.connect(self._deliver, Qt.QueuedConnection)
+        self._settled.connect(self._release, Qt.QueuedConnection)
 
     def start(self, peer_login=None, room_id=None):
         if self._started or self._cancelled.is_set():
@@ -50,7 +53,8 @@ class VoiceSession(QObject):
         except Exception as error:
             if core:
                 core.stop()
-            self._completed.emit(str(error))
+            if not self._cancelled.is_set():
+                self._completed.emit(str(error))
 
     @Slot(object)
     def _deliver(self, error):
@@ -67,11 +71,24 @@ class VoiceSession(QObject):
             return
         self._cancelled.set()
         self.running = False
-        _lifecycle.submit(self._stop)
+        self._stop_future = _lifecycle.submit(self._stop)
 
     def _stop(self):
-        if self._core:
-            self._core.stop()
+        try:
+            if self._core:
+                self._core.stop()
+        finally:
+            try:
+                self._settled.emit()
+            except RuntimeError:
+                pass  # QApplication teardown already destroyed the wrapper.
+
+    @Slot()
+    def _release(self):
+        if self._stop_future is None or not self._stop_future.done():
+            QTimer.singleShot(0, self._release)
+            return
+        self.deleteLater()
 
     def set_mic_enabled(self, enabled):
         self._mic = bool(enabled)

@@ -85,3 +85,17 @@ class VoiceSessionTests(unittest.TestCase):
             self.pump_until(lambda:bool(errors))
         self.assertFalse(session.running)
         self.assertEqual(errors,['device failure'])
+
+    def test_stopped_session_is_destroyed_on_gui_after_worker_finishes(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from shiboken6 import isValid
+        session = VoiceSession('alice')
+        self.assertIs(session.parent(), self.app)
+        destroyed = []
+        session.destroyed.connect(lambda: destroyed.append(threading.get_ident()), Qt.DirectConnection)
+        session.stop()
+        _lifecycle.submit(lambda: None).result(timeout=2)
+        self.app.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.assertFalse(isValid(session))
+        self.assertEqual(destroyed, [threading.get_ident()])
