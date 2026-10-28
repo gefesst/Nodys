@@ -84,6 +84,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         )
 
     def show_section(self,key):
+        self._profile_section = key
         for name,button in self.profile_tabs.items():button.setChecked(name==key)
         self.edit_block.setVisible(key=='edit');self.password_block.setVisible(key=='password')
         self.save_button.setVisible(key!='main');self.edit_button.setVisible(key=='main')
@@ -271,14 +272,18 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def save_changes(self):
         if self._saving:return
-        nickname = self.nickname_edit.text().strip()
+        changing_password = getattr(self, "_profile_section", "edit") == "password"
+        if changing_password and not self.password_edit.text():
+            self.show_toast("Введите новый пароль", msec=2800)
+            return
+        nickname = self.nickname if changing_password else self.nickname_edit.text().strip()
         if not nickname:
             self.show_toast("Никнейм не может быть пустым", msec=2800)
             return
 
         # Если выбран файл из проводника (абсолютный путь), копируем в client/avatars
-        avatar_for_server = self.avatar_path
-        if self.avatar_path and os.path.isabs(self.avatar_path):
+        avatar_for_server = getattr(getattr(self, "ctx", None), "avatar", "") if changing_password else self.avatar_path
+        if not changing_password and self.avatar_path and os.path.isabs(self.avatar_path):
             normalized = self._normalize_avatar_to_project(self.avatar_path)
             if normalized:
                 self.avatar_path = normalized
@@ -288,8 +293,8 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             "action": "update_profile",
             "login": self.login,
             "nickname": nickname,
-            "password": self.password_edit.text(),
-            "current_password": self.current_password_edit.text(),
+            "password": self.password_edit.text() if changing_password else "",
+            "current_password": self.current_password_edit.text() if changing_password else "",
             "avatar": avatar_for_server
         }
 
@@ -309,6 +314,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         self.save_button.setText('Сохранить изменения')
         if resp.get("status") == "ok":
             self.nickname = getattr(self,'_submitted_profile',{}).get('nickname',self.nickname_edit.text().strip())
+            self.avatar_path = self._submitted_profile.get("avatar", self.avatar_path)
             self.display_name.setText(self.nickname)
 
             # Обновляем локальный config для автологина

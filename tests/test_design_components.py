@@ -74,3 +74,29 @@ class DesignGeometryTests(unittest.TestCase):
         window._mic_clicked()
         self.assertEqual(mic,[False,True])
         window.close()
+
+    def test_profile_sections_do_not_submit_hidden_password_or_profile_drafts(self):
+        from ui.profile_page import ProfilePage
+        page = ProfilePage('alice','Alice')
+        page.ctx = SimpleNamespace(avatar='saved-avatar')
+        sent = []
+        page.start_request = lambda payload, callback: sent.append((payload,callback))
+        page.show_section("password")
+        page.save_changes()
+        self.assertEqual(sent, [])
+        page.nickname_edit.setText('Unsubmitted name')
+        page.avatar_path = 'unsubmitted-avatar'
+        page.password_edit.setText('new-password')
+        page.current_password_edit.setText('current-password')
+        page.show_section('password')
+        page.save_changes()
+        self.assertEqual(sent[-1][0]['nickname'],'Alice')
+        self.assertEqual(sent[-1][0]['avatar'],'saved-avatar')
+        self.assertEqual(sent[-1][0]['password'],'new-password')
+        sent[-1][1]({'status':'error','message':'test rejection'})
+        page.show_section('edit')
+        page.save_changes()
+        self.assertEqual(sent[-1][0]['password'],'')
+        self.assertEqual(sent[-1][0]['current_password'],'')
+        self.assertEqual(sent[-1][0]['nickname'],'Unsubmitted name')
+        page.close()
