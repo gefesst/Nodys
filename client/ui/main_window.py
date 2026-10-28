@@ -1035,6 +1035,21 @@ class MainWindow(QWidget):
     def _stop_background_work(self):
         """One nonblocking cleanup path for logout and application close."""
         self.calls.reset()
+        outgoing = getattr(self, 'outgoing_window', None)
+        if outgoing is not None:
+            outgoing.finished_by_server = True
+            outgoing.close()
+            self.outgoing_window = None
+        quick = getattr(self, 'quick_switch', None)
+        if quick is not None:
+            quick.close()
+        settings = getattr(self, 'settings_page', None)
+        microphone = getattr(settings, 'microphone_check', None)
+        if microphone is not None:
+            microphone.close()
+        dock = getattr(self, 'voice_dock', None)
+        if dock is not None:
+            dock.hide()
         for name in ("call_events_timer", "heartbeat_timer", "self_status_timer",
                      "channel_invites_badge_timer", "_call_notice_timer"):
             timer = getattr(self, name, None)
