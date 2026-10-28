@@ -255,54 +255,22 @@ class VoiceParticipantItem(QFrame):
     def __init__(self, participant: dict, current_login: str):
         super().__init__()
         self.participant = participant or {}
-
-        speaking = bool(self.participant.get("speaking", False))
-        role = (self.participant.get("role") or "member").strip().lower()
-        login = self.participant.get("login", "")
-        nickname = self.participant.get("nickname", login or "Участник")
-        online = bool(self.participant.get("online", True))
-
-        self.setObjectName("ChannelVoiceMemberItem")
-        self.setProperty("speaking", "true" if speaking else "false")
-        self.style().unpolish(self)
-        self.style().polish(self)
-
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(8)
-
-        avatar = AvatarLabel(size=34)
-        avatar.set_avatar(path=self.participant.get("avatar", ""), login=login, nickname=nickname)
-        avatar.set_online(online, ring_color="#2f343d")
-        lay.addWidget(avatar)
-
-        text_col = QVBoxLayout()
-        text_col.setContentsMargins(0, 0, 0, 0)
-        text_col.setSpacing(1)
-
-        display_name = f"{nickname} (вы)" if login and login == current_login else nickname
-        name_lbl = QLabel(display_name)
-        name_lbl.setObjectName("ChannelVoiceMemberName")
-        text_col.addWidget(name_lbl)
-
-        role_ru = (
-            "владелец"
-            if role == "owner"
-            else ("админ" if role == "admin" else ("модератор" if role == "moderator" else "участник"))
-        )
-        state = "в сети" if online else "не в сети"
-        meta_lbl = QLabel(f"{login} · {role_ru} · {state}")
-        meta_lbl.setObjectName("ChannelVoiceMemberMeta")
-        text_col.addWidget(meta_lbl)
-
-        lay.addLayout(text_col, 1)
-
-        badge = QLabel("ГОВОРИТ" if speaking else "ТИШИНА")
-        badge.setObjectName("ChannelVoiceSpeakingBadge")
-        badge.setProperty("off", "false" if speaking else "true")
-        badge.style().unpolish(badge)
-        badge.style().polish(badge)
-        lay.addWidget(badge)
+        login=self.participant.get('login','')
+        name=self.participant.get('nickname') or login or 'Участник'
+        speaking=bool(self.participant.get('speaking'))
+        self.setObjectName('ChannelVoiceMemberItem')
+        self.setProperty('speaking',speaking)
+        self.setMinimumWidth(180)
+        self.setFixedHeight(225)
+        layout=QVBoxLayout(self);layout.setContentsMargins(20,28,20,24);layout.setSpacing(14)
+        avatar=AvatarLabel(68);avatar.set_avatar(self.participant.get('avatar',''),login,name)
+        avatar.setProperty('speaking',speaking)
+        layout.addWidget(avatar,0,Qt.AlignHCenter)
+        title=QLabel('Вы' if login==current_login else name);title.setObjectName('ChannelVoiceMemberName')
+        title.setAlignment(Qt.AlignCenter);title.setWordWrap(True);layout.addWidget(title)
+        state=QLabel('Говорит' if speaking else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
+        state.setAlignment(Qt.AlignCenter);layout.addWidget(state)
+        layout.addStretch()
 
 
 class ChannelInviteItem(QFrame):
@@ -800,10 +768,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.voice_members_scroll.setWidgetResizable(True)
 
         self.voice_members_container = QWidget()
-        self.voice_members_layout = QVBoxLayout(self.voice_members_container)
+        self.voice_members_layout = QGridLayout(self.voice_members_container)
         self.voice_members_layout.setContentsMargins(0, 0, 0, 0)
-        self.voice_members_layout.setSpacing(6)
-        self.voice_members_layout.addStretch()
+        self.voice_members_layout.setSpacing(20)
+        self.voice_members_layout.setAlignment(Qt.AlignTop)
 
         self.voice_members_scroll.setWidget(self.voice_members_container)
         vm_l.addWidget(self.voice_members_scroll, 1)
@@ -1301,6 +1269,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         super().resizeEvent(event)
         self._reposition_overlays()
         self._apply_settings_responsive_layout()
+        if hasattr(self,'voice_members_scroll'):
+            columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//210))
+            if columns!=getattr(self,'_voice_columns',None):
+                self._voice_columns=columns
+                self._render_voice_participants()
 
     def _is_poll_allowed(self) -> bool:
         if not self._alive or not self.ctx.login:
@@ -1539,7 +1512,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 item.widget().deleteLater()
 
     def _clear_voice_members_list(self):
-        for i in reversed(range(self.voice_members_layout.count() - 1)):
+        for i in reversed(range(self.voice_members_layout.count())):
             item = self.voice_members_layout.takeAt(i)
             if item and item.widget():
                 item.widget().deleteLater()
@@ -2085,12 +2058,16 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             empty = QLabel("Пока никто не подключён к голосовому каналу")
             empty.setObjectName("ChannelsEmptyList")
             empty.setWordWrap(True)
-            self.voice_members_layout.insertWidget(self.voice_members_layout.count() - 1, empty)
+            self.voice_members_layout.addWidget(empty,0,0,1,3)
             return
 
-        for part in participants:
+        columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//210))
+        self._voice_columns=columns
+        for i,part in enumerate(participants):
             row = VoiceParticipantItem(participant=part, current_login=self.ctx.login)
-            self.voice_members_layout.insertWidget(self.voice_members_layout.count() - 1, row)
+            self.voice_members_layout.addWidget(row,i//columns,i%columns)
+        for column in range(3):
+            self.voice_members_layout.setColumnStretch(column,1 if column<columns else 0)
 
     def load_voice_participants(self, force: bool = False):
         if not self._alive or not self.active_channel:

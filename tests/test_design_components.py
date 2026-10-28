@@ -79,6 +79,26 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertIsNone(handle.drag_origin)
         window.close()
 
+    def test_voice_tiles_reflow_and_clear_all_participants(self):
+        from ui.channels_page import ChannelsPage
+        page=ChannelsPage()
+        page._voice_participants=[{'login':str(i),'nickname':'Участник '+str(i)} for i in range(5)]
+        page.main_stack.setCurrentWidget(page.channel_page)
+        page.channel_inner_stack.setCurrentIndex(1)
+        page.show()
+        for width in (1032,1192,1352):
+            page.resize(width,740)
+            self.app.processEvents()
+            page._render_voice_participants()
+            self.assertEqual(page.voice_members_layout.count(),5)
+            self.assertLessEqual(page._voice_columns,3)
+            for i in range(5):
+                self.assertEqual(page.voice_members_layout.itemAt(i).widget().height(),225)
+        page._voice_participants=[]
+        page._render_voice_participants()
+        self.assertEqual(page.voice_members_layout.count(),1)
+        page.close()
+
     def test_theme_does_not_clip_navigation_or_icon_buttons(self):
         from PySide6.QtWidgets import QWidget, QVBoxLayout
         from ui.design.shell import NavButton

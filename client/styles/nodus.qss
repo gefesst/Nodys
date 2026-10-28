@@ -93,3 +93,7 @@ QFrame#CallContent {background:transparent;border:0;}
 QLabel#CallPeerName {font-size:22px;font-weight:600;}
 QLabel#CallSpeaking {font-size:12px;color:@SUB@;}
 QLabel#CallTimer {font-size:18px;font-weight:600;}
+
+QFrame#ChannelVoiceMemberItem[speaking="true"] {border:1px solid #67D5AD;}
+QLabel#ChannelVoiceMemberName {font-size:16px;font-weight:600;}
+QLabel#ChannelVoiceMemberMeta {font-size:12px;color:@SUB@;}
