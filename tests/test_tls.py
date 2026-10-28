@@ -50,6 +50,12 @@ class TlsHandshakeTests(unittest.TestCase):
                         with context.wrap_socket(raw,server_side=True) as secure:
                             secure.sendall(secure.recv(4))
                     except ssl.SSLError:pass
+                    except ConnectionResetError:
+                        # Windows may reset the server socket after the client
+                        # rejects its certificate. The caller still must raise
+                        # SSLCertVerificationError; trusted exchanges must work.
+                        if trusted and host == 'localhost':
+                            raise
             except Exception as error:errors.append(error)
             finally:listener.close()
         worker=threading.Thread(target=serve);worker.start()
