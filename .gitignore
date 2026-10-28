@@ -41,3 +41,6 @@ dist/
 .venv/
 *.db-wal
 *.db-shm
+
+# Local automated review evidence
+/work/
