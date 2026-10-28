@@ -43,21 +43,30 @@ class AuthWindow(QWidget):
 
         layout.addWidget(self.btn_login)
         layout.addWidget(self.btn_register)
+        self.status_label = QLabel()
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
         layout.addStretch()
 
     def login_user(self):
+        if self.thread and self.thread.isRunning():
+            return
+        self.status_label.clear()
+        self.btn_login.setEnabled(False)
+        self.btn_register.setEnabled(False)
         data = {
             "action": "login",
             "login": self.login.text().strip(),
             "password": self.password.text()
         }
 
-        host, port = get_api_endpoint()
-        self.thread = NetworkThread(host, port, data)
+        self.thread = NetworkThread(None, None, data)
         self.thread.finished.connect(self.handle_login_response)
         self.thread.start()
 
     def handle_login_response(self, resp):
+        self.btn_login.setEnabled(True)
+        self.btn_register.setEnabled(True)
         if resp.get("status") == "ok":
             login = resp.get("login", "")
             nickname = resp.get("nickname", "")
@@ -73,7 +82,7 @@ class AuthWindow(QWidget):
             if callable(self.on_login_success):
                 self.on_login_success()
         else:
-            QMessageBox.warning(self, "Ошибка", resp.get("message", "Неверный логин или пароль"))
+            self.status_label.setText(resp.get("message", "Неверный логин или пароль"))
 
     def open_register(self):
         if callable(self.on_open_register):

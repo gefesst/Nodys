@@ -79,3 +79,13 @@ Database updates now use numbered migrations. Existing databases receive an auto
 Voice connection and device startup/shutdown run in the background. Switching channels cancels a pending connection; navigating to Friends keeps an existing call. Manual preview: place a call, switch between Friends/Chats/Channels, and end it. In channel voice, switch channels while connection is pending and confirm the old channel does not reconnect itself.
 
 Application packaging remains deferred; development and manual review continue through the existing local preview launcher and draft PRs.
+
+## Sixth change set: request boundaries and authentication UI
+
+Control requests are validated before DB/password work: known actions/fields, bounded text, exact integer/boolean types, a 256 KB envelope and a five-second absolute receive deadline. Duplicate JSON keys, non-finite numbers and oversized frames are rejected. Public responses no longer include internal exception details.
+
+Admission uses bounded in-process counters: 120 connections/second/IP; login and registration share 30 attempts/minute/IP, 8 attempts/minute/IP+login and 120 attempts/minute globally. Limits use the actual socket peer address, ignore claimed identity for connection admission and return a `rate_limited` result for authentication attempts. These are development defaults, reset on server restart, and are not distributed abuse protection. Shared NAT users share the IP budget. Invalid credentials and successful requests both consume the budget.
+
+Remembered login now runs in the background with a "Войти вручную" cancellation button. Late results cannot overwrite a replaced token. Login errors appear inline and duplicate submissions are disabled while the request runs. Logout and close send bounded background cleanup with a captured identity; Qt does not wait for network joins. Cleanup remains best effort: abrupt process termination or offline servers can prevent immediate revocation, while local credentials are cleared on logout.
+
+Legacy Unicode plaintext passwords can be verified and upgraded on successful login; simultaneous registrations for the same login produce one success and one duplicate result. Packaging remains deferred.

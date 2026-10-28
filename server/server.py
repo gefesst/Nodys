@@ -4,8 +4,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 try:
     from .server_transport.tls import server_context
+    from .server_transport.framing import receive as recv_request
+    from .server_transport.admission import Admission
+    from .protocol.requests import validate as validate_request
 except ImportError:
     from server_transport.tls import server_context
+    from server_transport.framing import receive as recv_request
+    from server_transport.admission import Admission
+    from protocol.requests import validate as validate_request
 
 try:
     from .storage import events as event_store
@@ -122,7 +128,7 @@ def verify_password(password: str, stored: str) -> bool:
         except Exception:
             return False
     # legacy plaintext
-    return hmac.compare_digest(password, stored)
+    return hmac.compare_digest(password.encode("utf-8"), stored.encode("utf-8"))
 
 
 def maybe_upgrade_legacy_password(conn: sqlite3.Connection, login: str, stored: str, password: str) -> None:
@@ -145,44 +151,6 @@ def _recv_exact(conn: socket.socket, n: int) -> bytes:
             return b""
         buf += chunk
     return buf
-
-
-def recv_request(conn: socket.socket, max_bytes: int = 10_000_000) -> Optional[Dict[str, Any]]:
-    """Receive one JSON request.
-
-    Supports new length-prefixed frames and legacy raw JSON.
-    """
-    header = _recv_exact(conn, 4)
-    if not header:
-        return None
-
-    # Legacy: JSON starts with '{' or '['
-    if header[:1] in (b"{", b"["):
-        data = header
-        conn.settimeout(0.4)
-        while len(data) < max_bytes:
-            try:
-                chunk = conn.recv(65536)
-            except socket.timeout:
-                break
-            if not chunk:
-                break
-            data += chunk
-        try:
-            return json.loads(data.decode("utf-8"))
-        except Exception:
-            return None
-
-    length = struct.unpack("!I", header)[0]
-    if length <= 0 or length > max_bytes:
-        return None
-    payload = _recv_exact(conn, length)
-    if not payload:
-        return None
-    try:
-        return json.loads(payload.decode("utf-8"))
-    except Exception:
-        return None
 
 
 def send_response(conn: socket.socket, obj: Dict[str, Any]) -> None:
@@ -397,11 +365,11 @@ def add_user(login: str, password: str, nickname: str, avatar: str) -> bool:
     with database_connection(DB_FILE) as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO users(login, password, nickname, avatar) VALUES (?,?,?,?)",
+            "INSERT OR IGNORE INTO users(login, password, nickname, avatar) VALUES (?,?,?,?)",
             (login, hash_password(password), nickname, avatar or ""),
         )
         conn.commit()
-    return True
+        return cur.rowcount == 1
 
 
 def authenticate(login: str, password: str) -> bool:
@@ -1469,6 +1437,10 @@ def cleanup_calls_for_user(user):
 # -------------------- Request dispatcher --------------------
 
 def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        validate_request(data)
+    except ValueError as error:
+        return {"status":"error", "code":"invalid_request", "message":str(error)}
     prune_stale_calls()
 
     action = data.get("action")
@@ -1854,6 +1826,9 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
 # -------------------- Server loop --------------------
 
+_admission = Admission()
+
+
 def handle_client(conn: socket.socket, addr, tls_context=None):
     try:
         conn.settimeout(5.0)
@@ -1863,11 +1838,21 @@ def handle_client(conn: socket.socket, addr, tls_context=None):
         if not data:
             send_response(conn, {"status": "error", "message": "Пустой запрос"})
             return
+        validate_request(data)
+        if data['action'] in ('login','register') and not _admission.allow_auth(addr[0],data.get('login','')):
+            send_response(conn, {"status":"error", "code":"rate_limited",
+                                 "message":"Слишком много попыток. Повторите через минуту.", "retry_after":60})
+            return
         resp = handle_request(data)
         send_response(conn, resp)
-    except Exception as e:
+    except (ValueError, TimeoutError) as error:
         try:
-            send_response(conn, {"status": "error", "message": f"Ошибка сервера: {e}"})
+            send_response(conn, {"status":"error", "code":"invalid_request", "message":"Некорректный или незавершённый запрос"})
+        except Exception:
+            pass
+    except Exception:
+        try:
+            send_response(conn, {"status": "error", "code":"internal_error", "message": "Внутренняя ошибка сервера"})
         except Exception:
             pass
     finally:
@@ -1898,7 +1883,7 @@ def start_server(host: str = None, port: int = None):
             slots.release()
     while True:
         conn, addr = server.accept()
-        if not slots.acquire(blocking=False):
+        if not _admission.connections.allow(addr[0]) or not slots.acquire(blocking=False):
             conn.close()
             continue
         try:

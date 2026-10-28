@@ -37,6 +37,7 @@ class ThreadSafeMixin:
 
         session_at_start = getattr(ctx, "session_token", None)
         t = NetworkThread(host, port, payload)
+        self._threads = [item for item in self._threads if item.isRunning()]
         self._threads.append(t)
 
         def done(resp):
@@ -55,14 +56,17 @@ class ThreadSafeMixin:
         t.finished.connect(done)
         t.start()
 
-    def shutdown_requests(self, wait_ms=2000):
+    def shutdown_requests(self, wait_ms=0):
+        import time
+        deadline = time.monotonic() + max(0, wait_ms) / 1000
         for t in list(getattr(self, "_threads", [])):
             try:
                 if hasattr(t, "abort"):
                     t.abort()
                 t.requestInterruption()
-                if t.isRunning():
-                    t.wait(wait_ms)
+                remaining = int((deadline - time.monotonic()) * 1000)
+                if t.isRunning() and remaining > 0:
+                    t.wait(remaining)
             except Exception:
                 pass
 

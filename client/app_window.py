@@ -1,48 +1,14 @@
-from transport.control import connect_api
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton
+from PySide6.QtCore import Qt, Slot
+from network import NetworkThread
 from PySide6.QtGui import QIcon
 import os
-import socket
-import json
-import struct
 
 from auth_window import AuthWindow
 from register_window import RegisterWindow
 from ui.main_window import MainWindow
 from config import load_config, save_config, clear_config
 from user_context import UserContext
-from settings import get_api_endpoint
-
-
-def _recv_exact(sock: socket.socket, n: int) -> bytes:
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
-            return b""
-        buf += chunk
-    return buf
-
-
-def _send_packet(sock: socket.socket, obj: dict) -> None:
-    payload = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-    sock.sendall(struct.pack("!I", len(payload)) + payload)
-
-
-def _recv_packet(sock: socket.socket, max_bytes: int = 2_000_000) -> dict:
-    hdr = _recv_exact(sock, 4)
-    if not hdr:
-        return {}
-    length = struct.unpack("!I", hdr)[0]
-    if length <= 0 or length > max_bytes:
-        return {}
-    body = _recv_exact(sock, length)
-    if not body:
-        return {}
-    try:
-        return json.loads(body.decode("utf-8"))
-    except Exception:
-        return {}
 
 
 class AppWindow(QWidget):
@@ -62,6 +28,9 @@ class AppWindow(QWidget):
             self.setWindowIcon(QIcon(icon_path))
 
         self.ctx = UserContext()
+        self._resume_token = None
+        self._resume_thread = None
+        self._closing = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -100,7 +69,32 @@ class AppWindow(QWidget):
             self.show_auth()
             return
 
-        resp = self._try_resume_session(token)
+        self.resume_page = QWidget()
+        resume_layout = QVBoxLayout(self.resume_page)
+        resume_layout.addWidget(QLabel("Восстанавливаем вход…"))
+        cancel = QPushButton("Войти вручную")
+        cancel.clicked.connect(self._cancel_resume)
+        resume_layout.addWidget(cancel)
+        self.stack.addWidget(self.resume_page)
+        self.stack.setCurrentWidget(self.resume_page)
+        self._resume_token = token
+        self._resume_thread = NetworkThread(None, None, {"action":"resume_session", "token":token})
+        self._resume_thread.finished.connect(self._handle_resume_response, Qt.QueuedConnection)
+        self._resume_thread.start()
+
+    def _cancel_resume(self):
+        self._resume_token = None
+        if self._resume_thread:
+            self._resume_thread.abort()
+        self.show_auth()
+
+    @Slot(dict)
+    def _handle_resume_response(self, resp):
+        token = self._resume_token
+        cfg = load_config()
+        if self._closing or not token or cfg.get("token") != token:
+            return
+        self._resume_token = None
         if resp.get("status") == "ok":
             login = resp.get("login", "")
             nickname = resp.get("nickname", "")
@@ -125,19 +119,6 @@ class AppWindow(QWidget):
                 pass
             self.show_auth()
 
-    def _try_resume_session(self, token: str) -> dict:
-        """Try to resume session by token.
-
-        This is a small synchronous call used only on app startup.
-        """
-        host, port = get_api_endpoint()
-        try:
-            with connect_api(host, port, timeout=1.5) as s:
-                _send_packet(s, {"action": "resume_session", "token": token})
-                return _recv_packet(s)
-        except Exception:
-            return {}
-
     def _ensure_main_page(self):
         if self.main_page is None:
             self.main_page = MainWindow(controller=self)
@@ -150,6 +131,7 @@ class AppWindow(QWidget):
         self.stack.setCurrentWidget(self.register_page)
 
     def show_main(self):
+        self._resume_token = None
         self._ensure_main_page()
         # Полный рефреш main-части под текущий UserContext
         self.main_page.reload_from_context(full_reset=True)
@@ -160,6 +142,14 @@ class AppWindow(QWidget):
         self.show_auth()
 
     def closeEvent(self, event):
+        self._closing = True
+        self._resume_token = None
+        if self._resume_thread:
+            self._resume_thread.abort()
+        for page in (self.auth_page, self.register_page):
+            request = getattr(page, "thread", None)
+            if request:
+                request.abort()
         # Корректно закрыть внутреннюю main-страницу (остановка таймеров/потоков)
         try:
             if self.main_page is not None:
