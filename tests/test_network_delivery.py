@@ -42,3 +42,18 @@ class NetworkDeliveryTests(unittest.TestCase):
         worker.start();worker.join(1);request.abort()
         self.app.processEvents()
         self.assertEqual(callbacks,[])
+
+    def test_completed_request_is_destroyed_on_gui_after_delivery(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, Qt
+        from shiboken6 import isValid
+        events = []
+        request = NetworkThread('localhost', 1, {'action': 'status'})
+        self.assertIs(request.parent(), self.app)
+        request.finished.connect(lambda _: events.append(('delivered', threading.get_ident())))
+        request.destroyed.connect(lambda: events.append(('destroyed', threading.get_ident())), Qt.DirectConnection)
+        with patch.object(request, '_run', side_effect=lambda: request._emit_if_alive({'status': 'ok'})):
+            request.start()
+            self.spin(lambda: request not in NetworkThread._inflight)
+            QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        self.assertFalse(isValid(request))
+        self.assertEqual(events, [('delivered', threading.get_ident()), ('destroyed', threading.get_ident())])

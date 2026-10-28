@@ -188,7 +188,9 @@ class NetworkThread(QObject):
     _hooked_application = None
 
     def __init__(self, host: Optional[str], port: Optional[int], data: Dict[str, Any]):
-        super().__init__()
+        # Keep Qt ownership on the GUI thread. Python's cyclic collector can run
+        # in a network worker; it must not destroy a Qt wrapper there.
+        super().__init__(QCoreApplication.instance())
         self.host = host
         self.port = port
         self.data = dict(data)
@@ -254,6 +256,9 @@ class NetworkThread(QObject):
             QTimer.singleShot(0, self._release)
             return
         NetworkThread._inflight.discard(self)
+        # All completion signals were queued before _settled. The worker has
+        # exited, so release native state explicitly on this object's Qt thread.
+        self.deleteLater()
 
     def _worker(self):
         try:
