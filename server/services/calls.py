@@ -55,11 +55,13 @@ class CallService:
             self.emit(connection,notifications,callee,dict(type='incoming_call',from_user=caller))
         return True, 'ok'
 
-    def accept(self, callee, caller):
+    def accept(self, callee, caller, expected_id=None):
         a,b=sorted((callee,caller))
         with self.transaction() as (connection, notifications):
-            row=connection.execute('SELECT status,caller_login FROM active_call_pairs WHERE user_a=? AND user_b=?',(a,b)).fetchone()
+            row=connection.execute('SELECT status,caller_login,created_at FROM active_call_pairs WHERE user_a=? AND user_b=?',(a,b)).fetchone()
             if not row or row[1] != caller or caller == callee:
+                return False
+            if expected_id is not None and row[2] != expected_id:
                 return False
             if row[0] == 'active':
                 return True

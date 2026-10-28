@@ -152,3 +152,20 @@ class VoiceAuthorizationTests(VoiceFixture, unittest.TestCase):
             connection.execute('UPDATE voice_tickets SET expires=0 WHERE login=?',('bob',))
         self.assertEqual(self.audio('alice'),0)
         self.assertEqual(self.audio('bob'),0)
+
+    def test_admission_rejects_before_database_work(self):
+        from unittest.mock import patch
+        packet=self.ciphers['alice'].seal(b'H')
+        with patch.object(self.relay.ip_budget,'allow',return_value=False), patch.object(self.relay,'database') as database:
+            self.relay.handle(self.sink,packet,self.addresses['alice'])
+            database.assert_not_called()
+
+    def test_expired_grant_and_other_room_are_not_forwarded(self):
+        other=self.server.create_channel('bob','private room')
+        self.connect('bob',room=other['id'])
+        self.assertEqual(self.audio('alice'),0)
+        self.connect('bob',room=self.channel['id'])
+        self.assertEqual(self.audio('alice'),1)
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            conn.execute('UPDATE voice_tickets SET expires=0 WHERE login=?',('bob',))
+        self.assertEqual(self.audio('alice'),0)

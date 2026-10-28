@@ -156,10 +156,16 @@ def _chat_baseline(conn):
 
 def _call_heartbeats(connection):
     columns = {row[1] for row in connection.execute('PRAGMA table_info(active_call_pairs)')}
-    for name in ('seen_a', 'seen_b'):
+    statements = {
+        'seen_a': ("ALTER TABLE active_call_pairs ADD COLUMN seen_a TEXT NOT NULL DEFAULT ''",
+                   'UPDATE active_call_pairs SET seen_a=updated_at'),
+        'seen_b': ("ALTER TABLE active_call_pairs ADD COLUMN seen_b TEXT NOT NULL DEFAULT ''",
+                   'UPDATE active_call_pairs SET seen_b=updated_at'),
+    }
+    for name, queries in statements.items():
         if name not in columns:
-            connection.execute(f"ALTER TABLE active_call_pairs ADD COLUMN {name} TEXT NOT NULL DEFAULT ''")
-            connection.execute(f'UPDATE active_call_pairs SET {name}=updated_at')
+            for query in queries:
+                connection.execute(query)
 
 
 def _receipts(connection):
@@ -190,6 +196,7 @@ def migrate(path, kind):
     path.parent.mkdir(parents=True, exist_ok=True)
     migrations = MIGRATIONS[kind]
     with connect(path, timeout=10) as connection:
+        path.chmod(0o600)
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         applied = list(connection.execute('SELECT version,name FROM schema_migrations ORDER BY version')) if 'schema_migrations' in tables else []
         expected = [(i+1, name) for i,(name,_) in enumerate(migrations)]

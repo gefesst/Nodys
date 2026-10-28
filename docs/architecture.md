@@ -2,7 +2,11 @@
 
 ## Boundaries
 
-- `server/server.py`: TCP entry point, dispatch, authentication/friends/message compatibility helpers. It remains a composition root with legacy helpers; this is not a wholesale framework rewrite.
+- `server/server.py`: TCP lifecycle, service composition and thin compatibility entry points. Account, relationship, message and request-dispatch behavior no longer resides here.
+- `server/protocol/router.py`: request-to-service adapter with explicit typed dependencies.
+- `server/services/accounts.py`, `friends.py`, `events.py`: account/session lifecycle, relationships and event delivery.
+- `server/storage/messages.py`: direct-message persistence.
+- `server/domain/passwords.py`: bounded password verification and upgrades to 600,000-round PBKDF2.
 - `server/protocol/requests.py`: bounded request vocabulary, strict types and role/decision values.
 - `server/server_transport`: verified TLS configuration, absolute framing deadline and bounded admission counters.
 - `server/domain`: authoritative session/channel/private-call authorization, ordered presence and avatar validation.
@@ -16,7 +20,10 @@
 - `client/transport`: verified control connections and encrypted voice connection establishment.
 - `client/application`: asynchronous session/voice lifecycle, request generations, portable avatars, durable logout retry and platform setup.
 - `client/audio/mixer.py`: bounded per-speaker reorder buffers, short loss concealment and saturating mixing.
-- `client/ui`: Qt views and existing controllers. Further controller extraction is an architectural improvement, not evidence of a newly discovered runtime defect.
+- `client/application/call_controller.py`: session-scoped signaling, request cancellation, event cursor and call identity. Emits state/notice signals; owns no widgets or audio devices.
+- `client/application/polling.py`: service/page polling policy with explicit timer and lifecycle bindings.
+- `client/transport/framing.py`: bounded response parser with an absolute deadline.
+- `client/ui`: rendering, navigation and view interaction. MainWindow delegates signaling/polling and uses one shared nonblocking cleanup path for logout and close.
 
 ## Identity and transactions
 
@@ -40,4 +47,12 @@ Network and audio lifecycle work runs outside Qt. Request generations prevent ol
 
 ## Development and validation
 
-One TLS preview launcher starts isolated Alice/Bob clients. Preview resources never belong in production packaging. Runtime dependencies are pinned; CI checks Windows, Linux and macOS. See [audit-closeout.md](audit-closeout.md) for measured evidence and remaining external acceptance. Packaging is deferred.
+Platform launchers (`Просмотр Nodys.cmd` on Windows, `Просмотр Nodys.command` on macOS) start the same isolated Alice/Bob TLS preview. Certificates are generated with the installed cryptography library; no external OpenSSL executable is required. Preview resources never belong in production packaging. Runtime dependencies are pinned. CI checks Windows, macOS and Linux, refuses skipped tests, runs the actual Windows launcher, TLS two-client process smoke, undefined-name analysis, Bandit medium/high severity checks and dependency auditing. See [audit-closeout.md](audit-closeout.md) for measured evidence and remaining external acceptance. Packaging is deferred.
+
+## Security follow-through
+
+Login password verification and token issuance share a write transaction, so a concurrent password reset cannot be followed by a token issued using the old password. Revocation storage failures propagate instead of returning success; the logout retry queue retains failed deliveries. Expired sessions also prune associated voice credentials and presence versions. Session-touch and compatibility-event caches are bounded.
+
+Call accept/decline/end carry the call ID captured by the controller. Late callbacks are fenced by session and controller generation; a successful action invalidates in-flight older polls. Removing a friendship terminates its call as well as revoking media access.
+
+UDP admission has bounded per-IP (4,000/s) and relay-wide (10,000/s) budgets before DB work, in addition to authenticated per-route limits. Shared NAT clients share the IP budget. These limits and cryptographic regression tests are not claims of DDoS immunity or third-party certification. See [security-review.md](security-review.md).

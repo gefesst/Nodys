@@ -111,3 +111,10 @@ class RequestSecurityTests(unittest.TestCase):
                 with ThreadPoolExecutor(max_workers=2) as workers:
                     results=list(workers.map(lambda _:server.add_user('alice','test','Alice',''),range(2)))
             self.assertEqual(sorted(results),[False,True])
+
+    def test_corrupt_password_work_factor_and_digest_fail_closed(self):
+        from domain.passwords import verify_password
+        for stored in ('pbkdf2_sha256$999999999999999999$AAAA$AAAA',
+                       'pbkdf2_sha256$-1$AAAA$AAAA','pbkdf2_sha256$600000$!$!',
+                       'pbkdf2_sha256$600000$AAAA$AAAA'):
+            self.assertFalse(verify_password('password',stored))

@@ -1,20 +1,44 @@
 name: Checks
 on: [push, pull_request]
+permissions:
+  contents: read
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
       - name: Linux Qt and audio runtime
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0 libportaudio2
       - run: python -m pip install -r requirements.txt
       - run: python -m pip check
       - run: python -m compileall -q client server shared tools tests
-      - run: python -m unittest discover -s tests -v
+      - run: python tools/check.py
+      - name: Windows launcher and two-client TLS preview
+        if: runner.os == 'Windows'
+        run: '& ".\Просмотр Nodys.cmd" --smoke-seconds 8'
+      - name: Two-client TLS preview smoke
+        if: runner.os != 'Windows'
+        run: python tools/preview.py --tls --smoke-seconds 8
+      - name: Install analysis tools
+        if: runner.os == 'Linux'
+        run: python -m pip install -r requirements-checks.txt
+      - name: Undefined names and security scan
+        if: runner.os == 'Linux'
+        run: |
+          python -m ruff check client server shared tools --select F821,F822,F823
+          python -m bandit -r client server shared -ll
+          python -m pip_audit -r requirements.txt --no-deps --disable-pip

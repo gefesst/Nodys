@@ -1,4 +1,5 @@
 from transport.control import connect_api
+from transport.framing import receive as receive_response
 import uuid
 import socket
 import json
@@ -170,42 +171,7 @@ def send_json_packet(sock: socket.socket, obj: Dict[str, Any]) -> None:
 
 
 def recv_json_packet(sock: socket.socket, max_bytes: int = 10_000_000) -> Optional[Dict[str, Any]]:
-    """Read one response.
-
-    Supports both the new length-prefixed protocol and legacy raw-JSON replies.
-    """
-    header = _recv_exact(sock, 4)
-    if not header:
-        return None
-
-    # Legacy detection: JSON usually starts with '{' or '['.
-    if header[:1] in (b"{", b"["):
-        data = header
-        # Read until socket closes or we get a valid JSON.
-        sock.settimeout(0.4)
-        while len(data) < max_bytes:
-            try:
-                chunk = sock.recv(65536)
-            except socket.timeout:
-                break
-            if not chunk:
-                break
-            data += chunk
-        try:
-            return json.loads(data.decode("utf-8"))
-        except Exception:
-            return None
-
-    length = struct.unpack("!I", header)[0]
-    if length <= 0 or length > max_bytes:
-        return None
-    payload = _recv_exact(sock, length)
-    if not payload:
-        return None
-    try:
-        return json.loads(payload.decode("utf-8"))
-    except Exception:
-        return None
+    return receive_response(sock, max_bytes=max_bytes)
 
 
 class NetworkThread(QObject):

@@ -6,27 +6,15 @@ import time
 from cryptography.exceptions import InvalidTag
 from shared.voice_protocol import DatagramCipher, MAX_PACKET, audio_frame
 from transport.control import connect_api
+from transport.framing import receive as receive_response
 from settings import get_api_endpoint
-
-
-def _exact(connection, count):
-    data = b''
-    while len(data) < count:
-        part = connection.recv(count-len(data))
-        if not part:
-            raise ConnectionError('Сервер закрыл соединение')
-        data += part
-    return data
 
 
 def request_ticket(login, token, room, peer):
     payload = json.dumps(dict(action='voice_ticket',login=login,token=token,room=room,peer=peer)).encode()
     with connect_api(*get_api_endpoint()) as connection:
         connection.sendall(struct.pack('!I', len(payload))+payload)
-        length = struct.unpack('!I', _exact(connection, 4))[0]
-        if not 0 < length <= 4096:
-            raise ValueError('Некорректный ответ голосового сервера')
-        response = json.loads(_exact(connection, length))
+        response = receive_response(connection, max_bytes=4096, timeout=3)
     if response.get('status') != 'ok':
         raise ValueError(response.get('message', 'Голосовое соединение недоступно'))
     return response

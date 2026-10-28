@@ -208,3 +208,17 @@ class UiTests(unittest.TestCase):
         MainWindow.perform_logout(window)
         window._queue_session_cleanup.assert_called_once_with('logout')
         window._do_logout_transition.assert_called_once()
+
+    def test_main_window_navigation_and_cleanup_are_repeatable(self):
+        from ui.main_window import MainWindow
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow()
+            self.addCleanup(window.deleteLater)
+            window.show_channels();window.show_chats();window.show_friends();window.show_profile()
+            window.prepare_to_close_app();window.prepare_to_close_app()
+            self.assertFalse(window.call_events_timer.isActive())
+            self.assertFalse(window.heartbeat_timer.isActive())
+            self.assertEqual(window.calls.requests,{})
+            window.reload_from_context(full_reset=True)
+            self.assertTrue(window.heartbeat_timer.isActive())
+            window.prepare_to_close_app()

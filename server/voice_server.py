@@ -12,8 +12,10 @@ from cryptography.exceptions import InvalidTag
 from shared.voice_protocol import DatagramCipher, HEADER, MAGIC, MAX_PACKET, PCM_BYTES
 try:
     from .storage import voice_tickets
+    from .server_transport.admission import WindowLimiter
 except ImportError:
     from storage import voice_tickets
+    from server_transport.admission import WindowLimiter
 
 DB_FILE = os.environ.get('NODYS_DB_FILE') or str(Path(__file__).with_name('users.db'))
 HOST = os.environ.get('NODYS_VOICE_HOST', '127.0.0.1')
@@ -28,6 +30,8 @@ class VoiceRelay:
         self.connections = {}
         self.last_cleanup = 0
         self._connection = None
+        self.ip_budget = WindowLimiter(4000, 1, max_keys=8192)
+        self.global_budget = WindowLimiter(10000, 1, max_keys=1)
 
     @contextmanager
     def database(self):
@@ -48,6 +52,8 @@ class VoiceRelay:
 
     def handle(self, sock, packet, address):
         if not HEADER.size + 16 < len(packet) <= MAX_PACKET or packet[:3] != MAGIC:
+            return
+        if not self.global_budget.allow("relay") or not self.ip_budget.allow(address[0]):
             return
         now = time.monotonic()
         if now-self.last_cleanup > 2:

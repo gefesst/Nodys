@@ -1,3 +1,5 @@
+from application.call_controller import CallController
+from application.polling import PollingController
 from application.session_cleanup import submit as submit_session_cleanup
 from PySide6.QtCore import QTimer, Qt, QRect, QEvent
 import os
@@ -147,9 +149,11 @@ class MainWindow(QWidget):
         # Call signaling poll
         self.current_call_user = None
         self.voice_client = None
-        self.call_poll_thread = None
         self.call_window = None
-        self._outgoing_call_thread = None
+        self.calls = CallController(lambda: self.ctx, self)
+        self.calls.state_changed.connect(self._reconcile_call_state)
+        self.calls.notice.connect(lambda text, timeout: self._show_call_notice(text, timeout_ms=timeout))
+        self.calls.response_finished.connect(self._incoming_response_finished)
         self.call_events_timer = QTimer(self)
         self.call_events_timer.timeout.connect(self.poll_call_events)
         self.call_events_timer.start(1000)
@@ -185,6 +189,12 @@ class MainWindow(QWidget):
         except Exception:
             pass
 
+        self.polling = PollingController(
+            [(self.call_events_timer, 1000, 2600), (self.heartbeat_timer, 10000, 18000),
+             (self.self_status_timer, 5000, 12000), (self.channel_invites_badge_timer, 9000, 18000)],
+            [(lambda: self.friends_page.set_polling_enabled(True), lambda: self.friends_page.set_polling_enabled(False)),
+             (lambda: self.chats_page.start_auto_update(force_refresh=True), self.chats_page.stop_auto_update),
+             (self.channels_page.start_auto_update, self.channels_page.stop_auto_update)])
         self._apply_polling_policy(force=True)
 
     def _snapshot_context(self, src_ctx):
@@ -240,120 +250,13 @@ class MainWindow(QWidget):
         if timer.interval() != interval_ms:
             timer.setInterval(interval_ms)
 
-    def _apply_polling_policy(self, force: bool = False):
-        """Centralized polling visibility policy.
-
-        Rules:
-        - Page-level polling runs only on active tab and only when app/window visible.
-        - Service polling (call events / heartbeat / self-status) is throttled in background.
-        """
-        window_active = self._window_is_active_for_polling()
-        current_idx = self.stack.currentIndex() if window_active else -1
-
-        desired = {
-            "friends": (current_idx == 0),
-            "chats": (current_idx == 1),
-            "channels": (current_idx == 2),
-            "window_active": window_active,
-        }
-
-        # Service timers: always enabled in session, but slower in background.
-        call_interval = 1000 if window_active else 2600
-        hb_interval = 10000 if window_active else 18000
-        status_interval = 5000 if window_active else 12000
-        invites_badge_interval = 9000 if window_active else 18000
-
-        try:
-            self._set_timer_interval(self.call_events_timer, call_interval)
-            if self.ctx.login:
-                if not self.call_events_timer.isActive():
-                    self.call_events_timer.start(call_interval)
-            elif self.call_events_timer.isActive():
-                self.call_events_timer.stop()
-        except Exception:
-            pass
-
-        try:
-            self._set_timer_interval(self.heartbeat_timer, hb_interval)
-            if self.ctx.login:
-                if not self.heartbeat_timer.isActive():
-                    self.heartbeat_timer.start(hb_interval)
-            elif self.heartbeat_timer.isActive():
-                self.heartbeat_timer.stop()
-        except Exception:
-            pass
-
-        try:
-            self._set_timer_interval(self.self_status_timer, status_interval)
-            if self.ctx.login:
-                if not self.self_status_timer.isActive():
-                    self.self_status_timer.start(status_interval)
-            elif self.self_status_timer.isActive():
-                self.self_status_timer.stop()
-        except Exception:
-            pass
-
-        # Lightweight polling только для счётчика приглашений на кнопке "Каналы".
-        try:
-            self._set_timer_interval(self.channel_invites_badge_timer, invites_badge_interval)
-            if self.ctx.login:
-                if not self.channel_invites_badge_timer.isActive():
-                    self.channel_invites_badge_timer.start(invites_badge_interval)
-            elif self.channel_invites_badge_timer.isActive():
-                self.channel_invites_badge_timer.stop()
-        except Exception:
-            pass
-
-        # Friends polling
-        prev_friends = bool(self._poll_state.get("friends", False))
-        now_friends = bool(desired["friends"])
-        if force or (prev_friends != now_friends):
-            try:
-                if hasattr(self.friends_page, "set_polling_enabled"):
-                    self.friends_page.set_polling_enabled(now_friends)
-                else:
-                    if now_friends:
-                        self.friends_page.refresh()
-                        if hasattr(self.friends_page, "timer") and not self.friends_page.timer.isActive():
-                            self.friends_page.timer.start(2500)
-                    else:
-                        if hasattr(self.friends_page, "timer") and self.friends_page.timer.isActive():
-                            self.friends_page.timer.stop()
-            except Exception:
-                pass
-
-        # Chats polling
-        prev_chats = bool(self._poll_state.get("chats", False))
-        now_chats = bool(desired["chats"])
-        if force or (prev_chats != now_chats):
-            try:
-                if now_chats:
-                    self.chats_page.start_auto_update(force_refresh=True)
-                else:
-                    self.chats_page.stop_auto_update()
-            except Exception:
-                pass
-
-        # Channels polling
-        prev_channels = bool(self._poll_state.get("channels", False))
-        now_channels = bool(desired["channels"])
-        if force or (prev_channels != now_channels):
-            try:
-                if now_channels:
-                    self.channels_page.start_auto_update()
-                else:
-                    self.channels_page.stop_auto_update()
-            except Exception:
-                pass
-
-        was_active = self._poll_state.get("window_active", None)
-        if window_active and (force or (was_active is False) or (was_active is None)):
-            try:
-                self.refresh_self_status(force=True)
-            except Exception:
-                pass
-
-        self._poll_state = desired
+    def _apply_polling_policy(self, force=False):
+        if not hasattr(self, "polling"):
+            return
+        became_active = self.polling.apply(self._window_is_active_for_polling(),
+                                           self.stack.currentIndex(), bool(self.ctx.login), force)
+        if became_active:
+            self.refresh_self_status(force=True)
 
     # ==================================================
     # ============ Inline call UI (in-app) ============
@@ -361,7 +264,6 @@ class MainWindow(QWidget):
 
     def _setup_inline_call_ui(self):
         self._incoming_from_user = None
-        self._incoming_action_thread = None
 
         self._call_notice_timer = QTimer(self)
         self._call_notice_timer.setSingleShot(True)
@@ -533,45 +435,13 @@ class MainWindow(QWidget):
             pass
 
     def _respond_incoming_inline(self, accept: bool):
-        from_user = self._incoming_from_user
-        if not from_user or not getattr(self.ctx, "login", ""):
+        if self.calls.respond(accept):
+            self._set_incoming_buttons_enabled(False)
+
+    def _incoming_response_finished(self, success):
+        self._set_incoming_buttons_enabled(True)
+        if success:
             self._hide_incoming_inline()
-            return
-        if self._incoming_action_thread and self._incoming_action_thread.isRunning():
-            return
-
-        self._set_incoming_buttons_enabled(False)
-        action = "accept_call" if accept else "decline_call"
-        self._incoming_action_thread = NetworkThread(None, None, {
-            "action": action,
-            "login": self.ctx.login,
-            "from_user": from_user,
-            "token": self.ctx.session_token,
-        })
-
-        def _done(resp):
-            ok = isinstance(resp, dict) and resp.get("status") == "ok"
-            if ok:
-                if accept:
-                    self._show_call_notice(f"Подключаем звонок с {from_user}...", timeout_ms=1800)
-                else:
-                    self._show_call_notice(f"Вызов от {from_user} отклонён", timeout_ms=1800)
-                self._hide_incoming_inline()
-            else:
-                msg = "Не удалось обработать вызов"
-                if isinstance(resp, dict):
-                    msg = resp.get("message", msg)
-                self._show_call_notice(msg, timeout_ms=2500)
-                # Если принять уже нельзя, скрываем карточку.
-                if accept:
-                    self._hide_incoming_inline()
-                else:
-                    self._set_incoming_buttons_enabled(True)
-
-            self._incoming_action_thread = None
-
-        self._incoming_action_thread.finished.connect(_done)
-        self._incoming_action_thread.start()
 
     def _accept_incoming_inline(self):
         self._respond_incoming_inline(True)
@@ -580,36 +450,8 @@ class MainWindow(QWidget):
         self._respond_incoming_inline(False)
 
     def start_outgoing_call(self, friend_login: str):
-        """Отправка вызова с inline-уведомлением внутри main-окна."""
-        if not friend_login or not getattr(self.ctx, "login", ""):
-            return
-        if self._outgoing_call_thread and self._outgoing_call_thread.isRunning():
+        if not self.calls.start_call(friend_login):
             self._show_call_notice("Подождите, предыдущий вызов ещё отправляется", timeout_ms=1800)
-            return
-
-        data = {
-            "action": "call_user",
-            "from_user": self.ctx.login,
-            "to_user": friend_login,
-            "token": self.ctx.session_token,
-        }
-
-        self._outgoing_call_thread = NetworkThread(None, None, data)
-
-        def _done(resp):
-            try:
-                if isinstance(resp, dict) and resp.get("status") == "ok":
-                    self._show_call_notice(f"Вызов отправлен пользователю {friend_login}")
-                else:
-                    msg = "Не удалось начать вызов"
-                    if isinstance(resp, dict):
-                        msg = resp.get("message", msg)
-                    self._show_call_notice(msg, timeout_ms=2600)
-            finally:
-                self._outgoing_call_thread = None
-
-        self._outgoing_call_thread.finished.connect(_done)
-        self._outgoing_call_thread.start()
 
     # ==================================================
     # ================== Бейдж "Чаты" ==================
@@ -802,92 +644,17 @@ class MainWindow(QWidget):
                 return
             payload = {"action":action, "login":login, "token":token}
             if action == "release_call_state":
-                state = getattr(self, "_applied_call_state", None)
-                if not state or state[0] != token or not state[1]:
+                state = self.calls.state
+                if not state:
                     return
-                payload["call_id"] = state[1][0]
+                payload["call_id"] = state["call_id"]
             submit_session_cleanup(endpoint, payload, timeout=timeout_sec)
 
     def _queue_presence_offline(self, timeout_sec=0.7):
         self._queue_session_cleanup("presence_offline", timeout_sec)
 
     def _do_logout_transition(self):
-        # Остановить автообновления
-        try:
-            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
-                self.call_events_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "heartbeat_timer") and self.heartbeat_timer.isActive():
-                self.heartbeat_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "self_status_timer") and self.self_status_timer.isActive():
-                self.self_status_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "channel_invites_badge_timer") and self.channel_invites_badge_timer.isActive():
-                self.channel_invites_badge_timer.stop()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_self_status_thread", None) and self._self_status_thread.isRunning():
-                self._self_status_thread.abort()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_channel_invites_badge_thread", None) and self._channel_invites_badge_thread.isRunning():
-                self._channel_invites_badge_thread.abort()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_outgoing_call_thread", None) and self._outgoing_call_thread.isRunning():
-                self._outgoing_call_thread.abort()
-        except Exception:
-            pass
-
-        try:
-            self.chats_page.stop_auto_update()
-        except Exception:
-            pass
-        try:
-            self.channels_page.stop_auto_update()
-        except Exception:
-            pass
-
-        try:
-            if self.voice_client:
-                self.voice_client.stop()
-                self.voice_client = None
-            self._close_call_window()
-            self._hide_incoming_inline()
-            self._hide_call_notice()
-            if hasattr(self, "_call_notice_timer") and self._call_notice_timer.isActive():
-                self._call_notice_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self.channels_page, "stop_voice_session"):
-                self.channels_page.stop_voice_session(show_toast=False)
-        except Exception:
-            pass
-        try:
-            if hasattr(self.friends_page, "timer"):
-                self.friends_page.timer.stop()
-        except Exception:
-            pass
-
-        # Корректно остановить запросы страниц
-        for page in (self.friends_page, self.chats_page, self.channels_page, self.profile_page):
-            try:
-                page._alive = False
-                if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=0)
-            except Exception:
-                pass
+        self._stop_background_work()
 
         try:
             clear_config()
@@ -915,85 +682,18 @@ class MainWindow(QWidget):
 
 
     def poll_call_events(self):
-        if not getattr(self.ctx, "login", None) or not getattr(self.ctx, "session_token", ""):
-            return
-        if self.call_poll_thread and self.call_poll_thread.isRunning():
-            return
-        token = self.ctx.session_token
-        if getattr(self, "_event_session", None) != token:
-            self._event_session = token
-            self._event_cursor = 0
-        self.call_poll_thread = NetworkThread(None, None, {
-            "action": "poll_events",
-            "after_event_id": self._event_cursor,
-            "login": self.ctx.login,
-            "token": self.ctx.session_token,
-        })
-        self.call_poll_thread.finished.connect(
-            lambda response: self.handle_call_events(response) if self.ctx.session_token == token else None)
-        self.call_poll_thread.start()
+        self.calls.poll()
 
-    def handle_call_events(self, resp):
-        if resp.get("status") != "ok":
-            return
-        if "call_state" in resp:
-            self._reconcile_call_state(resp["call_state"])
-            for event in resp.get("events", []):
-                self._event_cursor = max(getattr(self, "_event_cursor", 0), event.get("event_id", 0))
-            return
-        for ev in resp.get("events", []):
-            et = ev.get("type")
-            if et == "incoming_call":
-                from_user = ev.get("from_user")
-                self._show_incoming_inline(from_user)
-
-            elif et == "call_accepted":
-                by_user = ev.get("by_user")
-                self.current_call_user = by_user
-                self._hide_incoming_inline()
-                self._start_voice_for_peer(by_user)
-                self._open_call_window(by_user)
-                self._show_call_notice(f"{by_user} принял вызов", timeout_ms=1600)
-
-            elif et == "call_started":
-                with_user = ev.get("with_user")
-                self.current_call_user = with_user
-                self._hide_incoming_inline()
-                self._start_voice_for_peer(with_user)
-                self._open_call_window(with_user)
-                self._show_call_notice(f"Звонок с {with_user} начат", timeout_ms=1600)
-
-            elif et == "call_declined":
-                by_user = ev.get("by_user")
-                self.current_call_user = None
-                self._close_call_window()
-                try:
-                    if self.voice_client:
-                        self.voice_client.stop()
-                        self.voice_client = None
-                except Exception:
-                    pass
-                self._show_call_notice(f"{by_user} отклонил вызов", timeout_ms=2200)
-
-            elif et == "call_ended":
-                with_user = ev.get("with_user") or ev.get("by_user") or "пользователем"
-                self.current_call_user = None
-                self._close_call_window()
-                try:
-                    if self.voice_client:
-                        self.voice_client.stop()
-                        self.voice_client = None
-                except Exception:
-                    pass
-                self._show_call_notice(f"Звонок с {with_user} завершён", timeout_ms=2300)
+    def handle_call_events(self, response):
+        self.calls.receive(response)
 
     def _reconcile_call_state(self, state):
         """The snapshot heals missed/expired events and avoids duplicate audio starts."""
         key = (self.ctx.session_token, None if state is None else
-               (state.get("call_id"),state.get("peer"),state.get("status"),state.get("incoming")))
-        if getattr(self, "_applied_call_state", None) == key:
+               (state.get("call_id"), state.get("peer"), state.get("status"), state.get("incoming")))
+        if getattr(self, "_rendered_call_key", None) == key:
             return
-        self._applied_call_state = key
+        self._rendered_call_key = key
         if state is None:
             self._hide_incoming_inline()
             if self.current_call_user or self.voice_client or self.call_window:
@@ -1044,17 +744,11 @@ class MainWindow(QWidget):
             self._show_call_notice(f"Не удалось запустить аудио: {e}", timeout_ms=2800)
 
     def _open_call_window(self, peer_login: str):
+        call_id = self.calls.state["call_id"] if self.calls.state else ""
+        token = self.ctx.session_token
         def on_end_call():
-            try:
-                t = NetworkThread(None, None, {
-                    "action": "end_call",
-                    "login": self.ctx.login,
-                    "with_user": peer_login,
-                    "token": self.ctx.session_token,
-                })
-                t.start()
-            except Exception:
-                pass
+            if self.ctx.session_token == token and call_id:
+                self.calls.end_call(call_id, peer_login)
 
         def on_mic_toggle(enabled: bool):
             if self.voice_client:
@@ -1087,8 +781,9 @@ class MainWindow(QWidget):
             "login": peer_login,
             "token": self.ctx.session_token,
         })
+        call_window = self.call_window
         def _apply_info(resp):
-            if resp.get("status") == "ok" and self.call_window:
+            if resp.get("status") == "ok" and self.ctx.session_token == token and self.call_window is call_window:
                 nick = resp.get("nickname") or peer_login
                 avatar = resp.get("avatar") or ""
                 self.call_window.name_lbl.setText(nick)
@@ -1119,6 +814,7 @@ class MainWindow(QWidget):
 
     def _queue_release_call_state(self, timeout_sec=0.8):
         self._queue_session_cleanup("release_call_state", timeout_sec)
+        self.calls.reset()
         self.current_call_user = None
 
     def resizeEvent(self, event):
@@ -1146,105 +842,12 @@ class MainWindow(QWidget):
             self._apply_polling_policy()
 
     def closeEvent(self, event):
-        if self._is_closing:
-            event.accept()
-            return
-        self._is_closing = True
-
-        # Если это logout-переход на auth — не выходим из приложения
-        if self.is_logging_out:
-            event.accept()
-            return
-
-        # Это закрытие приложения на крестик
-        try:
-            self._hide_incoming_inline()
-            self._hide_call_notice()
-            if hasattr(self, "_call_notice_timer") and self._call_notice_timer.isActive():
-                self._call_notice_timer.stop()
-        except Exception:
-            pass
-
-        try:
-            # Send best-effort cleanup outside Qt; server heartbeat expiry is the fallback.
-            self._queue_release_call_state(timeout_sec=0.9)
-        except Exception:
-            pass
-
-        try:
-            # Сохраняем токен для auto-login, но явно снимаем online presence.
-            self._queue_presence_offline(timeout_sec=0.7)
-        except Exception:
-            pass
-
-        try:
-            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
-                self.call_events_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "heartbeat_timer") and self.heartbeat_timer.isActive():
-                self.heartbeat_timer.stop()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_channel_invites_badge_thread", None) and self._channel_invites_badge_thread.isRunning():
-                self._channel_invites_badge_thread.abort()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "self_status_timer") and self.self_status_timer.isActive():
-                self.self_status_timer.stop()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_self_status_thread", None) and self._self_status_thread.isRunning():
-                self._self_status_thread.abort()
-        except Exception:
-            pass
-
-        try:
-            self.chats_page.stop_auto_update()
-        except Exception:
-            pass
-        try:
-            self.channels_page.stop_auto_update()
-        except Exception:
-            pass
-
-        try:
-            if self.voice_client:
-                self.voice_client.stop()
-                self.voice_client = None
-            self._hide_incoming_inline()
-            self._hide_call_notice()
-            if hasattr(self, "_call_notice_timer") and self._call_notice_timer.isActive():
-                self._call_notice_timer.stop()
-        except Exception:
-            pass
-
-        try:
-            if hasattr(self.friends_page, "timer"):
-                self.friends_page.timer.stop()
-        except Exception:
-            pass
-
-        # Остановить фоновые запросы страниц
-        for page in (self.friends_page, self.chats_page, self.channels_page, self.profile_page):
-            try:
-                page._alive = False
-                if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=0)
-            except Exception:
-                pass
-
-        # Не делаем явный logout при закрытии приложения: токен остаётся
-        # в конфиге и сессия может быть восстановлена при следующем запуске.
-
-        app = QApplication.instance()
-        if app is not None:
-            app.quit()
-
+        if not self._is_closing and not self.is_logging_out:
+            self._is_closing = True
+            self.prepare_to_close_app()
+            app = QApplication.instance()
+            if app is not None:
+                app.quit()
         event.accept()
 
     def reload_from_context(self, full_reset=False):
@@ -1254,6 +857,7 @@ class MainWindow(QWidget):
         """
         from user_context import UserContext
         self.ctx = self._snapshot_context(UserContext())
+        self.calls.reset()
         self.is_logging_out = False
 
         # После logout страницы переводятся в _alive=False.
@@ -1374,76 +978,33 @@ class MainWindow(QWidget):
 
 
     def prepare_to_close_app(self):
-        """
-        Вызывается контейнером AppWindow при закрытии приложения.
-        """
-        try:
-            self._queue_release_call_state(timeout_sec=0.9)
-        except Exception:
-            pass
+        self._queue_release_call_state(timeout_sec=0.9)
+        self._queue_presence_offline(timeout_sec=0.7)
+        self._stop_background_work()
 
-        try:
-            self._queue_presence_offline(timeout_sec=0.7)
-        except Exception:
-            pass
-
-        try:
-            if hasattr(self, "call_events_timer") and self.call_events_timer.isActive():
-                self.call_events_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "heartbeat_timer") and self.heartbeat_timer.isActive():
-                self.heartbeat_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "channel_invites_badge_timer") and self.channel_invites_badge_timer.isActive():
-                self.channel_invites_badge_timer.stop()
-        except Exception:
-            pass
-        try:
-            if hasattr(self, "self_status_timer") and self.self_status_timer.isActive():
-                self.self_status_timer.stop()
-        except Exception:
-            pass
-        try:
-            if getattr(self, "_self_status_thread", None) and self._self_status_thread.isRunning():
-                self._self_status_thread.abort()
-        except Exception:
-            pass
-
-        try:
-            self.chats_page.stop_auto_update()
-        except Exception:
-            pass
-        try:
-            self.channels_page.stop_auto_update()
-        except Exception:
-            pass
-
-        try:
-            if self.voice_client:
-                self.voice_client.stop()
-                self.voice_client = None
-        except Exception:
-            pass
-        try:
-            if hasattr(self.channels_page, "stop_voice_session"):
-                self.channels_page.stop_voice_session(show_toast=False)
-        except Exception:
-            pass
-        try:
-            if hasattr(self.friends_page, "timer"):
-                self.friends_page.timer.stop()
-        except Exception:
-            pass
-
+    def _stop_background_work(self):
+        """One nonblocking cleanup path for logout and application close."""
+        self.calls.reset()
+        for name in ("call_events_timer", "heartbeat_timer", "self_status_timer",
+                     "channel_invites_badge_timer", "_call_notice_timer"):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.stop()
+        for name in ("_self_status_thread", "_channel_invites_badge_thread"):
+            request = getattr(self, name, None)
+            if request is not None:
+                request.abort()
+        self.chats_page.stop_auto_update()
+        self.channels_page.stop_auto_update()
+        self.friends_page.set_polling_enabled(False)
+        self.channels_page.stop_voice_session(show_toast=False)
+        if self.voice_client:
+            self.voice_client.stop()
+            self.voice_client = None
+        self._close_call_window()
+        self._hide_incoming_inline()
+        self._hide_call_notice()
         for page in (self.friends_page, self.chats_page, self.channels_page, self.profile_page):
-            try:
-                page._alive = False
-                if hasattr(page, "shutdown_requests"):
-                    page.shutdown_requests(wait_ms=0)
-            except Exception:
-                pass
+            page._alive = False
+            page.shutdown_requests(wait_ms=0)
 

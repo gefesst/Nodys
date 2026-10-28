@@ -11,6 +11,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'server'))
 import server
+from local_certificate import create_certificate
 
 
 def main():
@@ -39,10 +40,7 @@ def main():
         if args.tls:
             certificate = data/'localhost.crt'
             key = data/'localhost.key'
-            subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes',
-                '-keyout',str(key),'-out',str(certificate),'-days','1','-subj','/CN=localhost',
-                '-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],check=True,
-                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            create_certificate(certificate, key)
             env.update(NODYS_TLS_CERT=str(certificate),NODYS_TLS_KEY=str(key))
             tls_config = {'api_tls':True,'api_ca_file':str(certificate)}
         try:

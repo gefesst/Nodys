@@ -117,3 +117,56 @@ class AuditPermissions(fixtures.VoiceFixture, unittest.TestCase):
         self.assertEqual(self.server.get_channel_messages(cid),[])
         with self.server.database_connection(self.server.DB_FILE) as connection:
             self.assertEqual(connection.execute('SELECT COUNT(*) FROM channel_cleanup').fetchone()[0],0)
+
+    def test_revocation_storage_failure_is_not_reported_as_success(self):
+        import sqlite3
+        from unittest.mock import patch
+        service=self.server._accounts_service()
+        module=__import__(service.__class__.__module__,fromlist=['database_connection'])
+        with patch.object(module,'database_connection',side_effect=sqlite3.OperationalError('disk failure')):
+            with self.assertRaises(sqlite3.OperationalError): service.delete_session(self.tokens['alice'])
+        self.assertIsNotNone(self.server.get_session_by_token(self.tokens['alice']))
+
+    def test_old_accept_and_end_cannot_change_replacement_call(self):
+        self.server.send_friend_request('alice','bob');self.server.accept_friend_request('alice','bob')
+        self.server.start_call('alice','bob')
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            first=conn.execute('SELECT created_at FROM active_call_pairs').fetchone()[0]
+        self.server.end_call('alice','bob');self.server.start_call('alice','bob')
+        self.assertEqual(self.request('bob','accept_call',from_user='alice',call_id=first)['status'],'error')
+        self.assertEqual(self.request('alice','end_call',with_user='bob',call_id=first)['status'],'error')
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            self.assertEqual(conn.execute('SELECT status FROM active_call_pairs').fetchone()[0],'ringing')
+
+    def test_unicode_plaintext_password_is_upgraded_at_login(self):
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            conn.execute('UPDATE users SET password=? WHERE login=?',('пароль','alice'))
+        result=self.server.handle_request(dict(action='login',login='alice',password='пароль'))
+        self.assertEqual(result['status'],'ok')
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            stored=conn.execute('SELECT password FROM users WHERE login=?',('alice',)).fetchone()[0]
+        self.assertTrue(stored.startswith('pbkdf2_sha256$600000$'))
+        self.assertTrue(self.server.verify_password('пароль',stored))
+
+    def test_concurrent_password_reset_revokes_login_using_old_password(self):
+        import threading
+        from unittest.mock import patch
+        service=self.server._accounts_service()
+        authenticate=service.authenticate
+        checked=threading.Event();release=threading.Event()
+        def paused_authenticate(login,password):
+            result=authenticate(login,password)
+            if threading.current_thread().name.startswith('login-race'):
+                checked.set();release.wait(3)
+            return result
+        with patch.object(service,'authenticate',side_effect=paused_authenticate):
+            with ThreadPoolExecutor(max_workers=1,thread_name_prefix='login-race') as logins, ThreadPoolExecutor(max_workers=1) as resets:
+                login=logins.submit(self.server.handle_request,dict(action='login',login='alice',password='synthetic'))
+                self.assertTrue(checked.wait(2))
+                reset=resets.submit(self.request,'alice','update_profile',nickname='Alice',avatar='',password='replacement',current_password='synthetic')
+                release.set()
+                result=login.result(timeout=5)
+                self.assertEqual(reset.result(timeout=5)['status'],'ok')
+        self.assertEqual(result['status'],'ok')
+        self.assertIsNone(self.server.get_session_by_token(result['token']))
+        self.assertIsNotNone(self.server.get_session_by_token(self.tokens['alice']))
