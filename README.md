@@ -1,6 +1,6 @@
 # Nodys
 
-Python/PySide6 desktop voice chat. Development proceeds through stacked draft pull requests; `main` stays unchanged until review.
+Python/PySide6 desktop voice chat. Current audited development changes are published to `main`. Further checked fixes are pushed to GitHub as development continues; application packaging remains deferred.
 
 ## Local preview
 
