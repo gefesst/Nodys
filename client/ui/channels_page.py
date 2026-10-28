@@ -1,3 +1,6 @@
+from application.avatars import encode_avatar
+from application.request_scope import RequestScope
+from application.sequence import clock as voice_sequence
 import time
 from functools import partial
 
@@ -368,7 +371,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self._sending_channel_msg = False
         self._message_send_inflight = False
-        self._messages_signature = ""
+        self._messages_signature = None
         self._channels_signature = None
         self._invites_signature = None
         self._compact_mode = False
@@ -1077,6 +1080,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         sp_root.addWidget(self.settings_confirm)
 
+        self._settings_revision = 0
+        self.settings_name_input.textEdited.connect(self._mark_settings_edited)
+        self.settings_text_perm_combo.activated.connect(self._mark_settings_edited)
+        self.settings_voice_perm_combo.activated.connect(self._mark_settings_edited)
         self.main_stack.addWidget(self.settings_page)
 
         root.addWidget(right, 3)
@@ -1129,6 +1136,36 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
+    def _mark_settings_edited(self, *_args):
+        self._settings_revision = getattr(self, "_settings_revision", 0) + 1
+
+    def start_request(self, data, callback, host=None, port=None):
+        if not hasattr(self, "_request_scope"):
+            self._request_scope = RequestScope()
+        action = data.get("action")
+        scoped = action in {
+            "get_channel_messages", "get_channel_details",
+            "get_channel_voice_participants", "update_channel_settings",
+        }
+        if not scoped:
+            return super().start_request(data, callback, host, port)
+        def identity():
+            return (self.ctx.session_token, self._active_channel_id(),
+                    getattr(self, "_voice_epoch", 0) if action == "get_channel_voice_participants" else 0)
+        ticket = self._request_scope.capture(action, identity())
+        def guarded(response):
+            if self._request_scope.accepts(ticket, identity()):
+                callback(response)
+        return super().start_request(data, guarded, host, port)
+
+    def _invalidate_channel_requests(self):
+        if hasattr(self, "_request_scope"):
+            self._request_scope.invalidate()
+        self._loading_messages = False
+        self._loading_channel_details = False
+        self._voice_participants_loading = False
+        self._saving_channel_settings = False
+
     def start_auto_update(self):
         if not self._alive:
             return
@@ -1167,6 +1204,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.stop()
 
     def reset_for_user(self):
+        self._invalidate_channel_requests()
         self._alive = True
         self.stop_auto_update()
         self.stop_voice_session(show_toast=False)
@@ -1192,7 +1230,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._deleting_channel = False
         self._sending_channel_msg = False
         self._message_send_inflight = False
-        self._messages_signature = ""
+        self._messages_signature = None
         self._channels_signature = None
         self._invites_signature = None
         self._channels_loaded_once = False
@@ -1786,10 +1824,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if self._voice_joined and old_id and new_id and old_id != new_id:
             self.stop_voice_session(show_toast=False)
 
+        self._invalidate_channel_requests()
         self.active_channel = dict(channel)
         self._channel_details = {}
         self._settings_permissions = {}
-        self._messages_signature = ""
+        self._messages_signature = None
         self._voice_participants = []
         self._voice_participants_signature = ""
         self._render_voice_participants()
@@ -1815,7 +1854,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if not file_path:
             return
 
-        self._create_avatar_path = file_path
+        try:
+            self._create_avatar_path = encode_avatar(file_path)
+        except ValueError as error:
+            self.show_toast(str(error))
+            return
         preview_name = self.create_name_input.text().strip() or "Канал"
         self.create_avatar_preview.set_avatar(path=file_path, login="channel", nickname=preview_name)
 
@@ -1931,7 +1974,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self.active_channel = None
                     self._channel_details = {}
                     self._settings_permissions = {}
-                    self._messages_signature = ""
+                    self._messages_signature = None
                     self._voice_participants = []
                     self._voice_participants_signature = ""
                     self._clear_voice_members_list()
@@ -1995,7 +2038,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
 
         self._loading_messages = True
-        if not self._messages_signature:
+        if self._messages_signature is None:
             self._clear_channel_messages()
             for _ in range(4):
                 sk = QFrame()
@@ -2091,7 +2134,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                         self.load_channel_details(silent=True)
                     return
                 # Форсируем перерисовку сразу после отправки.
-                self._messages_signature = ""
+                self._messages_signature = None
                 self.load_channel_messages(force=True)
             finally:
                 self._sending_channel_msg = False
@@ -2148,6 +2191,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     return
 
                 participants = resp.get("participants") or []
+                if not self._voice_joined:
+                    participants = [p for p in participants if p.get("login") != self.ctx.login]
                 # Local fallback: ensure current user row appears right after join
                 if self._voice_joined and self.ctx.login and not any((p.get("login") == self.ctx.login) for p in participants):
                     participants.insert(0, {
@@ -2185,6 +2230,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             "channel_id": channel_id,
             "speaking": bool(speaking),
             "joined": bool(joined),
+            "sequence": voice_sequence.next(),
         }
 
         def cb(resp):
@@ -2211,8 +2257,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         payload = {
             "action": "leave_channel_voice",
             "channel_id": cid,
+            "sequence": voice_sequence.next(),
         }
-        self.start_request(payload, lambda _resp: None)
+        def after_leave(response):
+            if response.get("status") == "ok" and self._active_channel_id() == cid and not self._voice_joined:
+                self.load_voice_participants(force=True)
+        self.start_request(payload, after_leave)
 
     def sync_voice_presence(self, force_pull: bool = False):
         if not self._alive or not self.active_channel:
@@ -2274,6 +2324,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if channel_id <= 0:
             return
 
+        revision = self._settings_revision
         self._loading_channel_details = True
         payload = {
             "action": "get_channel_details",
@@ -2282,6 +2333,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         def cb(resp):
             try:
+                if revision != self._settings_revision:
+                    return
                 if resp.get("status") != "ok":
                     if not silent:
                         self.show_toast(resp.get("message", "Не удалось загрузить настройки канала"))
@@ -2384,7 +2437,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if not file_path:
             return
 
-        self._settings_avatar_path = file_path
+        try:
+            self._settings_avatar_path = encode_avatar(file_path)
+            self._mark_settings_edited()
+        except ValueError as error:
+            self.show_toast(str(error))
+            return
         preview_name = self.settings_name_input.text().strip() or "Канал"
         self.settings_avatar_preview.set_avatar(path=file_path, login="channel", nickname=preview_name)
 
@@ -2448,6 +2506,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.show_toast("Введите название канала")
             return
 
+        revision = self._settings_revision
         self._saving_channel_settings = True
         payload = {
             "action": "update_channel_settings",
@@ -2471,7 +2530,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
                 self.show_toast("Настройки канала сохранены")
                 self.load_channels(force_refresh=True, preferred_channel_id=self._active_channel_id())
-                self.load_channel_details(silent=True)
+                if revision == self._settings_revision:
+                    self.load_channel_details(silent=True)
             finally:
                 self._saving_channel_settings = False
 
@@ -2622,7 +2682,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 self.active_channel = None
                 self._channel_details = {}
                 self._settings_permissions = {}
-                self._messages_signature = ""
+                self._messages_signature = None
                 self._voice_participants = []
                 self._voice_participants_signature = ""
                 self._clear_channel_messages()
@@ -2663,7 +2723,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 self.active_channel = None
                 self._channel_details = {}
                 self._settings_permissions = {}
-                self._messages_signature = ""
+                self._messages_signature = None
                 self._voice_participants = []
                 self._voice_participants_signature = ""
                 self._clear_channel_messages()
@@ -2797,6 +2857,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self._apply_channel_permissions_ui()
 
     def stop_voice_session(self, show_toast: bool = False):
+        self._voice_epoch = getattr(self, "_voice_epoch", 0) + 1
+        self._voice_participants_loading = False
         channel_id = self._active_channel_id()
 
         if self._voice_client is not None:
@@ -2825,7 +2887,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         if was_joined and channel_id > 0:
             self._leave_voice_presence(channel_id=channel_id)
-            self.load_voice_participants(force=True)
 
         self._apply_channel_permissions_ui()
         self._apply_voice_local_controls()

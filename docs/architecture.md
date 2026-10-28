@@ -26,3 +26,11 @@ Database context managers commit or roll back and always close. Preview data liv
 5. Lock dependencies and package for target platforms, with hardware audio acceptance.
 
 Do not present this first extraction as completion of the entire architecture migration. TCP and UDP encryption, real audio and network failure matrices remain release gates.
+
+## Channel state and portable avatars (second change set)
+
+`client/application/request_scope.py` assigns response tickets to the current screen, action and identity. Channel switches invalidate tickets; repeated reads accept only the newest response. The shared request adapter also rejects responses from a previous authentication session. Settings revisions prevent a pending refresh/save response from overwriting newer edits.
+
+`server/domain/presence_order.py` persists the highest voice update sequence per session/channel in `voice_presence_versions`. Updates and presence writes share an immediate transaction. A late join cannot undo a leave, and a late leave cannot undo a newer join. The client reserves sequence ranges in its configuration so process restarts and wall-clock rollback do not reuse older command numbers. Independent devices should use distinct authentication sessions. Legacy unsequenced clients work only before sequenced updates for the same session/channel.
+
+Avatars now travel as bounded 128-pixel PNG thumbnails in existing avatar fields. `client/application/avatars.py` prepares them; `server/domain/avatars.py` decodes, validates and re-encodes them with Pillow. No server file reads use the client-provided path. Legacy paths remain readable for compatibility but are not automatically migrated. Inline thumbnails avoid a breaking protocol/schema migration; separate content-addressed media storage and caching remain appropriate for larger deployments.

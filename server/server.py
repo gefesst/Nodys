@@ -1,4 +1,14 @@
 try:
+    from .domain.avatars import normalize_avatar
+except ImportError:
+    from domain.avatars import normalize_avatar
+
+try:
+    from .domain.presence_order import accept_update
+except ImportError:
+    from domain.presence_order import accept_update
+
+try:
     from .storage.database import connect as database_connection
 except ImportError:
     from storage.database import connect as database_connection
@@ -280,6 +290,11 @@ def init_db() -> None:
             )"""
         )
 
+        c.execute("""CREATE TABLE IF NOT EXISTS voice_presence_versions (
+            token TEXT NOT NULL, channel_id INTEGER NOT NULL, sequence INTEGER NOT NULL,
+            PRIMARY KEY(token, channel_id))""")
+        c.execute("DELETE FROM voice_presence_versions WHERE token NOT IN (SELECT token FROM sessions)")
+
         # Helpful indexes
         # indexes (compatible with existing DB)
         c.execute("CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_login)")
@@ -425,6 +440,7 @@ def delete_session(token: str) -> None:
         return
     try:
         with database_connection(DB_FILE, timeout=10) as conn:
+            conn.execute("DELETE FROM voice_presence_versions WHERE token=?", (token,))
             conn.execute("DELETE FROM sessions WHERE token=?", (token,))
             conn.commit()
     except Exception:
@@ -1214,7 +1230,7 @@ def _cleanup_channel_voice_presence(conn: sqlite3.Connection, channel_id: Option
         )
 
 
-def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = False, joined: bool = True) -> Tuple[bool, str]:
+def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = False, joined: bool = True, token: str = "", sequence=None) -> Tuple[bool, str]:
     cid = int(channel_id or 0)
     if cid <= 0:
         return False, "Не указан канал"
@@ -1225,6 +1241,9 @@ def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = Fal
         if joined and not _can_join_voice(conn, cid, login):
             return False, "У вас нет прав для входа в голосовой канал"
 
+        conn.execute("BEGIN IMMEDIATE")
+        if not accept_update(conn, token, cid, sequence):
+            return True, "Устаревшее обновление пропущено"
         _cleanup_channel_voice_presence(conn, cid)
         if not joined:
             conn.execute(
@@ -1248,11 +1267,14 @@ def set_channel_voice_presence(login: str, channel_id: int, speaking: bool = Fal
     return True, "ok"
 
 
-def leave_channel_voice(login: str, channel_id: int) -> Tuple[bool, str]:
+def leave_channel_voice(login: str, channel_id: int, token: str = "", sequence=None) -> Tuple[bool, str]:
     cid = int(channel_id or 0)
     if cid <= 0:
         return False, "Не указан канал"
     with database_connection(DB_FILE, timeout=10) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        if not accept_update(conn, token, cid, sequence):
+            return True, "Устаревшее обновление пропущено"
         conn.execute(
             "DELETE FROM channel_voice_presence WHERE channel_id=? AND login=?",
             (cid, login),
@@ -1770,7 +1792,10 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         login = (data.get("login") or "").strip()
         password = data.get("password") or ""
         nickname = (data.get("nickname") or "").strip()
-        avatar = data.get("avatar") or ""
+        try:
+            avatar = normalize_avatar(data.get("avatar") or "")
+        except ValueError as error:
+            return {"status": "error", "message": str(error)}
         if not login or not password or not nickname:
             return {"status": "error", "message": "Заполните все поля"}
         ok = add_user(login, password, nickname, avatar)
@@ -1856,7 +1881,10 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         if not nickname:
             return {"status": "error", "message": "Никнейм не может быть пустым"}
         password = (data.get("password") or "").strip() or None
-        avatar = data.get("avatar") or ""
+        try:
+            avatar = normalize_avatar(data.get("avatar") or "")
+        except ValueError as error:
+            return {"status": "error", "message": str(error)}
         update_user_profile(current_user, nickname, password, avatar)
         return {"status": "ok"}
 
@@ -1934,7 +1962,10 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
     # Channels
     if action == "create_channel":
         name = (data.get("name") or "").strip()
-        avatar = data.get("avatar") or ""
+        try:
+            avatar = normalize_avatar(data.get("avatar") or "")
+        except ValueError as error:
+            return {"status": "error", "message": str(error)}
         try:
             ch = create_channel(current_user, name=name, avatar=avatar)
             return {"status": "ok", "channel": ch}
@@ -2008,7 +2039,10 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
     if action == "update_channel_settings":
         channel_id = int(data.get("channel_id") or 0)
         name = (data.get("name") or "").strip()
-        avatar = data.get("avatar") or ""
+        try:
+            avatar = normalize_avatar(data.get("avatar") or "")
+        except ValueError as error:
+            return {"status": "error", "message": str(error)}
         text_min_role = (data.get("text_min_role") or "member").strip().lower()
         voice_min_role = (data.get("voice_min_role") or "member").strip().lower()
         ok, msg, channel = update_channel_settings(
@@ -2057,12 +2091,12 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
         channel_id = int(data.get("channel_id") or 0)
         speaking = bool(data.get("speaking", False))
         joined = bool(data.get("joined", True))
-        ok, msg = set_channel_voice_presence(current_user, channel_id, speaking=speaking, joined=joined)
+        ok, msg = set_channel_voice_presence(current_user, channel_id, speaking=speaking, joined=joined, token=token, sequence=data.get("sequence"))
         return {"status": "ok"} if ok else {"status": "error", "message": msg}
 
     if action == "leave_channel_voice":
         channel_id = int(data.get("channel_id") or 0)
-        ok, msg = leave_channel_voice(current_user, channel_id)
+        ok, msg = leave_channel_voice(current_user, channel_id, token=token, sequence=data.get("sequence"))
         return {"status": "ok"} if ok else {"status": "error", "message": msg}
 
     if action == "get_channel_voice_participants":

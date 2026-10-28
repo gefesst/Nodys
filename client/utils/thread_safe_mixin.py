@@ -35,11 +35,13 @@ class ThreadSafeMixin:
                 if "from_user" not in payload and login:
                     payload["from_user"] = login
 
+        session_at_start = getattr(ctx, "session_token", None)
         t = NetworkThread(host, port, payload)
         self._threads.append(t)
 
         def done(resp):
-            if not getattr(self, "_alive", True):
+            current_ctx = getattr(self, "ctx", None)
+            if not getattr(self, "_alive", True) or getattr(current_ctx, "session_token", None) != session_at_start:
                 if t in self._threads:
                     self._threads.remove(t)
                 return

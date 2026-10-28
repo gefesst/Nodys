@@ -52,3 +52,45 @@ class UiTests(unittest.TestCase):
             window.handle_register_response({'status':'error','message':'Логин уже существует'})
             modal.assert_not_called()
         self.assertEqual(window.status_label.text(),'Логин уже существует')
+
+    def test_late_channel_response_is_ignored(self):
+        pending = []
+        with patch('utils.thread_safe_mixin.ThreadSafeMixin.start_request',
+                   side_effect=lambda data, callback, *args: pending.append((data,callback))):
+            self.page.open_channel({'id':1,'name':'First'})
+            old = [callback for data, callback in pending if data['action']=='get_channel_details'][0]
+            self.page.open_channel({'id':2,'name':'Second'})
+            old({'status':'ok','channel':{'id':1,'name':'Wrong'}})
+        self.assertEqual(self.page.active_channel['id'],2)
+        self.assertEqual(self.page.active_channel['name'],'Second')
+
+    def test_empty_chat_shows_hint(self):
+        from PySide6.QtWidgets import QLabel
+        self.page.start_request = lambda data, cb, **kw: cb({'status':'ok','messages':[]}) if data['action']=='get_channel_messages' else None
+        self.page.open_channel({'id':1,'name':'Empty'})
+        self.assertTrue(self.page.findChildren(QLabel,'ChannelTextEmptyHint'))
+
+    def test_details_response_preserves_new_draft(self):
+        pending = []
+        self.page.active_channel = {'id':1,'name':'Old'}
+        self.page.start_request = lambda data, cb, **kw: pending.append(cb)
+        self.page.load_channel_details()
+        self.page.settings_name_input.setText('Draft')
+        self.page._mark_settings_edited()
+        pending[0]({'status':'ok','channel':{'id':1,'name':'Server'}})
+        self.assertEqual(self.page.settings_name_input.text(),'Draft')
+
+    def test_avatar_survives_source_file_removal(self):
+        from PySide6.QtGui import QImage, QColor
+        from application.avatars import encode_avatar
+        from ui.avatar_widget import AvatarLabel
+        from domain.avatars import normalize_avatar
+        source = Path(self.folder.name)/'image.png'
+        image = QImage(64,64,QImage.Format_RGBA8888)
+        image.fill(QColor('red'))
+        image.save(str(source))
+        payload = normalize_avatar(encode_avatar(str(source)))
+        source.unlink()
+        widget = AvatarLabel()
+        self.addCleanup(widget.close)
+        self.assertFalse(widget._load_pixmap(payload,'remote').isNull())

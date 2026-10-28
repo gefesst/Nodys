@@ -1,3 +1,4 @@
+import base64
 import os
 from PySide6.QtWidgets import QLabel
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QFont
@@ -76,6 +77,15 @@ class AvatarLabel(QLabel):
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     def _load_pixmap(self, path, login):
+        if isinstance(path, str) and path.startswith("data:image/png;base64,"):
+            if len(path) > 140_000:
+                return None
+            try:
+                pixmap = QPixmap()
+                pixmap.loadFromData(base64.b64decode(path.split(",",1)[1], validate=True), "PNG")
+                return pixmap
+            except (ValueError, TypeError):
+                return None
         # 1) Прямой путь
         if path and os.path.exists(path):
             return QPixmap(path)
