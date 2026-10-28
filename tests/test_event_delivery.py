@@ -1,9 +1,7 @@
 import unittest
 import test_voice_authorization as fixtures
 
-class EventDeliveryTests(unittest.TestCase):
-    setUp = fixtures.VoiceAuthorizationTests.setUp
-    packet = fixtures.VoiceAuthorizationTests.packet
+class EventDeliveryTests(fixtures.VoiceFixture, unittest.TestCase):
 
     def poll(self, login='bob', after=0):
         return self.server.handle_request({'action':'poll_events','token':self.tokens[login], 'after_event_id':after})

@@ -13,13 +13,13 @@ Cross-platform: create a Python virtual environment, install `requirements.txt`,
 
 `python -m unittest discover -s tests -v`
 
-`python -m compileall -q client server tools tests`
+`python -m compileall -q client server shared tools tests`
 
 ## Architecture direction
 
 Keep Python for the desktop client and services. Extract transport, authentication, channel policy, repositories and migrations into independently tested modules. UI should consume application state through controllers rather than own transport and database rules. Preserve executable entry points throughout migration.
 
-The current branch starts this migration; the comprehensive audit is not yet resolved. In particular, encrypted remote audio, media storage, migration versioning and hardware audio validation still require implementation. Do not expose the development servers to untrusted networks.
+The current branch starts this migration; the comprehensive audit is not yet resolved. In particular, media storage, migration versioning, public-server hardening and hardware audio validation still require implementation. Do not expose the development servers to untrusted networks.
 
 ## Current changes
 
@@ -45,8 +45,27 @@ Audio playback mixes bounded queues for individual speakers with saturation inst
 
 Control connections use verified TLS for remote hosts (certificate chain and hostname, TLS 1.2 minimum). Set `NODYS_HOST`, `NODYS_PORT`, `NODYS_TLS_CERT` and `NODYS_TLS_KEY` on the TCP server. Client configuration accepts `api_tls` and optional `api_ca_file`; normal public certificates use system trust. Plaintext control is permitted only on loopback. The server defaults to `127.0.0.1` and limits concurrent client handlers to 64.
 
-**Remote voice is intentionally unavailable until encrypted UDP is implemented.** Both the voice client and server reject non-loopback hosts so session tokens cannot be transmitted in plaintext over the network. TLS protects control traffic only; this branch is not a remote voice release.
+The third change set initially blocked remote voice. The fourth change set below replaces that restriction with authenticated encrypted UDP; old plaintext voice clients are no longer compatible.
 
 For a manual TLS preview, open `Просмотр Nodys TLS.command` on macOS or run `python tools/preview.py --tls` (OpenSSL required). It generates a temporary localhost certificate trusted only by the two test clients. Test channels, messages and settings in Alice/Bob windows. Check accept/decline/end call behavior manually; microphone permission and real sound quality require your hardware. Closing both windows removes the temporary accounts and certificate.
 
 For repeatable process checks: `python tools/preview.py --tls --smoke-seconds 10`. This confirms startup and process survival, not microphone quality.
+
+## Fourth change set: encrypted voice
+
+Voice now uses AES-256-GCM authenticated datagrams. Login tokens travel only through the control connection, never in UDP. Each connection gets independent keys for each direction, scoped to one channel or active private call. Duplicate, modified and plaintext packets are rejected. A newer authenticated packet can update the client's NAT address.
+
+Keys expire after one hour; the client renews them before expiry and reconnects after eight seconds without a server acknowledgement. Renewing credentials revokes the old transport. A relay restart requires fresh keys, so encryption counters cannot repeat after restart. Leaving/logging out, membership changes and call termination retain server-side permission checks.
+
+For deployment on a private test network, configure the existing TLS control endpoint and set `NODYS_VOICE_HOST` / `NODYS_VOICE_PORT` for the UDP relay. Configure matching `voice_host` / `voice_port` in each client. Both servers must use the same `NODYS_DB_FILE`. Default listeners remain loopback. No firewall rules or public exposure are changed by the launcher.
+
+This is client-to-server transport encryption, **not end-to-end encryption**: the trusted relay decrypts and re-encrypts audio. Protect the server database and its backups, which hold short-lived transport keys. Internet deployment still needs operational hardening and capacity testing; there is no STUN/TURN or UDP-over-TCP fallback.
+
+### Manual check after this update
+
+1. Start `Просмотр Nodys TLS.command`; Alice and Bob open with isolated test accounts.
+2. Join the test channel's voice section in both windows. Allow microphone access yourself if prompted. Check mute, deafen, leave and rejoin. Use headphones to prevent feedback.
+3. Leave channel voice, call Bob from Alice, accept, then end the call; both windows should clear the call state.
+4. Close both clients when done. Restart the launcher after further code changes.
+
+Automated tests exercise actual TLS credential requests and encrypted UDP with synthetic PCM, packet tampering/replay, key renewal, UDP relay restart, revocation and audio-device startup failure. They do not validate real microphone/speaker quality or communication between two physical machines.

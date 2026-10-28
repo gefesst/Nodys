@@ -3,3 +3,4 @@ sounddevice>=0.4
 numpy>=1.24
 
 Pillow>=12.0
+cryptography>=46.0.6

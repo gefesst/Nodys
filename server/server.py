@@ -1,3 +1,7 @@
+# Preserve direct script entry points while sharing the wire protocol package.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 try:
     from .server_transport.tls import server_context
 except ImportError:
@@ -5,8 +9,10 @@ except ImportError:
 
 try:
     from .storage import events as event_store
+    from .storage import voice_tickets
 except ImportError:
     from storage import events as event_store
+    from storage import voice_tickets
 
 try:
     from .domain.avatars import normalize_avatar
@@ -306,6 +312,7 @@ def init_db() -> None:
         c.execute("DELETE FROM voice_presence_versions WHERE token NOT IN (SELECT token FROM sessions)")
 
         event_store.initialize(conn)
+        voice_tickets.initialize(conn)
         call_columns = {row[1] for row in c.execute("PRAGMA table_info(active_call_pairs)")}
         if "caller_login" not in call_columns:
             c.execute("ALTER TABLE active_call_pairs ADD COLUMN caller_login TEXT NOT NULL DEFAULT ''")
@@ -456,6 +463,7 @@ def delete_session(token: str) -> None:
     try:
         with database_connection(DB_FILE, timeout=10) as conn:
             conn.execute("DELETE FROM voice_presence_versions WHERE token=?", (token,))
+            conn.execute("DELETE FROM voice_tickets WHERE token=?", (token,))
             conn.execute("DELETE FROM sessions WHERE token=?", (token,))
             conn.commit()
     except Exception:
@@ -1855,6 +1863,16 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
     current_user, token, err = require_auth(data)
     if err:
         return err
+
+    if action == "voice_ticket":
+        try:
+            with database_connection(DB_FILE, timeout=5) as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                ticket = voice_tickets.issue(connection, current_user, token,
+                                             data.get("room"), data.get("peer"))
+            return {"status": "ok", **ticket}
+        except (ValueError, TypeError, OverflowError) as error:
+            return {"status": "error", "message": str(error)}
 
     # Common touch already done
 

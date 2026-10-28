@@ -23,10 +23,3 @@ class MixerTests(unittest.TestCase):
         self.assertFalse(mixer.push('third',self.frame(3)))
         self.assertLessEqual(mixer.queued_frames(),6)
         self.assertFalse(mixer.push('alice',b'bad'))
-
-    def test_remote_voice_fails_before_sending_credentials(self):
-        from voice_client import VoiceClient
-        client=VoiceClient('alice',token='synthetic',host='203.0.113.1')
-        with self.assertRaises(ValueError):client.start(peer_login='bob')
-        self.assertFalse(client.running)
-        self.assertIsNone(client.sock)

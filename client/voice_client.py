@@ -1,5 +1,6 @@
-from transport.control import is_loopback
+from transport.voice import SecureVoiceTransport
 import socket
+import queue
 import threading
 import time
 from audio.mixer import PcmMixer
@@ -8,34 +9,30 @@ import sounddevice as sd
 
 
 class VoiceClient:
+    ACK_TIMEOUT = 8
     def __init__(self, login, token: str = "", host="127.0.0.1", port=5556):
         self.login = login
         self.token = token or ""
         self.host = host
         self.port = port
         self.running = False
-        self.sock = None
+        self.transport = None
+        self._stop_event = threading.Event()
         self.sample_rate = 16000
         self.channels = 1
         self.dtype = "int16"
         self.frame_samples = 320
         # Короткий джиттер-буфер для сглаживания неровной UDP-доставки.
         self.mixer = PcmMixer(frame_samples=self.frame_samples)
+        self._outgoing = queue.Queue(maxsize=8)
         self._speaker_arrivals = {}
         self.recv_thread = None
-        self.heartbeat_thread = None
         self.in_stream = None
         self.out_stream = None
         self.peer = None
         self.room_id = None
         self.mic_enabled = True
         self.sound_enabled = True
-
-        # Playback/buffer state
-        self._target_buffer_frames = 3
-        self._last_play_chunk = b""
-        self._underflow_score = 0.0
-        self._overflow_score = 0.0
 
         # speaking/activity metrics
         self._mic_level = 0.0
@@ -47,51 +44,34 @@ class VoiceClient:
         self._avg_gap_ms = 20.0
         self._loss_score = 0.0
         self._latency_ms = 0.0
-        self._ping_sent = {}
         self._voice_threshold = 0.015
-
-        # quality metrics / ping
-        self._ping_thread = None
-        self._ping_seq = 0
-        self._ping_sent = {}
 
     def start(self, peer_login=None, room_id=None):
         if self.running:
             return
-        if not is_loopback(self.host):
-            raise ValueError("Удалённый голос требует защищённого UDP-транспорта; пока доступен локальный предпросмотр")
-
+        if self.recv_thread and self.recv_thread.is_alive():
+            raise RuntimeError("Предыдущее голосовое соединение ещё закрывается")
         self.peer = peer_login or None
         self.room_id = str(room_id) if room_id is not None else None
 
         if not self.peer and not self.room_id:
             raise ValueError("peer_login or room_id is required")
 
+        self._outgoing = queue.Queue(maxsize=8)
+        self._stop_event.clear()
+        self.transport = SecureVoiceTransport(self.login, self.token, self.host, self.port,
+                                              self.room_id, self.peer)
         self.running = True
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        try:
-            # Чуть больше буферы ОС, чтобы меньше терять пакеты под нагрузкой.
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
-        except Exception:
-            pass
-        self.sock.connect((self.host, self.port))
-        self.sock.settimeout(0.2)
         self._reset_runtime_metrics()
-        self._join()
-        if self.room_id:
-            self._join_room(self.room_id)
-        elif self.peer:
-            self._set_pair(self.login, self.peer, True)
-
         self.recv_thread = threading.Thread(target=self._recv_loop, daemon=True)
         self.recv_thread.start()
-        self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
-        self.heartbeat_thread.start()
+        try:
+            self._start_audio()
+        except BaseException:
+            self.stop()
+            raise
 
-        self._ping_thread = threading.Thread(target=self._ping_loop, daemon=True)
-        self._ping_thread.start()
-
+    def _start_audio(self):
         self.in_stream = sd.InputStream(
             samplerate=self.sample_rate,
             channels=self.channels,
@@ -113,14 +93,7 @@ class VoiceClient:
         if not self.running:
             return
         self.running = False
-        try:
-            if self.peer:
-                self._set_pair(self.login, self.peer, False)
-            if self.room_id:
-                self._leave_room(self.room_id)
-        except Exception:
-            pass
-
+        self._stop_event.set()
         for stream in (self.in_stream, self.out_stream):
             if stream:
                 try:
@@ -131,12 +104,11 @@ class VoiceClient:
         self.in_stream = None
         self.out_stream = None
 
-        if self.sock:
-            try:
-                self.sock.close()
-            except Exception:
-                pass
-            self.sock = None
+        if self.transport:
+            self.transport.close()
+        if self.recv_thread and self.recv_thread is not threading.current_thread():
+            self.recv_thread.join(timeout=7)
+        self.transport = None
         self.peer = None
         self.room_id = None
         self.mic_enabled = True
@@ -150,10 +122,6 @@ class VoiceClient:
         self._avg_gap_ms = 20.0
         self._loss_score = 0.0
         self._latency_ms = 0.0
-        self._ping_sent = {}
-        self._underflow_score = 0.0
-        self._overflow_score = 0.0
-        self._last_play_chunk = b""
         self.mixer.clear()
         self._speaker_arrivals.clear()
 
@@ -167,76 +135,14 @@ class VoiceClient:
         self._avg_gap_ms = 20.0
         self._loss_score = 0.0
         self._latency_ms = 0.0
-        self._ping_sent = {}
-        self._underflow_score = 0.0
-        self._overflow_score = 0.0
-        self._last_play_chunk = b""
         self.mixer.clear()
         self._speaker_arrivals.clear()
-
-    def _join(self):
-        if self.token:
-            msg = f"J|{self.login}|{self.token}".encode("utf-8")
-        else:
-            msg = f"J|{self.login}".encode("utf-8")
-        self.sock.sendto(msg, (self.host, self.port))
-
-    def _join_room(self, room_id: str):
-        room = str(room_id or "").strip()
-        if not room:
-            return
-        token_part = self.token or ""
-        msg = f"C|{self.login}|{token_part}|{room}".encode("utf-8")
-        self.sock.sendto(msg, (self.host, self.port))
-
-    def _leave_room(self, room_id: str):
-        room = str(room_id or "").strip()
-        if not room:
-            return
-        msg = f"L|{self.login}|{room}".encode("utf-8")
-        self.sock.sendto(msg, (self.host, self.port))
-
-    def _set_pair(self, a, b, active):
-        flag = "1" if active else "0"
-        # Новый формат (безопасный): S|sender_login|token|a|b|flag
-        # Legacy fallback (для старых серверов): S|a|b|flag
-        if self.token:
-            msg = f"S|{self.login}|{self.token}|{a}|{b}|{flag}".encode("utf-8")
-        else:
-            msg = f"S|{a}|{b}|{flag}".encode("utf-8")
-        self.sock.sendto(msg, (self.host, self.port))
-
-    def _heartbeat_loop(self):
-        while self.running:
-            try:
-                self._join()
-                if self.room_id:
-                    self._join_room(self.room_id)
-            except Exception:
-                pass
-            time.sleep(2)
-
-    def _ping_loop(self):
-        while self.running:
-            try:
-                seq = self._ping_seq
-                self._ping_seq += 1
-                payload = f"{seq}|{time.time():.6f}".encode("utf-8")
-                self._ping_sent[seq] = time.time()
-                self.sock.sendto(b"P|" + payload, (self.host, self.port))
-                # cleanup old
-                old = [k for k,v in self._ping_sent.items() if time.time()-v>5]
-                for k in old:
-                    self._ping_sent.pop(k, None)
-            except Exception:
-                pass
-            time.sleep(2.0)
 
     def _capture_cb(self, indata, frames, time_info, status):
         if not self.running:
             return
         try:
-            arr = indata.astype(np.float32)
+            arr = indata.astype(np.float32) / 32768.0
             rms = float(np.sqrt(np.mean(np.square(arr)))) if arr.size else 0.0
             self._mic_level = rms
             if rms >= self._voice_threshold:
@@ -248,8 +154,14 @@ class VoiceClient:
             return
         try:
             pcm = indata.copy().tobytes()
-            header = f"A|{self.login}|".encode("utf-8")
-            self.sock.sendto(header + pcm, (self.host, self.port))
+            try:
+                self._outgoing.put_nowait(pcm)
+            except queue.Full:
+                try:
+                    self._outgoing.get_nowait()
+                except queue.Empty:
+                    pass
+                self._outgoing.put_nowait(pcm)
         except Exception:
             pass
 
@@ -261,35 +173,65 @@ class VoiceClient:
             outdata[:count, 0] = chunk[:count]
 
     def _recv_loop(self):
-        while self.running:
+        try:
+            self._run_network()
+        finally:
+            transport = self.transport
+            if transport:
+                transport.close()
+            self.transport = None
+
+    def _run_network(self):
+        last_ack = time.monotonic()
+        last_ping = 0
+        while not self._stop_event.is_set():
+            transport = self.transport
+            now = time.monotonic()
+            if transport is None or now-last_ack > self.ACK_TIMEOUT or time.time() > transport.expires-60:
+                if transport:
+                    transport.close()
+                self.transport = None
+                self.mixer.clear()
+                try:
+                    replacement = SecureVoiceTransport(self.login, self.token, self.host, self.port,
+                                                       self.room_id, self.peer)
+                    if self._stop_event.is_set():
+                        replacement.close()
+                        return
+                    self._outgoing = queue.Queue(maxsize=8)
+                    self.transport = replacement
+                    last_ack = time.monotonic()
+                    last_ping = 0
+                except Exception:
+                    self._stop_event.wait(2)
+                continue
             try:
-                data, _ = self.sock.recvfrom(8192)
+                if now-last_ping >= 2:
+                    transport.send(b'H')
+                    last_ping = now
+                for _ in range(8):
+                    try:
+                        pcm = self._outgoing.get_nowait()
+                    except queue.Empty:
+                        break
+                    transport.send(b'A' + pcm)
+                data = transport.receive()
             except socket.timeout:
                 continue
-            except Exception:
-                break
-
-            if data.startswith(b"Q|"):
-                try:
-                    payload = data[2:].decode("utf-8", errors="ignore")
-                    seq_s, _ts = payload.split("|", 1)
-                    seq = int(seq_s)
-                    sent = self._ping_sent.pop(seq, None)
-                    if sent is not None:
-                        self._latency_ms = max(0.0, (time.time() - sent) * 1000.0)
-                except Exception:
-                    pass
+            except OSError:
+                self._stop_event.wait(0.2)
                 continue
-
-            if not data.startswith(b"R|"):
+            if data == b'K':
+                last_ack = time.monotonic()
+                self._latency_ms = max(0, (last_ack-last_ping)*1000)
                 continue
-            sep = data.find(b"|", 2)
-            if sep == -1:
+            if len(data) < 2 or data[:1] != b'R':
                 continue
-            speaker = data[2:sep].decode("utf-8", errors="replace")
+            size = data[1]
+            speaker = data[2:2+size].decode('utf-8', errors='replace')
             if self.peer and speaker != self.peer:
                 continue
-            pcm = data[sep + 1:]
+            pcm = data[2+size:]
             if not self.mixer.push(speaker, pcm):
                 continue
             now_ts = time.time()
@@ -328,14 +270,10 @@ class VoiceClient:
         jitter = float(self._jitter_ms)
         latency = float(self._latency_ms)
         loss = float(self._loss_score)
-        uf = float(self._underflow_score)
-        of = float(self._overflow_score)
         score = 100.0 - (
             jitter * 1.4
             + max(0.0, latency - 60.0) * 0.6
             + loss * 0.7
-            + uf * 0.45
-            + of * 0.25
         )
         if score >= 75:
             quality = "Отличное"
@@ -345,6 +283,9 @@ class VoiceClient:
             quality = "Среднее"
         else:
             quality = "Плохое"
+
+        if self.transport is None:
+            quality, score = "Переподключение", 0.0
 
         return {
             "mic_level": self._mic_level,

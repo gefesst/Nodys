@@ -38,11 +38,5 @@ class FoundationTests(unittest.TestCase):
             server.set_session_offline(token)
             self.assertFalse(server.is_online('synthetic'))
 
-    def test_old_udp_address_is_removed(self):
-        voice = load('voice_test', 'server/voice_server.py')
-        voice._mark_seen('synthetic',('127.0.0.1',1))
-        voice._mark_seen('synthetic',('127.0.0.1',2))
-        self.assertNotIn(('127.0.0.1',1),voice.addr_to_login)
-
 if __name__ == '__main__':
     unittest.main()

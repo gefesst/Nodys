@@ -1,479 +1,119 @@
-try:
-    from .storage.database import connect as database_connection
-except ImportError:
-    from storage.database import connect as database_connection
-
+"""Authenticated encrypted UDP relay. No plaintext compatibility path."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import os
+import secrets
 import socket
-import threading
 import sqlite3
 import time
-import os
-from collections import deque
+from cryptography.exceptions import InvalidTag
+from shared.voice_protocol import DatagramCipher, HEADER, MAGIC, MAX_PACKET, PCM_BYTES
 try:
-    from .domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
+    from .storage.database import connect as database_connection
+    from .storage import voice_tickets
 except ImportError:
-    from domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
-from typing import Dict, Tuple, Optional
+    from storage.database import connect as database_connection
+    from storage import voice_tickets
 
-# Shared DB with TCP server for token validation / channel ACL
-DB_FILE = os.environ.get("NODYS_DB_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
-
-HOST = "127.0.0.1"
-PORT = 5556
-
-# login -> (ip, port, last_seen)
-clients: Dict[str, Tuple[str, int, float]] = {}
-client_tokens: Dict[str, str] = {}
-# (ip,port) -> login
-addr_to_login: Dict[Tuple[str, int], str] = {}
-# frozenset({a,b}) -> True
-pairs: Dict[frozenset, bool] = {}
-
-# channel voice rooms
-# room_id(str) -> set(logins)
-room_members: Dict[str, set] = {}
-# login -> room_id(str)
-login_room: Dict[str, str] = {}
-
-lock = threading.Lock()
-
-_ROLE_RANK = {"member": 1, "moderator": 2, "admin": 3, "owner": 4}
-_CONTROL_RATE_WINDOW_SEC = 1.0
-_CONTROL_RATE_LIMIT = {b"J|": 30, b"C|": 30, b"L|": 30, b"S|": 40}
-_rate_lock = threading.Lock()
-_rate_log: Dict[Tuple[str, int, bytes], deque] = {}
-
-_has_active_pair_table_cache: Optional[bool] = None
-_has_active_pair_table_ts: float = 0.0
+DB_FILE = os.environ.get('NODYS_DB_FILE') or str(Path(__file__).with_name('users.db'))
+HOST = os.environ.get('NODYS_VOICE_HOST', '127.0.0.1')
+PORT = int(os.environ.get('NODYS_VOICE_PORT', '5556'))
 
 
-# -------------------- Helpers --------------------
+class VoiceRelay:
+    """Single socket-loop owner; no concurrent mutation of crypto or routes."""
+    def __init__(self, database):
+        self.database = database
+        self.process_id = secrets.token_hex(16)
+        self.connections = {}
+        self.last_cleanup = 0
 
-def validate_token(login: str, token: str) -> bool:
-    if not login or not token:
-        return False
-    try:
-        with database_connection(DB_FILE, timeout=0.2) as connection:
-            return session_valid(connection, login, token)
-    except sqlite3.Error:
-        return False
+    def _valid(self, connection, identity):
+        ticket = voice_tickets.read(connection, identity)
+        return ticket if ticket and voice_tickets.allowed(connection, ticket) else None
 
-
-def _authorized_audio(login, room=None, peer=None):
-    """Revalidate sender and recipients against authoritative state.
-
-    No positive cache: revocations apply to the next packet. Optimize only with
-    explicit invalidation, never an unbounded permission cache.
-    """
-    try:
-        with database_connection(DB_FILE, timeout=0.2) as connection:
-            if not session_valid(connection, login, client_tokens.get(login, '')):
-                return False
-            if room is not None:
-                return channel_voice_allowed(connection, login, room)
-            return peer is not None and private_call_allowed(connection, login, peer)
-    except sqlite3.Error:
-        return False
-
-
-def _norm_role(role: str) -> str:
-    r = (role or "").strip().lower()
-    if r not in {"member", "moderator", "admin", "owner"}:
-        return "member"
-    return r
-
-
-def _control_rate_limited(addr: Tuple[str, int], typ: bytes) -> bool:
-    limit = _CONTROL_RATE_LIMIT.get(typ)
-    if not limit:
-        return False
-
-    key = (addr[0], int(addr[1]), typ)
-    now_ts = time.time()
-    with _rate_lock:
-        q = _rate_log.get(key)
-        if q is None:
-            q = deque()
-            _rate_log[key] = q
-        while q and (now_ts - q[0]) > _CONTROL_RATE_WINDOW_SEC:
-            q.popleft()
-        if len(q) >= limit:
-            return True
-        q.append(now_ts)
-
-        # occasional cleanup
-        if len(_rate_log) > 5000:
-            for k in list(_rate_log.keys())[:1500]:
-                qq = _rate_log.get(k)
-                if not qq or (now_ts - qq[-1]) > 3.0:
-                    _rate_log.pop(k, None)
-    return False
-
-
-def _is_friends(user_a: str, user_b: str) -> bool:
-    if not user_a or not user_b or user_a == user_b:
-        return False
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT 1
-            FROM friends
-            WHERE (user_login=? AND friend_login=?)
-               OR (user_login=? AND friend_login=?)
-            LIMIT 1
-            """,
-            (user_a, user_b, user_b, user_a),
-        )
-        row = cur.fetchone()
-        conn.close()
-        return bool(row)
-    except Exception:
-        return False
-
-
-def _active_pair_table_exists() -> bool:
-    global _has_active_pair_table_cache, _has_active_pair_table_ts
-    now_ts = time.time()
-    if _has_active_pair_table_cache is not None and (now_ts - _has_active_pair_table_ts) < 5.0:
-        return bool(_has_active_pair_table_cache)
-
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        cur = conn.cursor()
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='active_call_pairs'")
-        row = cur.fetchone()
-        conn.close()
-        _has_active_pair_table_cache = bool(row)
-    except Exception:
-        _has_active_pair_table_cache = False
-
-    _has_active_pair_table_ts = now_ts
-    return bool(_has_active_pair_table_cache)
-
-
-def _is_active_call_pair(user_a: str, user_b: str) -> bool:
-    # Compatibility fallback for older DB schema.
-    if not _active_pair_table_exists():
-        return False
-
-    ua, ub = (user_a, user_b) if user_a <= user_b else (user_b, user_a)
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=5)
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT status FROM active_call_pairs WHERE user_a=? AND user_b=? LIMIT 1",
-            (ua, ub),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if not row:
-            return False
-        return str(row[0]).strip().lower() == "active"
-    except Exception:
-        return False
-
-
-def _can_join_channel_voice(login: str, room_id: str) -> bool:
-    try:
-        with database_connection(DB_FILE, timeout=0.2) as connection:
-            return channel_voice_allowed(connection, login, room_id)
-    except sqlite3.Error:
-        return False
-
-
-def _mark_seen(login: str, addr):
-    now_ts = time.time()
-    with lock:
-        previous = clients.get(login)
-        if previous and previous[:2] != addr[:2]:
-            addr_to_login.pop(previous[:2], None)
-        clients[login] = (addr[0], addr[1], now_ts)
-        addr_to_login[(addr[0], addr[1])] = login
-
-
-def _join_room(login: str, room_id: str):
-    old = login_room.get(login)
-    if old and old in room_members:
-        room_members[old].discard(login)
-        if not room_members[old]:
-            room_members.pop(old, None)
-
-    room_members.setdefault(room_id, set()).add(login)
-    login_room[login] = room_id
-
-
-def _remove_from_room(login: str):
-    old = login_room.pop(login, None)
-    if old and old in room_members:
-        room_members[old].discard(login)
-        if not room_members[old]:
-            room_members.pop(old, None)
-
-
-def set_pair(a: str, b: str, active: bool):
-    key = frozenset((a, b))
-    with lock:
-        if active:
-            pairs[key] = True
-        else:
-            pairs.pop(key, None)
-
-
-def other_user_in_pair(me: str) -> Optional[str]:
-    with lock:
-        for key in pairs.keys():
-            if me in key:
-                for u in key:
-                    if u != me:
-                        return u
-    return None
-
-
-# -------------------- Cleanup --------------------
-
-def cleanup_loop(timeout_sec: int = 20):
-    while True:
-        now_ts = time.time()
-        dead = []
-        with lock:
-            for login, (_, _, last_seen) in list(clients.items()):
-                if now_ts - last_seen > timeout_sec:
-                    dead.append(login)
-
-            for login in dead:
-                clients.pop(login, None)
-                client_tokens.pop(login, None)
-                # remove reverse addr mapping
-                for k, v in list(addr_to_login.items()):
-                    if v == login:
-                        addr_to_login.pop(k, None)
-                # remove from channel room if present
-                _remove_from_room(login)
-                # remove any pairs containing this login
-                for key in list(pairs.keys()):
-                    if login in key:
-                        pairs.pop(key, None)
-
-        time.sleep(2)
-
-
-# -------------------- Packet handling --------------------
-
-def handle_packet(sock: socket.socket, data: bytes, addr):
-    if len(data) < 3:
-        return
-    typ = data[:2]
-
-    if _control_rate_limited(addr, typ):
-        return
-
-    if typ == b"J|":
-        payload = data[2:].decode("utf-8", errors="ignore").strip()
-        if not payload:
+    def handle(self, sock, packet, address):
+        if not HEADER.size + 16 < len(packet) <= MAX_PACKET or packet[:3] != MAGIC:
             return
-
-        parts = payload.split("|", 1)
-        login = parts[0].strip()
-        token = parts[1].strip() if len(parts) > 1 else ""
-
-        if token:
-            if not validate_token(login, token):
-                return
-        else:
-            return
-
-        client_tokens[login] = token
-        _mark_seen(login, addr)
-        return
-
-    if typ == b"C|":
-        # Join channel voice room: C|login|token|room_id
-        payload = data[2:].decode("utf-8", errors="ignore").strip()
-        parts = payload.split("|", 3)
-        if len(parts) < 3:
-            return
-
-        login = parts[0].strip()
-        token = parts[1].strip()
-        room_id = parts[2].strip()
-        if not login or not room_id:
-            return
-
-        if token:
-            if not validate_token(login, token):
-                return
-        else:
-            return
-
-        if not _can_join_channel_voice(login, room_id):
-            return
-
-        client_tokens[login] = token
-        room_id = f"channel:{channel_id(room_id)}"
-        _mark_seen(login, addr)
-        with lock:
-            _join_room(login, room_id)
-        return
-
-    if typ == b"L|":
-        # Leave channel room: L|login|room_id
-        payload = data[2:].decode("utf-8", errors="ignore").strip()
-        parts = payload.split("|", 2)
-        if len(parts) < 1:
-            return
-
-        login = parts[0].strip()
-        if not login:
-            return
-
-        sender = addr_to_login.get((addr[0], addr[1]))
-        if sender != login:
-            return
-
-        with lock:
-            _remove_from_room(login)
-        return
-
-    if typ == b"S|":
-        # Pairing commands:
-        #   secure format: S|sender_login|token|a|b|flag
-        #   legacy format: S|a|b|flag
+        now = time.monotonic()
+        if now-self.last_cleanup > 2:
+            self.connections = {key: state for key,state in self.connections.items()
+                                if now-state['seen'] < 20}
+            self.last_cleanup = now
+        identity = HEADER.unpack_from(packet)[1]
         try:
-            payload = data[2:].decode("utf-8", errors="ignore").strip()
-            parts = payload.split("|")
-
-            sender_mapped = addr_to_login.get((addr[0], addr[1]))
-            if not sender_mapped:
-                return
-
-            sender_login = ""
-            token = ""
-            a = b = flag = ""
-
-            if len(parts) >= 5:
-                sender_login, token, a, b, flag = parts[0], parts[1], parts[2], parts[3], parts[4]
-                sender_login = sender_login.strip()
-                token = token.strip()
-            elif len(parts) >= 3:
-                a, b, flag = parts[0], parts[1], parts[2]
-                sender_login = sender_mapped
-            else:
-                return
-
-            a = (a or "").strip()
-            b = (b or "").strip()
-            flag = (flag or "").strip()
-
-            if sender_login and sender_login != sender_mapped:
-                return
-
-            sender = sender_mapped
-            if sender not in (a, b):
-                return
-
-            if token:
-                if not validate_token(sender, token):
+            with database_connection(self.database, timeout=0.2) as connection:
+                ticket = self._valid(connection, identity)
+                if not ticket:
+                    self.connections.pop(identity, None)
                     return
-            else:
-                return
-
-            if flag == "1":
-                # Private pair can be established only for friends and active calls.
-                if not _is_friends(a, b):
-                    return
-                if not _is_active_call_pair(a, b):
-                    return
-
-            set_pair(a, b, flag == "1")
-        except Exception:
-            pass
-        return
-
-    if typ == b"P|":
-        # Ping -> pong
-        try:
-            sock.sendto(b"Q|" + data[2:], addr)
-        except Exception:
-            pass
-        return
-
-    if typ == b"A|":
-        # Audio frame: A|from_user|<pcm>
-        try:
-            sep = data.find(b"|", 2)
-            if sep == -1:
-                return
-
-            from_user = data[2:sep].decode("utf-8", errors="ignore").strip()
-            pcm = data[sep + 1 :]
-
-            sender = addr_to_login.get((addr[0], addr[1]))
-            if sender != from_user:
-                return
-
-            _mark_seen(from_user, addr)
-
-            # 1) channel room broadcast
-            with lock:
-                room_id = login_room.get(from_user)
-                if room_id:
-                    recips = [u for u in room_members.get(room_id, set()) if u != from_user]
-                    targets = [clients.get(u) for u in recips]
+                state = self.connections.get(identity)
+                if state is None:
+                    if ticket['claimed'] or len(self.connections) >= 1024:
+                        return
+                    cipher = DatagramCipher(identity, ticket['server_key'], ticket['client_key'])
+                    sequence, payload = cipher.open(packet)
+                    if payload != b'J' or not voice_tickets.claim(connection, identity, self.process_id):
+                        return
+                    # Commit claim before sending: a restart must not reset send nonces.
+                    connection.commit()
+                    state = dict(cipher=cipher, address=address, address_sequence=sequence,
+                                 seen=now, ticket=ticket, rate_start=now, rate_count=0)
+                    self.connections[identity] = state
                 else:
-                    targets = None
-
-            if targets is not None:
-                if not _authorized_audio(from_user, room=room_id):
+                    sequence, payload = state['cipher'].open(packet)
+                if payload not in (b'J', b'H', b'L') and not (payload[:1] == b'A' and len(payload) == PCM_BYTES+1):
                     return
-                for recipient, tgt in zip(recips, targets):
-                    if not _authorized_audio(recipient, room=room_id):
+                # Only a newer authenticated packet may move the NAT endpoint.
+                if sequence >= state['address_sequence']:
+                    state['address'] = address
+                    state['address_sequence'] = sequence
+                state['seen'] = now
+                if now-state['rate_start'] >= 1:
+                    state['rate_start'], state['rate_count'] = now, 0
+                state['rate_count'] += 1
+                if state['rate_count'] > 100:
+                    return
+                if payload in (b'J', b'H'):
+                    sock.sendto(state['cipher'].seal(b'K'), state['address'])
+                    return
+                if payload == b'L':
+                    if sequence == state['cipher'].highest:
+                        self.connections.pop(identity, None)
+                        connection.execute('DELETE FROM voice_tickets WHERE id=?', (identity,))
+                    return
+                sender_name = ticket['login'].encode('utf-8')
+                if len(sender_name) > 255:
+                    return
+                output = b'R' + bytes([len(sender_name)]) + sender_name + payload[1:]
+                for other_id, target in list(self.connections.items()):
+                    other = target['ticket']
+                    if other['login'] == ticket['login']:
                         continue
-                    if not tgt:
+                    matches = (ticket['room'] and other['room'] == ticket['room']) or (
+                        not ticket['room'] and not other['room'] and
+                        ticket['peer'] == other['login'] and other['peer'] == ticket['login'])
+                    if not matches or not self._valid(connection, other_id):
                         continue
-                    ip, port, _ = tgt
                     try:
-                        sock.sendto(b"R|" + from_user.encode("utf-8") + b"|" + pcm, (ip, port))
-                    except Exception:
+                        sock.sendto(target['cipher'].seal(output), target['address'])
+                    except OSError:
                         pass
-                return
-
-            # 2) private pair
-            to_user = other_user_in_pair(from_user)
-            if not to_user:
-                return
-            if not (_authorized_audio(from_user, peer=to_user) and _authorized_audio(to_user, peer=from_user)):
-                return
-
-            with lock:
-                target = clients.get(to_user)
-            if not target:
-                return
-
-            ip, port, _ = target
-            sock.sendto(b"R|" + from_user.encode("utf-8") + b"|" + pcm, (ip, port))
-        except Exception:
-            pass
+        except (ValueError, InvalidTag, sqlite3.Error, OSError):
+            # Untrusted or revoked packets never alter routing or produce plaintext.
+            return
 
 
 def main():
-    import ipaddress
-    if not ipaddress.ip_address(HOST).is_loopback:
-        raise ValueError("Remote voice requires encrypted UDP transport")
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((HOST, PORT))
-    print(f"[VOICE] UDP listening on {HOST}:{PORT}")
-
-    threading.Thread(target=cleanup_loop, daemon=True).start()
-
-    while True:
-        try:
-            data, addr = sock.recvfrom(8192)
-            handle_packet(sock, data, addr)
-        except Exception:
-            pass
+    relay = VoiceRelay(DB_FILE)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.bind((HOST, PORT))
+        print(f'[VOICE] Encrypted UDP listening on {HOST}:{PORT}', flush=True)
+        while True:
+            packet, address = sock.recvfrom(MAX_PACKET+1)
+            relay.handle(sock, packet, address)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
