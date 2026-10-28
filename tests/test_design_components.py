@@ -100,3 +100,39 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertEqual(sent[-1][0]['current_password'],'')
         self.assertEqual(sent[-1][0]['nickname'],'Unsubmitted name')
         page.close()
+
+    def test_late_preferred_channel_does_not_override_manual_selection(self):
+        from ui.channels_page import ChannelsPage
+        from unittest.mock import Mock
+        callbacks=[]
+        selected=[2]
+        page=SimpleNamespace(_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
+            _channels_loaded_once=True,_channel_navigation_revision=1,
+            start_request=lambda payload,callback:callbacks.append(callback),
+            _active_channel_id=lambda:selected[0],_apply_channel_header=Mock(),
+            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),
+            main_stack=SimpleNamespace(currentWidget=lambda:'settings'),
+            placeholder_page='placeholder',open_channel=Mock(),show_toast=Mock())
+        ChannelsPage.load_channels(page,force_refresh=True,preferred_channel_id=2)
+        selected[0]=1
+        page._channel_navigation_revision+=1
+        callbacks[0]({'status':'ok','channels':[{'id':1,'name':'Owner'},{'id':2,'name':'Member'}]})
+        self.assertEqual(page.active_channel['id'],1)
+        page.open_channel.assert_not_called()
+
+    def test_only_latest_channel_list_reply_applies(self):
+        from ui.channels_page import ChannelsPage
+        from unittest.mock import Mock
+        callbacks=[]
+        page=SimpleNamespace(_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
+            _channels_loaded_once=True,
+            start_request=lambda payload,callback:callbacks.append(callback),
+            _active_channel_id=lambda:1,_apply_channel_header=Mock(),
+            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),
+            main_stack=SimpleNamespace(currentWidget=lambda:'settings'),
+            placeholder_page='placeholder',open_channel=Mock(),show_toast=Mock())
+        ChannelsPage.load_channels(page,force_refresh=True)
+        ChannelsPage.load_channels(page,force_refresh=True)
+        callbacks[1]({'status':'ok','channels':[{'id':1,'name':'Current'}]})
+        callbacks[0]({'status':'ok','channels':[{'id':1,'name':'Outdated'}]})
+        self.assertEqual(page.active_channel['name'],'Current')

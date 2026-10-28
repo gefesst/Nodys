@@ -1618,7 +1618,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         # text controls
         if can_send_text:
             self.channel_msg_input.setEnabled(True)
-            self.channel_send_btn.setEnabled(not self._message_send_inflight)
             self.channel_msg_input.setPlaceholderText("Сообщение в канал...")
         else:
             self.channel_msg_input.setEnabled(False)
@@ -1791,6 +1790,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._apply_channel_permissions_ui()
 
     def open_create_page(self):
+        self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
         self.hide_settings_confirm()
         self.create_name_input.clear()
         self._create_avatar_path = ""
@@ -1800,6 +1800,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.stop()
 
     def open_join_page(self):
+        self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
         self.hide_settings_confirm()
         self.join_code_input.clear()
         self.main_stack.setCurrentWidget(self.join_page)
@@ -1809,6 +1810,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def open_channel(self, channel: dict):
         if not channel:
             return
+        self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
 
         self.hide_settings_confirm()
 
@@ -1937,22 +1939,30 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if not self._channels_loaded_once:
             self._show_channels_skeleton(count=6)
 
+        self._channel_list_revision = getattr(self, '_channel_list_revision', 0) + 1
+        list_revision = self._channel_list_revision
+        navigation_revision = getattr(self, '_channel_navigation_revision', 0)
         self._loading_channels = True
         payload = {"action": "get_my_channels"}
 
         def cb(resp):
+            if list_revision != self._channel_list_revision:
+                return
             try:
                 self._channels_loaded_once = True
                 if resp.get("status") != "ok":
-                    self.channels = []
-                    self.render_channels(force=True)
+                    self.show_toast(resp.get("message", "Не удалось обновить список каналов"))
                     return
 
                 self.channels = resp.get("channels", []) or []
 
                 # keep active channel if still exists
                 cur_id = self._active_channel_id()
-                if preferred_channel_id:
+                previous_id = cur_id
+                if preferred_channel_id and (
+                    navigation_revision == getattr(self, '_channel_navigation_revision', 0)
+                    or cur_id == preferred_channel_id
+                ):
                     cur_id = preferred_channel_id
 
                 matched = None
@@ -1960,8 +1970,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     matched = next((c for c in self.channels if int(c.get("id", 0)) == int(cur_id)), None)
 
                 if matched:
-                    self.active_channel = dict(matched)
-                    self._apply_channel_header()
+                    if previous_id != cur_id:
+                        self.open_channel(matched)
+                    else:
+                        self.active_channel = dict(matched)
+                        self._apply_channel_header()
                 else:
                     # active channel deleted/unavailable
                     if self._voice_client is not None:
