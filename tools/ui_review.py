@@ -596,6 +596,10 @@ def main():
 
     def init(w):
         instances.append(w)
+        from PySide6.QtGui import QFont, QRawFont
+        font = QRawFont.fromFont(QFont('Arial'))
+        if not font.isValid() or not all(font.supportsCharacter(ord(c)) for c in 'NodusДрузья'):
+            raise RuntimeError('UI review requires Latin and Cyrillic glyphs; refusing unreadable screenshots')
         original(w)
         w._review = Review(w)
 
