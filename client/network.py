@@ -1,3 +1,4 @@
+from transport.control import connect_api
 import socket
 import json
 import threading
@@ -305,9 +306,7 @@ class NetworkThread(QObject):
                 if self._abort_event.is_set():
                     return
                 try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.settimeout(3.0)
-                        s.connect((host, int(port)))
+                    with connect_api(host, port, timeout=3.0) as s:
                         if self._abort_event.is_set():
                             return
 

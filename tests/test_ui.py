@@ -15,6 +15,8 @@ class UiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from PySide6.QtWidgets import QApplication
+        from application.qt_runtime import prepare_platform_plugins
+        prepare_platform_plugins()
         cls.app = QApplication.instance() or QApplication([])
 
     def setUp(self):
@@ -94,3 +96,20 @@ class UiTests(unittest.TestCase):
         widget = AvatarLabel()
         self.addCleanup(widget.close)
         self.assertFalse(widget._load_pixmap(payload,'remote').isNull())
+
+    def test_call_snapshot_does_not_restart_audio(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from ui.main_window import MainWindow
+        window = SimpleNamespace(ctx=SimpleNamespace(session_token='test'),current_call_user=None,
+            voice_client=None,call_window=None,_hide_incoming_inline=Mock(),
+            _show_incoming_inline=Mock(),_start_voice_for_peer=Mock(),_open_call_window=Mock(),
+            _close_call_window=Mock())
+        state={'peer':'bob','status':'active','incoming':False,'call_id':'1'}
+        MainWindow._reconcile_call_state(window,state)
+        MainWindow._reconcile_call_state(window,state)
+        window._start_voice_for_peer.assert_called_once_with('bob')
+        MainWindow._reconcile_call_state(window,None)
+        self.assertIsNone(window.current_call_user)
+        MainWindow._reconcile_call_state(window,dict(state,call_id='2'))
+        self.assertEqual(window._start_voice_for_peer.call_count,2)

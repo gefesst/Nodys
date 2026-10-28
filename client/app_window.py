@@ -1,3 +1,4 @@
+from transport.control import connect_api
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication
 from PySide6.QtGui import QIcon
 import os
@@ -131,9 +132,7 @@ class AppWindow(QWidget):
         """
         host, port = get_api_endpoint()
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1.5)
-                s.connect((host, int(port)))
+            with connect_api(host, port, timeout=1.5) as s:
                 _send_packet(s, {"action": "resume_session", "token": token})
                 return _recv_packet(s)
         except Exception:

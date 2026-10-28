@@ -82,7 +82,7 @@ def clear_config() -> None:
     # Session removal must preserve connection preferences.
     existing = load_config()
     preferences = {key: value for key, value in existing.items()
-                   if key in {"api_host", "api_port", "voice_host", "voice_port"}}
+                   if key in {"api_host", "api_port", "voice_host", "voice_port", "api_tls", "api_ca_file"}}
     paths = [get_config_path()]
     if not os.environ.get("NODYS_CONFIG_DIR"):
         paths.append(LEGACY_CONFIG_FILE)
