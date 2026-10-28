@@ -158,3 +158,22 @@ class DesignGeometryTests(unittest.TestCase):
         main.channels_page.open_channel.assert_called_once_with({'id':1,'name':'Team'})
         dialog.close()
         main.close()
+
+    def test_all_svg_assets_render_after_repeated_collection(self):
+        import gc
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QImage, QPainter
+        from ui.design.widgets import ASSETS, icon, ICONS
+        # Exercise initial parsing, cache hits, and QObject lifetime together.
+        image = QImage(32, 32, QImage.Format_ARGB32_Premultiplied)
+        for repeat in range(3):
+            for path in ASSETS.glob('*.svg'):
+                image.fill(Qt.transparent)
+                painter = QPainter(image)
+                try:
+                    icon(painter, path.stem, QRectF(0, 0, 32, 32), '#ACB9CC')
+                finally:
+                    painter.end()
+                self.assertTrue(ICONS[(path.stem, '#ACB9CC')].isValid())
+                self.assertTrue(any(image.pixelColor(x,y).alpha() for y in range(32) for x in range(32)))
+            gc.collect()

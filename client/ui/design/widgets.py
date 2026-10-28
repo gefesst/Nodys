@@ -3,6 +3,7 @@ from pathlib import Path
 import re, time
 from PySide6.QtCore import (
     Qt,
+    QByteArray,
     QRectF,
     QSize,
     QPropertyAnimation,
@@ -23,6 +24,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QWidget,
+    QApplication,
     QPushButton,
     QStyledItemDelegate,
     QStyle,
@@ -90,7 +92,12 @@ def icon(p, name, rect, color=SUB):
     if key not in ICONS:
         file = ASSETS / (name + ".svg")
         data = file.read_text().replace("#ACB9CC", color)
-        ICONS[key] = QSvgRenderer(data.encode())
+        # Select the byte-array overload explicitly. The constructor also accepts
+        # a filename and a QXmlStreamReader; never pass untyped temporary bytes.
+        renderer = QSvgRenderer(QApplication.instance())
+        if not renderer.load(QByteArray(data.encode("utf-8"))):
+            raise ValueError(f"Invalid bundled SVG icon: {name}")
+        ICONS[key] = renderer
     ICONS[key].render(p, QRectF(rect))
 
 
