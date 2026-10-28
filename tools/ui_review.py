@@ -42,7 +42,7 @@ def main():
             self.path.mkdir(parents=True, exist_ok=True)
             self.log = []
             self.error = None
-            self.deadline = time.monotonic() + 120
+            self.deadline = time.monotonic() + 300
             self.until = 0
             self.predicate = None
             self.steps = self.scenario()

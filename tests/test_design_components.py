@@ -61,3 +61,16 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertGreaterEqual(nav.height(), 64)
         self.assertGreaterEqual(send.height(), 40)
         window.close()
+
+    def test_call_controls_toggle_real_callbacks_without_repolishing(self):
+        from ui.call_window import ActiveCallWindow
+        mic, sound = [], []
+        window = ActiveCallWindow('alice','bob',on_mic_toggle=mic.append,on_sound_toggle=sound.append)
+        window._mic_clicked()
+        window._sound_clicked()
+        self.assertEqual(mic,[False])
+        self.assertEqual(sound,[False])
+        self.assertTrue(window.btn_mic.primary)
+        window._mic_clicked()
+        self.assertEqual(mic,[False,True])
+        window.close()

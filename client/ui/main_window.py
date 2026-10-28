@@ -585,7 +585,7 @@ class MainWindow(QWidget):
         self.settings_button.update()
         for b in (self.btn_friends, self.btn_chats, self.btn_channels, self.btn_profile):
             b.setProperty("active", b is active_btn)
-            b.style().unpolish(b); b.style().polish(b)
+            b.update()
 
 
     def open_quick_switch(self):

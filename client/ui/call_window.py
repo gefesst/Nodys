@@ -215,8 +215,6 @@ class ActiveCallWindow(QDialog):
         self.btn_mic.primary = not self.mic_enabled
         self.btn_mic.update()
         self.btn_mic.setProperty("off", "false" if self.mic_enabled else "true")
-        self.btn_mic.style().unpolish(self.btn_mic)
-        self.btn_mic.style().polish(self.btn_mic)
         if self.on_mic_toggle:
             self.on_mic_toggle(self.mic_enabled)
 
@@ -226,8 +224,6 @@ class ActiveCallWindow(QDialog):
         self.btn_sound.primary = not self.sound_enabled
         self.btn_sound.update()
         self.btn_sound.setProperty("off", "false" if self.sound_enabled else "true")
-        self.btn_sound.style().unpolish(self.btn_sound)
-        self.btn_sound.style().polish(self.btn_sound)
         if self.on_sound_toggle:
             self.on_sound_toggle(self.sound_enabled)
     def set_visual_state(self, state: str):
@@ -235,13 +231,11 @@ class ActiveCallWindow(QDialog):
         state: idle | me | peer | both
         """
         self.setProperty("talkState", state)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        self.update()
         # avatar accent
         if hasattr(self, "avatar_wrap"):
             self.avatar_wrap.setProperty("talkState", state)
-            self.avatar_wrap.style().unpolish(self.avatar_wrap)
-            self.avatar_wrap.style().polish(self.avatar_wrap)
+            self.avatar_wrap.update()
 
 
     def closeEvent(self, event):
