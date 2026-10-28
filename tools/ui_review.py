@@ -5,6 +5,8 @@ and handlers. Run with --output <folder>; --synthetic-voice replaces devices onl
 """
 
 import argparse, json, os, runpy, sys, time, traceback
+import faulthandler
+faulthandler.enable()
 from pathlib import Path
 
 os.environ["QT_QPA_PLATFORM"] = (
@@ -464,6 +466,19 @@ def main():
                 )
             m.show_chats()
             c = m.chats_page.conversation
+            self.history_trace = []
+            original_request = c.request
+            def history_request(data, callback):
+                def completed(response):
+                    callback(response)
+                    entry = dict(before_id=data.get('before_id'), after_id=data.get('after_id'),
+                                 status=response.get('status'), message=response.get('message'),
+                                 returned=len(response.get('messages', [])), loaded=len(c.rows),
+                                 older=c.older, newer=c.newer, loading=c.loading)
+                    self.history_trace.append(entry)
+                    print('History:', entry, flush=True)
+                original_request(data, completed)
+            c.request = history_request
             c.select(lab.people[0][0], "Алексей Морозов")
             self.wait(predicate=lambda: not c.loading and len(c.rows) == 80)
             yield
@@ -471,7 +486,7 @@ def main():
                 c.load("older")
                 self.wait(predicate=lambda: not c.loading)
                 yield
-            assert len(c.rows) == 240
+            assert len(c.rows) == 240, self.history_trace
             gaps = []
             last = [time.perf_counter()]
             timer = QTimer(w)
@@ -549,6 +564,7 @@ def main():
                         audio=getattr(self, "audio_results", None),
                         backdrop=getattr(self.w, "backdrop_description", None),
                         workflow_checks=getattr(self, "workflow_checks", []),
+                        history_trace=getattr(self, "history_trace", []),
                     ),
                     ensure_ascii=False,
                     indent=2,

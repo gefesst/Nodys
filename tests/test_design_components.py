@@ -136,3 +136,25 @@ class DesignGeometryTests(unittest.TestCase):
         callbacks[1]({'status':'ok','channels':[{'id':1,'name':'Current'}]})
         callbacks[0]({'status':'ok','channels':[{'id':1,'name':'Outdated'}]})
         self.assertEqual(page.active_channel['name'],'Current')
+
+    def test_quick_switch_repeated_filtering_and_target_selection(self):
+        from PySide6.QtWidgets import QWidget
+        from unittest.mock import Mock
+        from ui.design.quick_switch import QuickSwitch
+        main=QWidget()
+        main.friends_page=SimpleNamespace(_friends_data=[{'login':'alice','nickname':'Alice'}])
+        main.channels_page=SimpleNamespace(channels=[{'id':1,'name':'Team'}],open_channel=Mock())
+        main.chats_page=SimpleNamespace(open_chat=Mock())
+        main.show_channels=Mock()
+        main.show_chats=Mock()
+        dialog=QuickSwitch(main)
+        for _ in range(100):
+            dialog.query.setText('no match')
+            self.assertEqual(dialog.model.rowCount(),0)
+            dialog.query.setText('Team')
+            self.assertEqual(dialog.model.rowCount(),1)
+            self.app.processEvents()
+        dialog.open_selected()
+        main.channels_page.open_channel.assert_called_once_with({'id':1,'name':'Team'})
+        dialog.close()
+        main.close()
