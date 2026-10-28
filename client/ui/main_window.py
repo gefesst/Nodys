@@ -1,3 +1,4 @@
+from transport.control import connect_api
 from PySide6.QtCore import QTimer, Qt, QRect, QEvent
 import os
 import socket
@@ -825,9 +826,7 @@ class MainWindow(QWidget):
 
         try:
             host, port = get_api_endpoint()
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(max(0.2, float(timeout_sec)))
-                s.connect((host, int(port)))
+            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
                 send_json_packet(s, payload)
                 _ = recv_json_packet(s)
         except Exception:
@@ -851,9 +850,7 @@ class MainWindow(QWidget):
         }
         try:
             host, port = get_api_endpoint()
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(max(0.2, float(timeout_sec)))
-                s.connect((host, int(port)))
+            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
                 send_json_packet(s, payload)
                 _ = recv_json_packet(s)
         except Exception:
@@ -967,16 +964,27 @@ class MainWindow(QWidget):
             return
         if self.call_poll_thread and self.call_poll_thread.isRunning():
             return
+        token = self.ctx.session_token
+        if getattr(self, "_event_session", None) != token:
+            self._event_session = token
+            self._event_cursor = 0
         self.call_poll_thread = NetworkThread(None, None, {
             "action": "poll_events",
+            "after_event_id": self._event_cursor,
             "login": self.ctx.login,
             "token": self.ctx.session_token,
         })
-        self.call_poll_thread.finished.connect(self.handle_call_events)
+        self.call_poll_thread.finished.connect(
+            lambda response: self.handle_call_events(response) if self.ctx.session_token == token else None)
         self.call_poll_thread.start()
 
     def handle_call_events(self, resp):
         if resp.get("status") != "ok":
+            return
+        if "call_state" in resp:
+            self._reconcile_call_state(resp["call_state"])
+            for event in resp.get("events", []):
+                self._event_cursor = max(getattr(self, "_event_cursor", 0), event.get("event_id", 0))
             return
         for ev in resp.get("events", []):
             et = ev.get("type")
@@ -1024,6 +1032,31 @@ class MainWindow(QWidget):
                     pass
                 self._show_call_notice(f"Звонок с {with_user} завершён", timeout_ms=2300)
 
+    def _reconcile_call_state(self, state):
+        """The snapshot heals missed/expired events and avoids duplicate audio starts."""
+        key = (self.ctx.session_token, None if state is None else
+               (state.get("call_id"),state.get("peer"),state.get("status"),state.get("incoming")))
+        if getattr(self, "_applied_call_state", None) == key:
+            return
+        self._applied_call_state = key
+        if state is None:
+            self._hide_incoming_inline()
+            if self.current_call_user or self.voice_client or self.call_window:
+                self.current_call_user = None
+                if self.voice_client:
+                    self.voice_client.stop()
+                    self.voice_client = None
+                self._close_call_window()
+            return
+        peer = state.get("peer")
+        if state.get("status") == "active":
+            self._hide_incoming_inline()
+            self.current_call_user = peer
+            self._start_voice_for_peer(peer)
+            self._open_call_window(peer)
+        elif state.get("status") == "ringing" and state.get("incoming"):
+            self._show_incoming_inline(peer)
+
     def _start_voice_for_peer(self, peer_login: str):
         try:
             if hasattr(self.channels_page, "stop_voice_session"):
@@ -1043,6 +1076,9 @@ class MainWindow(QWidget):
             )
             self.voice_client.start(peer_login=peer_login)
         except Exception as e:
+            if self.voice_client:
+                self.voice_client.stop()
+                self.voice_client = None
             self._show_call_notice(f"Не удалось запустить аудио: {e}", timeout_ms=2800)
 
     def _open_call_window(self, peer_login: str):
@@ -1138,9 +1174,7 @@ class MainWindow(QWidget):
 
         try:
             host, port = get_api_endpoint()
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(max(0.2, float(timeout_sec)))
-                s.connect((host, int(port)))
+            with connect_api(host, port, timeout=max(0.2, float(timeout_sec))) as s:
                 send_json_packet(s, payload)
                 _ = recv_json_packet(s)
         except Exception:

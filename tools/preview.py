@@ -17,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--clients', type=int, choices=(1, 2), default=2)
     parser.add_argument("--smoke-seconds", type=float, default=0)
+    parser.add_argument("--tls", action="store_true", help="Use a temporary trusted localhost certificate")
     args = parser.parse_args()
     children = []
     with tempfile.TemporaryDirectory(prefix='nodys-preview-') as directory:
@@ -34,6 +35,16 @@ def main():
         channel = server.create_channel('alice', 'Тестовый канал')
         server.join_channel_by_code('bob', channel['code'])
         env = dict(os.environ, PYTHONFAULTHANDLER="1", NODYS_DB_FILE=server.DB_FILE, NODYS_CHAT_DB=server.CHAT_DB)
+        tls_config = {}
+        if args.tls:
+            certificate = data/'localhost.crt'
+            key = data/'localhost.key'
+            subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes',
+                '-keyout',str(key),'-out',str(certificate),'-days','1','-subj','/CN=localhost',
+                '-addext','subjectAltName=DNS:localhost,IP:127.0.0.1'],check=True,
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            env.update(NODYS_TLS_CERT=str(certificate),NODYS_TLS_KEY=str(key))
+            tls_config = {'api_tls':True,'api_ca_file':str(certificate)}
         try:
             children.append(subprocess.Popen([sys.executable, '-u', '-c', "import server; server.start_server('127.0.0.1',15555)"], cwd=ROOT/'server', env=env))
             children.append(subprocess.Popen([sys.executable, '-u', '-c', "import voice_server as v; v.HOST='127.0.0.1'; v.PORT=15556; v.main()"], cwd=ROOT/'server', env=env))
@@ -43,7 +54,7 @@ def main():
             for login in ('alice', 'bob')[:args.clients]:
                 config_dir = data / login
                 config_dir.mkdir()
-                (config_dir/'config.json').write_text(json.dumps({'login':login,'token':tokens[login], 'api_host':'127.0.0.1','api_port':15555,'voice_host':'127.0.0.1','voice_port':15556}))
+                (config_dir/'config.json').write_text(json.dumps({'login':login,'token':tokens[login], 'api_host':'127.0.0.1','api_port':15555,'voice_host':'127.0.0.1','voice_port':15556,**tls_config}))
                 children.append(subprocess.Popen([sys.executable, str(ROOT/'client/main.py')], env=dict(env,NODYS_CONFIG_DIR=str(config_dir))))
             print('Preview: Alice owns the channel, Bob is a member. Close clients or press Ctrl+C to stop.', flush=True)
             started = time.monotonic()

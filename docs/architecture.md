@@ -25,7 +25,7 @@ Database context managers commit or roll back and always close. Preview data liv
 4. Secure control/audio transport, media storage, acknowledged events and multi-speaker mixing.
 5. Lock dependencies and package for target platforms, with hardware audio acceptance.
 
-Do not present this first extraction as completion of the entire architecture migration. TCP and UDP encryption, real audio and network failure matrices remain release gates.
+Do not present this first extraction as completion of the entire architecture migration. Encrypted remote UDP, real audio and network failure matrices remain release gates.
 
 ## Channel state and portable avatars (second change set)
 
@@ -34,3 +34,14 @@ Do not present this first extraction as completion of the entire architecture mi
 `server/domain/presence_order.py` persists the highest voice update sequence per session/channel in `voice_presence_versions`. Updates and presence writes share an immediate transaction. A late join cannot undo a leave, and a late leave cannot undo a newer join. The client reserves sequence ranges in its configuration so process restarts and wall-clock rollback do not reuse older command numbers. Independent devices should use distinct authentication sessions. Legacy unsequenced clients work only before sequenced updates for the same session/channel.
 
 Avatars now travel as bounded 128-pixel PNG thumbnails in existing avatar fields. `client/application/avatars.py` prepares them; `server/domain/avatars.py` decodes, validates and re-encodes them with Pillow. No server file reads use the client-provided path. Legacy paths remain readable for compatibility but are not automatically migrated. Inline thumbnails avoid a breaking protocol/schema migration; separate content-addressed media storage and caching remain appropriate for larger deployments.
+
+## Call delivery, audio and control transport (third change set)
+
+- `server/storage/events.py`: non-destructive event reads by cursor; retention is 180 seconds and 200 events per user. Legacy clients still use the old destructive queue. A current call snapshot repairs state even when events have expired. Events and call changes are not yet a transactional outbox.
+- `client/ui/main_window.py`: reconciles snapshots by session, call ID, peer and status; rejects responses from a previous session. Extracting this controller from the widget remains follow-up work.
+- `client/audio/mixer.py`: bounded PCM queues per speaker, summed in int32 and clipped to int16. Network sequencing, adaptive jitter control and codec work remain open.
+- `client/transport/control.py`: shared verified TLS connection factory for asynchronous requests and shutdown/resume requests.
+- `server/server_transport/tls.py`: server certificate configuration and loopback-only plaintext policy. TLS handshake timeout and a bounded worker count constrain resource use.
+- `client/application/qt_runtime.py`: macOS platform-plugin visibility preparation before Qt startup; resolves hidden plugin flags observed in the local development environment.
+
+Remote voice is blocked until authenticated encrypted audio transport exists. Do not interpret TLS control support as encryption of voice packets.

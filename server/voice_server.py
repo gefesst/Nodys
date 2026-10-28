@@ -18,7 +18,7 @@ from typing import Dict, Tuple, Optional
 # Shared DB with TCP server for token validation / channel ACL
 DB_FILE = os.environ.get("NODYS_DB_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.db")
 
-HOST = "0.0.0.0"
+HOST = "127.0.0.1"
 PORT = 5556
 
 # login -> (ip, port, last_seen)
@@ -458,6 +458,9 @@ def handle_packet(sock: socket.socket, data: bytes, addr):
 
 
 def main():
+    import ipaddress
+    if not ipaddress.ip_address(HOST).is_loopback:
+        raise ValueError("Remote voice requires encrypted UDP transport")
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((HOST, PORT))
     print(f"[VOICE] UDP listening on {HOST}:{PORT}")

@@ -1,7 +1,8 @@
+from transport.control import is_loopback
 import socket
 import threading
 import time
-import queue
+from audio.mixer import PcmMixer
 import numpy as np
 import sounddevice as sd
 
@@ -19,7 +20,8 @@ class VoiceClient:
         self.dtype = "int16"
         self.frame_samples = 320
         # Короткий джиттер-буфер для сглаживания неровной UDP-доставки.
-        self.play_q = queue.Queue(maxsize=80)
+        self.mixer = PcmMixer(frame_samples=self.frame_samples)
+        self._speaker_arrivals = {}
         self.recv_thread = None
         self.heartbeat_thread = None
         self.in_stream = None
@@ -56,6 +58,8 @@ class VoiceClient:
     def start(self, peer_login=None, room_id=None):
         if self.running:
             return
+        if not is_loopback(self.host):
+            raise ValueError("Удалённый голос требует защищённого UDP-транспорта; пока доступен локальный предпросмотр")
 
         self.peer = peer_login or None
         self.room_id = str(room_id) if room_id is not None else None
@@ -71,6 +75,7 @@ class VoiceClient:
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 128 * 1024)
         except Exception:
             pass
+        self.sock.connect((self.host, self.port))
         self.sock.settimeout(0.2)
         self._reset_runtime_metrics()
         self._join()
@@ -149,8 +154,8 @@ class VoiceClient:
         self._underflow_score = 0.0
         self._overflow_score = 0.0
         self._last_play_chunk = b""
-        with self.play_q.mutex:
-            self.play_q.queue.clear()
+        self.mixer.clear()
+        self._speaker_arrivals.clear()
 
     def _reset_runtime_metrics(self):
         self._mic_level = 0.0
@@ -166,8 +171,8 @@ class VoiceClient:
         self._underflow_score = 0.0
         self._overflow_score = 0.0
         self._last_play_chunk = b""
-        with self.play_q.mutex:
-            self.play_q.queue.clear()
+        self.mixer.clear()
+        self._speaker_arrivals.clear()
 
     def _join(self):
         if self.token:
@@ -249,48 +254,11 @@ class VoiceClient:
             pass
 
     def _play_cb(self, outdata, frames, time_info, status):
-        if not self.sound_enabled:
-            outdata[:] = 0
-            return
-        try:
-            # Небольшой prebuffer для устойчивости к джиттеру сети.
-            if self.play_q.qsize() < self._target_buffer_frames and self._last_recv_ts > 0:
-                outdata[:] = 0
-                self._underflow_score = min(100.0, self._underflow_score * 0.97 + 2.5)
-                return
-
-            chunk = self.play_q.get_nowait()
-            self._last_play_chunk = chunk
-            arr = np.frombuffer(chunk, dtype=np.int16).reshape(-1, 1)
-            if len(arr) < len(outdata):
-                outdata[:] = 0
-                outdata[:len(arr)] = arr
-            else:
-                outdata[:] = arr[:len(outdata)]
-
-            # плавно снижаем штрафы при стабильном воспроизведении
-            self._underflow_score = max(0.0, self._underflow_score * 0.96 - 0.2)
-            self._overflow_score = max(0.0, self._overflow_score * 0.97 - 0.2)
-        except queue.Empty:
-            # Простая PLC-логика: кратковременно повторяем последний фрейм,
-            # если пакет задержался совсем немного.
-            now_ts = time.time()
-            if self._last_play_chunk and self._last_recv_ts > 0 and (now_ts - self._last_recv_ts) < 0.12:
-                try:
-                    arr = np.frombuffer(self._last_play_chunk, dtype=np.int16).reshape(-1, 1)
-                    if len(arr) < len(outdata):
-                        outdata[:] = 0
-                        outdata[:len(arr)] = arr
-                    else:
-                        outdata[:] = arr[:len(outdata)]
-                except Exception:
-                    outdata[:] = 0
-            else:
-                outdata[:] = 0
-            self._underflow_score = min(100.0, self._underflow_score * 0.97 + 3.0)
-        except Exception:
-            outdata[:] = 0
-            self._underflow_score = min(100.0, self._underflow_score * 0.98 + 1.5)
+        chunk = self.mixer.mix()
+        outdata[:] = 0
+        if self.sound_enabled:
+            count = min(len(outdata), len(chunk))
+            outdata[:count, 0] = chunk[:count]
 
     def _recv_loop(self):
         while self.running:
@@ -318,10 +286,16 @@ class VoiceClient:
             sep = data.find(b"|", 2)
             if sep == -1:
                 continue
+            speaker = data[2:sep].decode("utf-8", errors="replace")
+            if self.peer and speaker != self.peer:
+                continue
             pcm = data[sep + 1:]
+            if not self.mixer.push(speaker, pcm):
+                continue
             now_ts = time.time()
-            if self._last_recv_ts > 0:
-                gap_ms = (now_ts - self._last_recv_ts) * 1000.0
+            previous = self._speaker_arrivals.get(speaker, 0)
+            if previous > 0:
+                gap_ms = (now_ts - previous) * 1000.0
                 dev = abs(gap_ms - 20.0)
                 self._avg_gap_ms = 0.95 * self._avg_gap_ms + 0.05 * gap_ms
                 self._jitter_ms = 0.9 * self._jitter_ms + 0.1 * dev
@@ -329,6 +303,8 @@ class VoiceClient:
                 miss = max(0.0, (gap_ms - 35.0) / 20.0)
                 self._loss_score = min(100.0, 0.9 * self._loss_score + 10.0 * miss)
             self._last_recv_ts = now_ts
+            self._speaker_arrivals = {name: stamp for name, stamp in self._speaker_arrivals.items() if now_ts-stamp < 5}
+            self._speaker_arrivals[speaker] = now_ts
 
             try:
                 arr = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
@@ -338,18 +314,6 @@ class VoiceClient:
                     self._last_peer_voice_ts = time.time()
             except Exception:
                 pass
-            try:
-                self.play_q.put_nowait(pcm)
-            except queue.Full:
-                try:
-                    # При переполнении сбрасываем самый старый кадр,
-                    # чтобы держать задержку низкой.
-                    _ = self.play_q.get_nowait()
-                    self.play_q.put_nowait(pcm)
-                    self._overflow_score = min(100.0, self._overflow_score * 0.96 + 2.0)
-                except Exception:
-                    pass
-
     def set_mic_enabled(self, enabled: bool):
         self.mic_enabled = bool(enabled)
 
@@ -389,7 +353,7 @@ class VoiceClient:
             "peer_speaking": peer,
             "latency_ms": round(latency, 1),
             "jitter_ms": round(jitter, 1),
-            "buffer_frames": int(self.play_q.qsize()),
+            "buffer_frames": self.mixer.queued_frames(),
             "quality": quality,
             "quality_score": round(max(0.0, min(100.0, score)), 1),
         }

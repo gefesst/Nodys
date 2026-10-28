@@ -1,4 +1,14 @@
 try:
+    from .server_transport.tls import server_context
+except ImportError:
+    from server_transport.tls import server_context
+
+try:
+    from .storage import events as event_store
+except ImportError:
+    from storage import events as event_store
+
+try:
     from .domain.avatars import normalize_avatar
 except ImportError:
     from domain.avatars import normalize_avatar
@@ -295,6 +305,11 @@ def init_db() -> None:
             PRIMARY KEY(token, channel_id))""")
         c.execute("DELETE FROM voice_presence_versions WHERE token NOT IN (SELECT token FROM sessions)")
 
+        event_store.initialize(conn)
+        call_columns = {row[1] for row in c.execute("PRAGMA table_info(active_call_pairs)")}
+        if "caller_login" not in call_columns:
+            c.execute("ALTER TABLE active_call_pairs ADD COLUMN caller_login TEXT NOT NULL DEFAULT ''")
+
         # Helpful indexes
         # indexes (compatible with existing DB)
         c.execute("CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(user_login)")
@@ -510,6 +525,8 @@ def push_event(login: str, event: Dict[str, Any]) -> None:
         return
     ev = dict(event)
     ev.setdefault("ts", _iso(_now_utc()))
+    with database_connection(DB_FILE, timeout=10) as connection:
+        event_store.append(connection, login, ev)
     with events_lock:
         pending_events[login].append(ev)
 
@@ -1597,13 +1614,13 @@ def _db_set_call_pair(a: str, b: str, status: str) -> None:
     with database_connection(DB_FILE, timeout=10) as conn:
         conn.execute(
             """
-            INSERT INTO active_call_pairs(user_a, user_b, status, created_at, updated_at)
-            VALUES(?,?,?,?,?)
+            INSERT INTO active_call_pairs(user_a, user_b, status, created_at, updated_at, caller_login)
+            VALUES(?,?,?,?,?,?)
             ON CONFLICT(user_a, user_b) DO UPDATE SET
                 status=excluded.status,
                 updated_at=excluded.updated_at
             """,
-            (ua, ub, status, now_iso, now_iso),
+            (ua, ub, status, now_iso, now_iso, a),
         )
         conn.commit()
 
@@ -2118,6 +2135,20 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
     if action == "poll_events":
         mark_call_activity(current_user)
+        if "after_event_id" in data:
+            with database_connection(DB_FILE, timeout=10) as connection:
+                try:
+                    events = event_store.read(connection, current_user, data["after_event_id"])
+                except ValueError as error:
+                    return {"status": "error", "message": str(error)}
+                pair = connection.execute("""SELECT user_a,user_b,status,caller_login,created_at
+                    FROM active_call_pairs WHERE user_a=? OR user_b=? LIMIT 1""",
+                    (current_user,current_user)).fetchone()
+            state = None if not pair else {
+                "peer": pair[1] if pair[0] == current_user else pair[0],
+                "status": pair[2], "incoming": pair[3] != current_user, "call_id": pair[4],
+            }
+            return {"status": "ok", "events": events, "call_state": state}
         events = pop_events(current_user)
         return {"status": "ok", "events": events}
 
@@ -2141,9 +2172,11 @@ def handle_request(data: Dict[str, Any]) -> Dict[str, Any]:
 
 # -------------------- Server loop --------------------
 
-def handle_client(conn: socket.socket, addr):
+def handle_client(conn: socket.socket, addr, tls_context=None):
     try:
         conn.settimeout(5.0)
+        if tls_context is not None:
+            conn = tls_context.wrap_socket(conn, server_side=True)
         data = recv_request(conn)
         if not data:
             send_response(conn, {"status": "error", "message": "Пустой запрос"})
@@ -2162,7 +2195,10 @@ def handle_client(conn: socket.socket, addr):
             pass
 
 
-def start_server(host: str = "0.0.0.0", port: int = 5555):
+def start_server(host: str = None, port: int = None):
+    host = host or os.environ.get("NODYS_HOST", "127.0.0.1")
+    port = int(port if port is not None else os.environ.get("NODYS_PORT", "5555"))
+    tls_context = server_context(host)
     init_db()
     init_chat_db()
 
@@ -2172,10 +2208,23 @@ def start_server(host: str = "0.0.0.0", port: int = 5555):
     server.listen(20)
     print(f"[SERVER] TCP listening on {host}:{port}")
 
+    slots = threading.BoundedSemaphore(64)
+    def serve(conn, addr):
+        try:
+            handle_client(conn, addr, tls_context)
+        finally:
+            slots.release()
     while True:
         conn, addr = server.accept()
-        t = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
-        t.start()
+        if not slots.acquire(blocking=False):
+            conn.close()
+            continue
+        try:
+            threading.Thread(target=serve, args=(conn, addr), daemon=True).start()
+        except Exception:
+            conn.close()
+            slots.release()
+            raise
 
 
 if __name__ == "__main__":
