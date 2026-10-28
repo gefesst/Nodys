@@ -4,10 +4,10 @@ Python/PySide6 desktop voice chat. Current audited development changes are publi
 
 ## Local preview
 
-On macOS open `Просмотр Nodys.command`. The first run installs dependencies in `.venv`.
+On macOS open `Просмотр Nodys.command`. It enables TLS automatically. The first run installs dependencies in `.venv`; OpenSSL is required for the temporary test certificate.
 Two clients open: Alice (channel owner) and Bob (member), with an isolated temporary database and configuration. Preview uses loopback ports 15555/15556. Close both clients to stop the servers and remove preview data. Restart the launcher after each change to see current code.
 
-Cross-platform: create a Python virtual environment, install `requirements.txt`, then run `python tools/preview.py`. Use `--clients 1` for one window.
+Cross-platform: create a Python virtual environment, install `requirements.txt`, then run `python tools/preview.py --tls`. Use `--clients 1` for one window.
 
 ## Checks
 
@@ -47,7 +47,7 @@ Control connections use verified TLS for remote hosts (certificate chain and hos
 
 The third change set initially blocked remote voice. The fourth change set below replaces that restriction with authenticated encrypted UDP; old plaintext voice clients are no longer compatible.
 
-For a manual TLS preview, open `Просмотр Nodys TLS.command` on macOS or run `python tools/preview.py --tls` (OpenSSL required). It generates a temporary localhost certificate trusted only by the two test clients. Test channels, messages and settings in Alice/Bob windows. Check accept/decline/end call behavior manually; microphone permission and real sound quality require your hardware. Closing both windows removes the temporary accounts and certificate.
+For a manual TLS preview, open `Просмотр Nodys.command` on macOS or run `python tools/preview.py --tls` (OpenSSL required). It generates a temporary localhost certificate trusted only by the two test clients. Test channels, messages and settings in Alice/Bob windows. Check accept/decline/end call behavior manually; microphone permission and real sound quality require your hardware. Closing both windows removes the temporary accounts and certificate.
 
 For repeatable process checks: `python tools/preview.py --tls --smoke-seconds 10`. This confirms startup and process survival, not microphone quality.
 
@@ -63,7 +63,7 @@ This is client-to-server transport encryption, **not end-to-end encryption**: th
 
 ### Manual check after this update
 
-1. Start `Просмотр Nodys TLS.command`; Alice and Bob open with isolated test accounts.
+1. Start `Просмотр Nodys.command`; Alice and Bob open with isolated test accounts.
 2. Join the test channel's voice section in both windows. Allow microphone access yourself if prompted. Check mute, deafen, leave and rejoin. Use headphones to prevent feedback.
 3. Leave channel voice, call Bob from Alice, accept, then end the call; both windows should clear the call state.
 4. Close both clients when done. Restart the launcher after further code changes.
@@ -89,3 +89,5 @@ Admission uses bounded in-process counters: 120 connections/second/IP; login and
 Remembered login now runs in the background with a "Войти вручную" cancellation button. Late results cannot overwrite a replaced token. Login errors appear inline and duplicate submissions are disabled while the request runs. Logout and close send bounded background cleanup with a captured identity; Qt does not wait for network joins. Cleanup remains best effort: abrupt process termination or offline servers can prevent immediate revocation, while local credentials are cleared on logout.
 
 Legacy Unicode plaintext passwords can be verified and upgraded on successful login; simultaneous registrations for the same login produce one success and one duplicate result. Packaging remains deferred.
+
+The `.command` launcher and `tools/preview.py` are development helpers, not application entry points. They use temporary test accounts, certificates and storage; production packaging must use `client/main.py` and must not bundle preview credentials or databases.
