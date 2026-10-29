@@ -32,6 +32,7 @@ class RoomNavigationMixin:
     def build_room_navigation(self):
         self.text_room_id=0
         self.voice_room_id=1
+        self.connected_voice_room_id=None
         self._rooms=[]
         self._rooms_cache={}
         self._rooms_manage=False
@@ -84,7 +85,16 @@ class RoomNavigationMixin:
                 room['participants']=self._voice_participants
             # Server list snapshots can arrive after leave or after selecting another room.
             # Only the locally confirmed connection may display our own membership.
-            room['participants']=[p for p in room.get('participants',[]) if p.get('login')!=self.ctx.login or (self._voice_joined and room['id']==self.voice_room_id)]
+            room['participants']=[p for p in room.get('participants',[]) if p.get('login')!=self.ctx.login or (self._voice_joined and room['id']==self.connected_room_id())]
+        for room in rooms:
+            if self._voice_joined and room['id']==self.connected_room_id():
+                people=list(room.get('participants',[]))
+                if not any(p.get('login')==self.ctx.login for p in people):
+                    people.append(dict(login=self.ctx.login,nickname=self.ctx.nickname or self.ctx.login,avatar=self.ctx.avatar or ''))
+                if self._voice_client is not None:
+                    speaking=bool(self._voice_client.get_activity().get('me_speaking',False)) and not self._voice_muted
+                    people=[dict(p,speaking=speaking) if p.get('login')==self.ctx.login else p for p in people]
+                room['participants']=people
         for room in rooms:
             for person in room.get('participants',[]):
                 avatar=self._room_avatars.get((room['id'],person['login']))
@@ -142,14 +152,20 @@ class RoomNavigationMixin:
             self.text_room_id=room['id'];self.switch_to_text_tab()
         else:
             if self.voice_room_id!=room['id']:
-                # Complete teardown before changing the room used by presence.
-                self.stop_voice_session(show_toast=False)
                 self.voice_room_id=room['id']
                 self._voice_participants=[p for p in room.get('participants',[]) if p.get('login')!=self.ctx.login];self._voice_participants_signature=''
                 self._render_voice_participants()
             self.switch_to_voice_tab()
         self.room_title.setText(('# ' if room['kind']=='text' else 'Голосовой · ')+room['name'])
         self.render_rooms()
+        main=getattr(self,"_main_window",None)
+        if main is not None:main.refresh_voice_dock()
+
+    def connected_room_id(self):
+        return self.connected_voice_room_id if self.connected_voice_room_id is not None else self.voice_room_id
+
+    def viewing_connected_room(self):
+        return self._voice_joined and self.voice_room_id==self.connected_room_id()
 
     def edit_room_dialog(self,kind='text',room=None):
         cid=self._active_channel_id();token=self.ctx.session_token

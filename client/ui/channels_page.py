@@ -1326,8 +1326,8 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             else:
                 self.channel_msg_input.setPlaceholderText("У вас нет прав на отправку сообщений")
 
-        # voice controls
-        if self._voice_joined:
+        # voice controls refer to the viewed room, not an unrelated live connection.
+        if self.viewing_connected_room():
             self.voice_join_btn.setEnabled(not self._voice_transitioning)
             self.voice_join_btn.setText("Отключение..." if self._voice_transitioning else "Отключиться")
             self.voice_access_hint_lbl.setText("Вы подключены к голосовому каналу")
@@ -1847,10 +1847,10 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                     return
 
                 participants = resp.get("participants") or []
-                if not self._voice_joined:
+                if not self.viewing_connected_room():
                     participants = [p for p in participants if p.get("login") != self.ctx.login]
                 # Local fallback: ensure current user row appears right after join
-                if self._voice_joined and self.ctx.login and not any((p.get("login") == self.ctx.login) for p in participants):
+                if self.viewing_connected_room() and self.ctx.login and not any((p.get("login") == self.ctx.login) for p in participants):
                     participants.insert(0, {
                         "login": self.ctx.login,
                         "nickname": self.ctx.nickname or self.ctx.login,
@@ -1860,7 +1860,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                         "speaking": False,
                     })
 
-                if self._voice_joined and self._voice_client is not None:
+                if self.viewing_connected_room() and self._voice_client is not None:
                     local_speaking=bool(self._voice_client.get_activity().get("me_speaking",False)) and not self._voice_muted
                     for person in participants:
                         if person.get("login")==self.ctx.login:person["speaking"]=local_speaking
@@ -1888,7 +1888,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         payload = {
             "action": "set_channel_voice_presence",
             "channel_id": channel_id,
-            "room_id":self.voice_room_id,
+            "room_id":self.connected_room_id(),
             "speaking": bool(speaking),
             "joined": bool(joined),
             "sequence": voice_sequence.next(),
@@ -2452,8 +2452,9 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
     # Voice channel
     # ------------------------------------------------------------------
     def _apply_voice_local_controls(self):
-        joined = bool(self._voice_joined)
+        joined = self.viewing_connected_room()
         if not joined:
+            self.voice_status_lbl.setText("Вы подключены к другой комнате" if self._voice_joined else "Вы не в голосовом канале")
             self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#EDF2FA;")
 
         self.voice_mute_btn.setVisible(joined)
@@ -2517,7 +2518,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         if self._voice_transitioning:
             return
 
-        if self._voice_joined:
+        if self.viewing_connected_room():
             self._voice_transitioning = True
             self._apply_channel_permissions_ui()
             try:
@@ -2534,6 +2535,9 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         if not bool((self._settings_permissions or {}).get("can_join_voice", True)):
             self.show_toast("У вас нет прав для входа в голосовой канал")
             return
+
+        if self._voice_joined:
+            self.stop_voice_session()
 
         settings=getattr(self._main_window,'settings_page',None)
         if settings is not None and not settings.stop_microphone_check():
@@ -2555,6 +2559,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         except Exception:
             pass
 
+        selected_room_id=self.voice_room_id
         room_id = self._voice_room_id()
         if not room_id:
             self.show_toast("Некорректный канал")
@@ -2577,6 +2582,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             if self._voice_client is not voice:
                 return
             self._voice_transitioning = False
+            self.connected_voice_room_id=selected_room_id
             self._voice_joined = True
             self._voice_started_at=time.monotonic()
             self._last_voice_presence_push_ts = 0.0
@@ -2619,6 +2625,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
 
         was_joined = bool(self._voice_joined)
         self._voice_joined = False
+        self.connected_voice_room_id=None
         self._last_voice_presence_push_ts = 0.0
         self._voice_muted = False
         self._voice_deafened = False
@@ -2657,6 +2664,9 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             reconnecting=quality == "Переподключение"
             elapsed=max(0,int(time.monotonic()-getattr(self,'_voice_started_at',time.monotonic())))
             state="Восстанавливаем соединение…" if reconnecting else f"Вы подключены · {elapsed//60:02}:{elapsed%60:02}"
+            if not self.viewing_connected_room():
+                self.render_rooms()
+                return
             self.voice_status_lbl.setText(state)
             self.voice_status_lbl.setStyleSheet('font-size:16px;font-weight:600;color:'+('#EAC184' if reconnecting else '#67D5AD')+';')
             self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)

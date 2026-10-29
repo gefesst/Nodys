@@ -68,7 +68,28 @@ def main():
         p.toggle_voice_join();wait(lambda:p._voice_joined)
         wait(lambda:any(person['login']==lab.me for person in p._voice_participants))
         shot('voice-connected')
-        p.toggle_voice_join();wait(lambda:not p._voice_joined)
+        connected=p._voice_client
+        other=next(r for r in p._rooms if r['name']=='Встреча')
+        p.select_room(other);wait(seconds=.4)
+        assert p._voice_joined and p._voice_client is connected
+        assert p.connected_room_id()==voice['id'] and p.voice_room_id==other['id']
+        p._push_voice_presence(False);wait(seconds=.3)
+        presence=lab.request(lab.me,'get_channel_rooms',channel_id=cid)['rooms']
+        assert any(person['login']==lab.me for r in presence if r['id']==voice['id'] for person in r.get('participants',[]))
+        assert not any(person['login']==lab.me for r in presence if r['id']==other['id'] for person in r.get('participants',[]))
+        shot('browsing-other-voice')
+        p.select_room(voice);wait(seconds=.2)
+        assert p._voice_client is connected
+        checks.append('browsing another voice room retains original connection and presence')
+        p.select_room(other);p.toggle_voice_join()
+        wait(lambda:p._voice_joined and p.connected_room_id()==other['id'])
+        assert p._voice_client is not connected
+        p.select_room(voice);wait(seconds=.2)
+        assert p.connected_room_id()==other['id']
+        m.open_voice_surface();wait(seconds=.2)
+        assert p.voice_room_id==other['id']
+        m.end_voice_surface();wait(lambda:not p._voice_joined)
+        checks.append('explicit join transfers voice; dock returns to connected room and disconnects it')
         for target in (next(r for r in p._rooms if r['name']=='Встреча'),voice):
             p.select_room(target);p.load_rooms(force=True);wait(seconds=.4)
             assert not p._voice_joined and p._voice_client is None

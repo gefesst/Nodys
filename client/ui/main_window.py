@@ -700,7 +700,8 @@ class MainWindow(QWidget):
         panel=getattr(self,'call_window',None)
         channel_surface=(self.stack.currentWidget() is self.channels_page and
             self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
-            self.channels_page.channel_inner_stack.currentIndex()==1)
+            self.channels_page.channel_inner_stack.currentIndex()==1 and
+            self.channels_page.viewing_connected_room())
         visible=(private and not (panel and panel.isVisible())) or (channel and not channel_surface)
         self.voice_dock.sync_controls()
         self.voice_dock.set_present(visible)
@@ -713,13 +714,14 @@ class MainWindow(QWidget):
             self.voice_dock.set_status('Восстанавливаем соединение…' if reconnecting else 'В разговоре · '+(panel.timer_lbl.text() if panel else 'Подключение…'),reconnecting)
             self.voice_dock.participants.setText(activity.get('quality','Подключение…'))
         elif channel:
-            self.voice_dock.title.setText(str((self.channels_page.active_channel or {}).get('name','Голосовой канал')))
+            room=next((r for r in self.channels_page._rooms if r['id']==self.channels_page.connected_room_id()),{})
+            self.voice_dock.title.setText(room.get('name','Голосовой канал'))
             voice=self.channels_page._voice_client
             activity=voice.get_activity() if voice else {}
             reconnecting=activity.get('quality')=='Переподключение'
             elapsed=max(0,int(time.monotonic()-getattr(self.channels_page,'_voice_started_at',time.monotonic())))
             self.voice_dock.set_status('Восстанавливаем соединение…' if reconnecting else f'В голосовом · {elapsed//60:02d}:{elapsed%60:02d}',reconnecting)
-            count=len(self.channels_page._voice_participants)
+            count=len(self.channels_page._voice_participants) if self.channels_page.viewing_connected_room() else len(room.get("participants",[]))
             noun='участник' if count%10==1 and count%100!=11 else 'участника' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'участников'
             self.voice_dock.participants.setText(f'{count} {noun}')
 
@@ -727,7 +729,11 @@ class MainWindow(QWidget):
         if self.call_window:
             self.call_window.show();self.call_window.raise_();self.voice_dock.set_present(False)
         else:
-            self.show_channels();self.channels_page.switch_to_voice_tab()
+            self.show_channels()
+            page=self.channels_page
+            room=next((r for r in page._rooms if r["id"]==page.connected_room_id()),None)
+            if room:page.select_room(room)
+            else:page.switch_to_voice_tab()
 
     def end_voice_surface(self):
         if self.call_window:
