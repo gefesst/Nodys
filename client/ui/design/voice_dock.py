@@ -2,36 +2,39 @@
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpacityEffect,QApplication
 from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve,Qt,QTimer
 from .motion import reduced
+from .tokens import LIST_WIDTH, RAIL_WIDTH
 from .widgets import Button, set_voice_button_state
 
 class VoiceDock(QFrame):
     def __init__(self, main):
         super().__init__(main)
         self.main=main
-        self.setFixedSize(314,140)
-        self.divider=QFrame(self);self.divider.setGeometry(0,0,314,1)
+        self.setFixedSize(LIST_WIDTH-26,140)
+        self.divider=QFrame(self);self.divider.setGeometry(0,0,LIST_WIDTH-26,1)
         self.divider.setStyleSheet('background:#354152;border:0;')
-        card=QFrame(self);self.card=card;card.setObjectName('VoiceDock');card.setGeometry(0,20,314,112)
+        card=QFrame(self);self.card=card;card.setObjectName('VoiceDock');card.setGeometry(0,20,LIST_WIDTH-26,112)
         card.setStyleSheet('QFrame#VoiceDock {background:#233449;border:1px solid #405A7C;border-radius:12px;}')
         layout=QVBoxLayout(card);layout.setContentsMargins(14,9,14,10);layout.setSpacing(2)
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
-        self.title.setMinimumHeight(0);self.title.setFixedHeight(27);self.title.clicked.connect(main.open_voice_surface)
+        self.title.setMinimumHeight(0);self.title.setFixedHeight(24);self.title.clicked.connect(main.open_voice_surface)
         layout.addWidget(self.title)
         self.status=QLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;')
         from .microphone_check import MicrophoneMeter
         self.meter=MicrophoneMeter(82,18)
         self._meter_source=None
-        status_row=QHBoxLayout();status_row.setSpacing(8);status_row.addWidget(self.status,1);status_row.addWidget(self.meter)
-        layout.addLayout(status_row)
+        self.status.setFixedHeight(16)
+        layout.addWidget(self.status)
         self.meter_timer=QTimer(self);self.meter_timer.setInterval(125);self.meter_timer.timeout.connect(self.update_meter)
         row=QHBoxLayout();row.setSpacing(12)
-        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');row.addWidget(self.participants,1)
+        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');self.participants.setFixedHeight(16);layout.addWidget(self.participants)
         self.controls={}
         for name,symbol,callback in [('Микрофон','mic',self.toggle_mic),('Звук','headphones',self.toggle_sound),('Отключиться','end',main.end_voice_surface)]:
             button=Button('',symbol);button.setMinimumHeight(0);button.setFixedSize(32,28);button.setAccessibleName(name)
             self.controls[symbol]=button
             if symbol=='end':button.setProperty('danger',True)
             button.clicked.connect(callback);row.addWidget(button)
+        row.addStretch(1)
+        row.addWidget(self.meter)
         layout.addLayout(row)
         self._progress=0.0
         self._present=False
@@ -116,10 +119,10 @@ class VoiceDock(QFrame):
 
     def position(self):
         narrow=hasattr(self.main,"stack") and self.main.stack.currentWidget() is self.main.channels_page
-        width=196 if narrow else 314
+        width=196 if narrow else LIST_WIDTH-26
         self.setFixedWidth(width)
         self.divider.setFixedWidth(width)
         self.card.setGeometry(0,20,width,112)
         self.participants.setVisible(not narrow)
-        self.move(100 if narrow else 102,max(42,self.main.height()-154)+round(12*(1-self._progress)))
+        self.move(RAIL_WIDTH+12 if narrow else RAIL_WIDTH+14,max(42,self.main.height()-154)+round(12*(1-self._progress)))
         self.raise_()

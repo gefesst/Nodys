@@ -28,6 +28,7 @@ from settings import get_voice_endpoint, get_api_endpoint
 from ui.micro_interactions import install_opacity_feedback
 
 from ui.design.motion import TransitionStack as QStackedWidget
+from ui.design.tokens import RAIL_WIDTH, LIST_WIDTH
 
 
 class MainWindow(QWidget):
@@ -343,9 +344,10 @@ class MainWindow(QWidget):
         if getattr(self, "incoming_card", None):
             self.incoming_card.position_panel()
         if getattr(self, "call_notice", None):
-            self.call_notice.setFixedWidth(max(280,min(420,self.width()-472)))
+            content_left = RAIL_WIDTH + LIST_WIDTH
+            self.call_notice.setFixedWidth(max(280,min(420,self.width()-content_left-44)))
             self.call_notice.adjustSize()
-            self.call_notice.move(max(12,428+(self.width()-428-self.call_notice.width())//2),
+            self.call_notice.move(max(12,content_left+(self.width()-content_left-self.call_notice.width())//2),
                                   max(12,self.height()-self.call_notice.height()-16))
 
     def _show_call_notice(self, text: str, timeout_ms: int = 2200):

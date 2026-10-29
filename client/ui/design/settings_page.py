@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 from config import load_config, save_config
 from .widgets import Button, ScrollSafeComboBox
+from .tokens import LIST_WIDTH
 
 
 class SettingsPage(QWidget):
@@ -30,7 +31,7 @@ class SettingsPage(QWidget):
         outer.setSpacing(0)
         sidebar = QFrame()
         sidebar.setObjectName("SectionSidebar")
-        sidebar.setFixedWidth(340)
+        sidebar.setFixedWidth(LIST_WIDTH)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(22, 32, 20, 20)
         side.setSpacing(10)
