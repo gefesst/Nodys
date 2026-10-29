@@ -170,6 +170,34 @@ class DesignGeometryTests(unittest.TestCase):
                 self.assertFalse(button.findChildren(FocusRing),type(button).__name__)
             self.assertFalse(button.testAttribute(Qt.WA_MacShowFocusRect))
 
+    def test_button_icons_contrast_with_surfaces_through_hover_and_selection(self):
+        from unittest.mock import patch
+        from PySide6.QtGui import QColor
+        from PySide6.QtWidgets import QWidget
+        from ui.design.widgets import Button
+        def luminance(color):
+            values=[color.redF(),color.greenF(),color.blueF()]
+            linear=[v/12.92 if v<=0.04045 else ((v+0.055)/1.055)**2.4 for v in values]
+            return sum(v*w for v,w in zip(linear,(0.2126,0.7152,0.0722)))
+        host=QWidget();host.setObjectName('ContrastHost');host.resize(100,80)
+        host.setStyleSheet('QWidget#ContrastHost {background:#18212A;}')
+        self.addCleanup(host.close)
+        button=Button('', 'settings',parent=host);button.setFixedSize(64,44);button.move(10,10)
+        host.show();self.app.processEvents()
+        for flat in (False,True):
+            for primary in (False,True):
+                for danger in (False,True):
+                    for hover in (0,0.25,0.5,1):
+                        for pressed in (False,True):
+                            with self.subTest(flat=flat,primary=primary,danger=danger,hover=hover,pressed=pressed):
+                                button.primary=primary;button.setProperty('flat',flat)
+                                button.setProperty('danger',danger);button._hover=hover;button.setDown(pressed)
+                                colors=[]
+                                with patch('ui.design.widgets.icon',new=lambda p,n,r,c: colors.append(QColor(c))):
+                                    image=host.grab().toImage()
+                                fg=luminance(colors[-1]);bg=luminance(image.pixelColor(18,32))
+                                self.assertGreaterEqual((max(fg,bg)+0.05)/(min(fg,bg)+0.05),3.0)
+
     def test_dialog_poll_preserves_search_selection_and_accessibility_index(self):
         from PySide6.QtWidgets import QListView
         from PySide6.QtCore import QPersistentModelIndex

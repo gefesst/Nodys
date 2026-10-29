@@ -254,8 +254,12 @@ class Button(QPushButton):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        a = QColor(ACC if self.primary else "#28364A")
-        b = QColor("#ACC0FF" if self.primary else "#3A4D67")
+        flat = bool(self.property("flat"))
+        filled_primary = self.primary and not flat
+        # Selected flat navigation controls keep a dark surface under their
+        # accent icon. Only filled primary actions use the light blue surface.
+        a = QColor(ACC if filled_primary else "#2B3B51" if self.primary else "#28364A")
+        b = QColor("#ACC0FF" if filled_primary else "#3A4D67")
         if self.property("danger"):
             a, b = QColor("#492D39"), QColor("#603748")
         t = self._hover
@@ -265,10 +269,10 @@ class Button(QPushButton):
             a.blueF() * (1 - t) + b.blueF() * t,
         )
         if self.isDown():
-            bg = QColor("#3D2530" if self.property("danger") else "#7898EB" if self.primary else "#354866")
+            bg = QColor("#3D2530" if self.property("danger") else "#7898EB" if filled_primary else "#354866")
         if not self.isEnabled():
             bg = QColor("#252E3A")
-        if self.property("flat") and not self._hover and not self.isDown():
+        if flat and not self.primary and not self._hover and not self.isDown():
             bg.setAlpha(0)
         keyboard_focus = self.hasFocus() and self._keyboard_focus
         # Paint one contour in every state. A second inset focus rectangle
