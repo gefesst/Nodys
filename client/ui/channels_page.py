@@ -2222,14 +2222,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
     def ask_leave_channel(self):
         self.show_settings_confirm(
-            text="Выйти из этого канала?",
+            text="Чтобы вернуться, потребуется код или приглашение.",
             action_type="leave_channel",
             payload={},
         )
 
     def ask_delete_channel(self):
         self.show_settings_confirm(
-            text="Удалить канал полностью? Это действие нельзя отменить.",
+            text="Участники потеряют доступ к каналу.\nЭто действие нельзя отменить.",
             action_type="delete_channel",
             payload={},
         )
@@ -2242,6 +2242,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.settings_confirm_text.setText(text or "Подтвердите действие")
         from ui.design.dialogs import confirm
         titles = {"delete_channel": "Удалить канал?", "leave_channel": "Выйти из канала?", "remove_member": "Удалить участника?"}
+        if action_type == "delete_channel" and self.active_channel:
+            name = self.active_channel.get("name", "")
+            if name:
+                titles[action_type] = f"Удалить канал «{name}»?"
         labels = {"delete_channel": "Удалить", "leave_channel": "Выйти", "remove_member": "Удалить"}
         confirm(self, titles.get(action_type, "Подтвердите действие"), text,
                 labels.get(action_type, "Подтвердить"), self.apply_settings_confirm, danger=True)

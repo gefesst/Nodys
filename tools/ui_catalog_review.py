@@ -27,7 +27,7 @@ MAPPING = {
     'friends-requests':'06-friends-requests', 'friends-add':'07-friends-add-search',
     'friends-mini':'08-mini-profile', 'friends-remove':'06d-friend-remove-confirm',
     'friends-search-empty':'06b-friends-search-empty', 'friends-error':'06c-friends-network-error',
-    '01-chat':'09-private-chat', 'chat-none':'08b-chat-none', 'chat-multiline':'10-chat-multiline',
+    '01-chat':'43i-chat-read', 'chat-none':'08b-chat-none', 'chat-multiline':'10-chat-multiline',
     'channels-empty':'40-channels-empty','channels-loading':'40b-channels-loading','channels-error':'40c-channels-error',
     'channels-invites-empty':'40d-channel-invites-empty','channels-join-error':'40e-channel-join-error',
     'channels-list':'11a-channel-list', 'channels-invites':'11b-channel-invites',

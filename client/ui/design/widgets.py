@@ -242,7 +242,7 @@ class Button(QPushButton):
         a = QColor(ACC if self.primary else "#28364A")
         b = QColor("#ACC0FF" if self.primary else "#3A4D67")
         if self.property("danger"):
-            a, b = QColor("#54313E"), QColor("#704151")
+            a, b = QColor("#492D39"), QColor("#603748")
         t = self._hover
         bg = QColor.fromRgbF(
             a.redF() * (1 - t) + b.redF() * t,
@@ -250,7 +250,7 @@ class Button(QPushButton):
             a.blueF() * (1 - t) + b.blueF() * t,
         )
         if self.isDown():
-            bg = QColor("#7898EB" if self.primary else "#354866")
+            bg = QColor("#3D2530" if self.property("danger") else "#7898EB" if self.primary else "#354866")
         if not self.isEnabled():
             bg = QColor("#252E3A")
         if self.property("flat") and not self._hover and not self.isDown():
@@ -264,7 +264,7 @@ class Button(QPushButton):
         if self.property("text_color"):
             color = self.property("text_color")
         if not self.isEnabled():
-            color = "#8190A5"
+            color = "#7C8A9D"
         p.setFont(self.font())
         width = p.fontMetrics().horizontalAdvance(self.text())
         total = width + (26 if self.icon_name else 0)
@@ -386,6 +386,10 @@ class MessageDelegate(QStyledItemDelegate):
         self.view = view
         self.me = me
         self.own_name = own_name or (lambda: me)
+        from ui.avatar_widget import AvatarLabel
+        self._avatar_helper = AvatarLabel(32, view)
+        self._avatar_helper.hide()
+        self._avatars = OrderedDict()
         self.cache = OrderedDict()
         self.paint_count = 0
         self.paint_ns = []
@@ -448,7 +452,7 @@ class MessageDelegate(QStyledItemDelegate):
         bw = min(maxw, max(125, natural + 32))
         bh = y + 40
         head = (27 if m.divider else 41) if m.group else 0
-        head += 28 if m.divider else 0
+        head += 52 if m.divider else 0
         head += 40 if m.unread_count else 0
         height = head + bh + 8
         value = (layout, bw, bh, head, height)
@@ -499,7 +503,7 @@ class MessageDelegate(QStyledItemDelegate):
         x = o.rect.x() + 58
         y = o.rect.y() + head
         unread_offset = 40 if m.unread_count else 0
-        date_offset = unread_offset + (28 if m.divider else (14 if m.group else 0))
+        date_offset = unread_offset + (52 if m.divider else (14 if m.group else 0))
         if m.unread_count:
             count=m.unread_count
             noun='непрочитанное сообщение' if count%10==1 and count%100!=11 else 'непрочитанных сообщения' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'непрочитанных сообщений'
@@ -513,17 +517,14 @@ class MessageDelegate(QStyledItemDelegate):
         if m.divider:
             p.setFont(font(11))
             label_width = p.fontMetrics().horizontalAdvance(m.date)
-            center = self.view.viewport().width() / 2
+            center = (self.view.viewport().width() - 28) / 2
             p.setPen(QPen(QColor(EDGE), 1))
-            line_y = o.rect.y() + unread_offset + 14
-            p.drawLine(10, line_y, int(center - label_width / 2 - 16), line_y)
-            p.drawLine(
-                int(center + label_width / 2 + 16),
-                line_y,
-                self.view.viewport().width() - 10,
-                line_y,
-            )
-            draw_text(p, center - label_width / 2, o.rect.y() + unread_offset + 18, m.date, 11, MUT)
+            line_y = o.rect.y() + unread_offset + 22
+            gap=max(165,label_width/2+16)
+            length=min(135,max(0,center-gap-10))
+            p.drawLine(int(center-gap-length),line_y,int(center-gap),line_y)
+            p.drawLine(int(center+gap),line_y,int(center+gap+length),line_y)
+            draw_text(p, center-label_width/2, o.rect.y()+unread_offset+26, m.date, 11, MUT)
         if m.group:
             display_name = self.own_name() if own else m.name
             parts = display_name.split()
@@ -533,12 +534,23 @@ class MessageDelegate(QStyledItemDelegate):
             avatar(
                 p,
                 o.rect.x() + 10,
-                o.rect.y() + 1 + date_offset,
+                o.rect.y() + 2 + date_offset,
                 initials,
                 32,
                 False,
                 own,
             )
+            if m.avatar:
+                key = (m.avatar, m.author, display_name, self.view.devicePixelRatioF())
+                if key not in self._avatars:
+                    self._avatar_helper.setProperty("own_avatar", own)
+                    self._avatar_helper.set_avatar(m.avatar, m.author, display_name)
+                    self._avatars[key] = self._avatar_helper.pixmap()
+                    if len(self._avatars) > 128:
+                        self._avatars.popitem(last=False)
+                else:
+                    self._avatars.move_to_end(key)
+                p.drawPixmap(o.rect.x()+10, o.rect.y()+2+date_offset, self._avatars[key])
             p.setFont(font(13, True))
             name = p.fontMetrics().elidedText(
                 m.name, Qt.ElideRight, self.view.viewport().width() - 120

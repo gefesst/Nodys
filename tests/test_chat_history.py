@@ -148,6 +148,40 @@ class ConversationTests(unittest.TestCase):
         self.requests[-1][1](dict(status='error',message='Permission denied'))
         self.assertFalse(self.chat.offline_note.text())
 
+    def test_message_identity_uses_current_peer_and_channel_profiles(self):
+        self.owner.active_friend = dict(login="bob", nickname="Bob Updated", avatar="peer-avatar")
+        self.select("bob")
+        self.assertEqual(self.chat.model.rows[0].avatar, "peer-avatar")
+        self.assertEqual(self.chat.model.rows[0].name, "Bob Updated")
+        self.owner.ctx.avatar = "own-avatar"
+        self.chat.apply(self.response("alice")["messages"], "latest", {})
+        self.assertEqual(self.chat.model.rows[0].avatar, "own-avatar")
+        self.assertEqual(self.chat.model.rows[0].name, "Вы")
+        self.owner.active_friend = None
+        self.owner._channel_details = dict(members=[dict(login="bob", nickname="Channel Bob", avatar="channel-avatar")])
+        self.chat.channel = 1
+        self.chat.rows = []
+        self.chat.apply(self.response()["messages"], "latest", {})
+        self.assertEqual(self.chat.model.rows[0].avatar, "channel-avatar")
+        self.assertEqual(self.chat.model.rows[0].name, "Channel Bob")
+
+    def test_background_poll_does_not_move_history_or_composer(self):
+        from PySide6.QtTest import QTest
+        self.owner.ctx.nickname = "Alice"
+        self.owner.resize(800, 650)
+        self.chat.resize(800, 650)
+        self.owner.show()
+        self.chat.show()
+        self.select("bob")
+        QTest.qWait(50)
+        before = (self.chat.history_stack.geometry(), self.chat.compose_frame.geometry())
+        self.chat.load("poll")
+        self.app.processEvents()
+        self.assertEqual(before, (self.chat.history_stack.geometry(), self.chat.compose_frame.geometry()))
+        self.requests[-1][1](self.response())
+        self.app.processEvents()
+        self.assertEqual(before, (self.chat.history_stack.geometry(), self.chat.compose_frame.geometry()))
+
     def test_unread_boundary_survives_receipts_and_resets_between_dialogs(self):
         self.chat.select('bob')
         response=self.response(count=3)
@@ -187,6 +221,24 @@ class ConversationTests(unittest.TestCase):
         self.chat.load()
         self.requests[-1][1](self.response())
         self.assertIs(self.chat.history_stack.currentWidget(), self.chat.view)
+
+    def test_successful_send_supersedes_an_offline_poll(self):
+        self.select("bob")
+        self.chat.offline_note.setText("Нет соединения")
+        self.chat.load("poll")
+        old_poll = self.requests[-1][1]
+        self.chat.editor.setPlainText("retry")
+        self.chat.send()
+        self.requests[-1][1](dict(status="ok"))
+        latest = self.requests[-1][1]
+        self.assertTrue(self.chat.loading)
+        self.assertFalse(self.chat.offline_note.text())
+        old_poll(dict(status="error", code="network_error", message="Offline"))
+        self.assertFalse(self.chat.offline_note.text())
+        self.assertTrue(self.chat.loading)
+        latest(self.response())
+        self.assertFalse(self.chat.loading)
+        self.assertFalse(self.chat.history_error)
 
     def test_failed_send_retains_draft_and_reuses_identity(self):
         self.select("bob")

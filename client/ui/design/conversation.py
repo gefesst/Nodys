@@ -224,9 +224,7 @@ class Conversation(QWidget):
                 self.hint.setText(response.get("message", "История недоступна"))
                 self.update_controls(keep_hint=True)
                 return
-            if self.offline_note.text():
-                self.offline_note.clear()
-                self.connection_restored.show();self.recovery_timer.start(4000)
+            self.mark_connected()
             self.history_error = False
             incoming = response.get("messages", [])
             if direction == "poll" and not self.at_latest:
@@ -320,6 +318,13 @@ class Conversation(QWidget):
             self.unread_boundary = unread[0]['id'] if unread else None
             self.unread_count = len(unread)
         rendered = []
+        participants = {
+            member.get("login"): member
+            for member in getattr(self.owner, "_channel_details", {}).get("members", [])
+        }
+        peer = getattr(self.owner, "active_friend", None) or {}
+        if peer.get("login"):
+            participants[peer["login"]] = peer
         previous_author = previous_date = None
         for row in self.rows:
             author = row["from_user"]
@@ -327,19 +332,22 @@ class Conversation(QWidget):
             try:
                 day = datetime.strptime(date, "%Y-%m-%d").date()
                 today = datetime.now().date()
+                months=("января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря")
                 date_label = (
-                    "Сегодня"
+                    f"Сегодня, {day.day} {months[day.month-1]}"
                     if day == today
-                    else "Вчера"
+                    else f"Вчера, {day.day} {months[day.month-1]}"
                     if day == today - timedelta(days=1)
                     else day.strftime("%d.%m.%Y")
                 )
             except ValueError:
                 date_label = date
+            person = participants.get(author, {})
+            own = author == self.owner.ctx.login
             name = (
                 "Вы"
-                if author == self.owner.ctx.login
-                else row.get("nickname") or (author if self.channel else self.name)
+                if own
+                else person.get("nickname") or row.get("nickname") or (author if self.channel else self.name)
             )
             rendered.append(
                 Message(
@@ -353,6 +361,7 @@ class Conversation(QWidget):
                     date_label,
                     date != previous_date,
                     self.unread_count if row["id"] == self.unread_boundary else 0,
+                    getattr(self.owner.ctx, "avatar", "") if own else person.get("avatar") or row.get("avatar", ""),
                 )
             )
             previous_author, previous_date = author, date
@@ -394,7 +403,9 @@ class Conversation(QWidget):
             self.loading_state if self.loading else
             self.error_state if self.history_error else self.empty_state)
         self.history_stack.setCurrentWidget(surface)
-        self.hint.setVisible(bool(self.rows) and (self.loading or self.history_error))
+        # Background polling must not insert a status row and shift the history.
+        # Initial loading already has its own full-page skeleton.
+        self.hint.setVisible(bool(self.rows) and self.history_error)
         self.previous.setEnabled(self.older and not self.loading)
         self.previous.setVisible(self.older)
         self.latest.setVisible(self.newer)
@@ -404,6 +415,10 @@ class Conversation(QWidget):
             and self.identity not in self.pending
         )
         self.editor.setReadOnly(not self.can_send or self.identity is None)
+        self.editor.setPlaceholderText(
+            "Недостаточно прав для отправки" if not self.can_send
+            else "Сообщение в канал…" if self.is_channel else "Сообщение…"
+        )
         if not keep_hint:
             self.hint.setText(
                 "Загрузка…"
@@ -429,6 +444,12 @@ class Conversation(QWidget):
             self.send_status.setText("Отправляем… Можно продолжать редактирование")
         else:
             self.send_status.setText("Enter — отправить · Shift + Enter — новая строка")
+
+    def mark_connected(self):
+        if self.offline_note.text():
+            self.offline_note.clear()
+            self.connection_restored.show()
+            self.recovery_timer.start(4000)
 
     def send(self):
         text = self.editor.toPlainText().strip()
@@ -465,6 +486,11 @@ class Conversation(QWidget):
                 ):
                     self.drafts[identity] = ""
                 if self.identity == identity:
+                    # A successful write supersedes any older in-flight poll.
+                    # Refresh immediately and ignore its eventual stale failure.
+                    self.scope.invalidate()
+                    self.loading = False
+                    self.mark_connected()
                     if (
                         self.draft_versions.get(identity, 0) == revision
                         and self.editor.toPlainText().strip() == text

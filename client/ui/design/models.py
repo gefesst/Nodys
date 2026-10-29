@@ -16,6 +16,7 @@ class Message:
     date: str = ""
     divider: bool = False
     unread_count: int = 0
+    avatar: str = ""
 
 
 class MessageModel(QAbstractListModel):

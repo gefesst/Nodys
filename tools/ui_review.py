@@ -134,7 +134,27 @@ def main():
             assert len(page.dialog_model.rows)==1
             self.shot('43b-chat-search')
             page.search.clear()
+            assert lab.request(lab.me,'mark_chat_read',friend_login=peer)['status']=='ok'
+            c.select(None);c.select(peer,lab.people[0][1])
+            self.wait(predicate=lambda:not c.loading);yield
+            assert not any(message.unread_count for message in c.model.rows)
+            self.shot('43i-chat-read')
             self.wait(predicate=lambda:not page._loading_friends);yield
+            from PIL import Image
+            from io import BytesIO
+            import base64
+            avatar_image=Image.new('RGB',(64,64),'#A35C7B')
+            avatar_image.paste('#91ADFF',(24,0,40,64))
+            avatar_data=BytesIO();avatar_image.save(avatar_data,format='PNG')
+            avatar_payload='data:image/png;base64,'+base64.b64encode(avatar_data.getvalue()).decode()
+            assert lab.request(peer,'update_profile',nickname=lab.people[0][1],avatar=avatar_payload)['status']=='ok'
+            page.load_friends(force=True);self.wait(predicate=lambda:not page._loading_friends);yield
+            self.wait(predicate=lambda:not c.loading);yield
+            c.load('poll');self.wait(predicate=lambda:not c.loading);yield
+            assert all(message.avatar for message in c.model.rows if message.author==peer)
+            self.shot('43j-chat-uploaded-avatar')
+            assert c.delegate._avatars, 'Uploaded avatar must be painted, not just stored in the model'
+            self.visual_fixtures.append('43j-chat-uploaded-avatar: generated PNG saved through real update_profile; no user profile changed')
             long_name='Александра Константинопольская-Рождественская'
             assert lab.request(peer,'update_profile',nickname=long_name,avatar='')['status']=='ok'
             page.load_friends(force=True);self.wait(predicate=lambda:not page._loading_friends);yield
@@ -254,6 +274,9 @@ def main():
             self.wait(predicate=lambda:not ch._saving_channel_settings);yield
             assert ch.settings_feedback.text()=='Настройки канала сохранены'
             self.shot('42f-channel-settings-saved')
+            ch.ask_delete_channel()
+            self.shot('17c-channel-delete-confirm')
+            ch.hide_settings_confirm()
             from server import server
             guest_channel=server.create_channel(lab.people[0][0],'Общий канал')
             server.join_channel_by_code(lab.me,guest_channel['code'])
@@ -861,6 +884,7 @@ def main():
             save_config(lab.config);c.send()
             self.wait(predicate=lambda:not c.pending and not c.loading);yield
             assert not c.editor.toPlainText()
+            assert not c.offline_note.text(), 'Successful retry must clear the offline warning'
             self.shot('37-network-retry-success')
             self.workflow_checks.extend(['real_connection_refusal_preserves_draft','retry_after_network_restore'])
             # Same 10,000-row database as the prototype; bounded live view.
@@ -937,6 +961,8 @@ def main():
             self.shot("29-long-history")
             # Short screen recording of actual navigation, with no active audio.
             frames = []
+            frame_times = []
+            recording_started = time.perf_counter()
             for view in (
                 m.show_friends,
                 m.show_chats,
@@ -945,8 +971,8 @@ def main():
                 m.show_settings,
             ):
                 view()
-                for _ in range(4):
-                    self.wait(0.12)
+                for _ in range(16):
+                    self.wait(0.02)
                     yield
                     from PIL import Image
 
@@ -959,18 +985,26 @@ def main():
                             ).QImage.Format_RGBA8888
                         )
                     )
-                    frames.append(
-                        Image.frombytes(
-                            "RGBA", (image.width(), image.height()), bytes(image.bits())
-                        ).resize((960, 585))
+                    frame = Image.frombytes(
+                        "RGBA", (image.width(), image.height()), bytes(image.bits())
                     )
+                    frame.thumbnail((960, 960))
+                    frames.append(frame)
+                    frame_times.append(time.perf_counter() - recording_started)
+            durations = [max(10, round((b-a)*1000/10)*10)
+                         for a,b in zip(frame_times,frame_times[1:])]
+            durations.append(durations[-1])
             frames[0].save(
                 self.path / "interaction.gif",
                 save_all=True,
                 append_images=frames[1:],
-                duration=160,
+                duration=durations,
                 loop=0,
             )
+            self.recording = dict(file='interaction.gif', platform='offscreen',
+                frame_times_seconds=frame_times, encoded_durations_ms=durations,
+                frame_size=frames[0].size,
+                note='Window captures with measured timestamps; capture cadence is not render FPS or native desktop evidence.')
             for cycle in range(max(1, args.relogin_cycles)):
                 previous_token = m.ctx.session_token
                 c.editor.setPlainText('Private draft before logout')
@@ -1002,6 +1036,7 @@ def main():
                         visual_fixtures=self.visual_fixtures,
                         error=self.error,
                         performance=getattr(self, "performance", None),
+                        recording=getattr(self, "recording", None),
                         audio=getattr(self, "audio_results", None),
                         backdrop=getattr(self.w, "backdrop_description", None),
                         workflow_checks=getattr(self, "workflow_checks", []),
