@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 import uuid
+from collections import OrderedDict
+from copy import deepcopy
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal, QEvent
 from PySide6.QtWidgets import (
     QWidget,
@@ -38,6 +40,7 @@ class Conversation(QWidget):
         self.unseen_new = 0
         self.unread_initialized = False
         self.rows = []
+        self.history_cache = OrderedDict()
         self.loading = False
         self.history_loaded = False
         self.history_error = False
@@ -156,6 +159,18 @@ class Conversation(QWidget):
 
     def select(self, identity, name="", can_send=True):
         self.remember_draft()
+        if self.identity is not None and self.history_loaded:
+            self.history_cache[self.identity] = dict(
+                rows=deepcopy(self.rows), rendered=list(self.model.rows),
+                older=self.older, newer=self.newer, at_latest=self.at_latest,
+                unread_boundary=self.unread_boundary, unread_count=self.unread_count,
+                unread_initialized=self.unread_initialized,
+                scroll=self.view.verticalScrollBar().value())
+            self.history_cache.move_to_end(self.identity)
+            while len(self.history_cache)>20:
+                self.history_cache.popitem(last=False)
+        cached=self.history_cache.pop(identity,None)
+        if cached is not None:self.history_cache[identity]=cached
         self.scope.invalidate()
         self.send_error.clear()
         self.offline_note.clear()
@@ -177,9 +192,18 @@ class Conversation(QWidget):
         self._restoring = True
         self.editor.setPlainText(self.drafts.get(identity, ""))
         self._restoring = False
+        if cached is not None:
+            self.rows=deepcopy(cached["rows"])
+            for key in ("older","newer","at_latest","unread_boundary","unread_count","unread_initialized"):
+                setattr(self,key,cached[key])
+            self.history_loaded=True
+            self.model.replace(cached["rendered"])
+            self.view.doItemsLayout()
         self.update_controls()
+        if cached is not None:
+            self.view.verticalScrollBar().setValue(cached["scroll"])
         if identity is not None:
-            self.load("latest")
+            self.load("poll" if cached is not None else "latest")
 
     def reset(self):
         self.epoch += 1
@@ -188,6 +212,7 @@ class Conversation(QWidget):
         self.pending.clear()
         self.retries.clear()
         self.identity = None
+        self.history_cache.clear()
         self.select(None)
 
     def payload(self, action):

@@ -165,6 +165,32 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(self.chat.model.rows[0].avatar, "channel-avatar")
         self.assertEqual(self.chat.model.rows[0].name, "Channel Bob")
 
+    def test_revisited_chat_renders_cache_before_network_reply_and_reset_clears_it(self):
+        self.select("bob")
+        original=list(self.chat.model.rows)
+        self.chat.select("carol")
+        stale=self.requests[-1][1]
+        self.chat.select("bob")
+        self.assertEqual(self.chat.model.rows,original)
+        self.assertIs(self.chat.history_stack.currentWidget(),self.chat.view)
+        self.assertTrue(self.chat.loading)
+        stale(self.response("carol"))
+        self.assertEqual(self.chat.model.rows,original)
+        self.requests[-1][1](self.response("bob",count=1,start=3))
+        self.assertEqual([m.id for m in self.chat.model.rows],[1,2,3])
+        self.chat.reset()
+        self.assertFalse(self.chat.history_cache)
+        self.assertFalse(self.chat.model.rows)
+
+    def test_history_cache_is_bounded_and_remembers_empty_chats(self):
+        for i in range(25):
+            self.chat.select(str(i))
+            self.requests[-1][1]({"status":"ok","messages":[]})
+        self.chat.select("23")
+        self.assertLessEqual(len(self.chat.history_cache),20)
+        self.assertIs(self.chat.history_stack.currentWidget(),self.chat.empty_state)
+        self.assertTrue(self.chat.loading)
+
     def test_empty_private_and_channel_poll_keeps_empty_surface(self):
         from unittest.mock import patch
         for channel in (False, True):

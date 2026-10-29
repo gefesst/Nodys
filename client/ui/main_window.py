@@ -691,6 +691,7 @@ class MainWindow(QWidget):
             self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
             self.channels_page.channel_inner_stack.currentIndex()==1)
         visible=(private and not (panel and panel.isVisible())) or (channel and not channel_surface)
+        self.voice_dock.sync_controls()
         self.voice_dock.set_present(visible)
         self.voice_dock.position()
         if private:

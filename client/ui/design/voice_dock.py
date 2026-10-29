@@ -20,8 +20,10 @@ class VoiceDock(QFrame):
         self.status=QLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;');layout.addWidget(self.status)
         row=QHBoxLayout();row.setSpacing(12)
         self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');row.addWidget(self.participants,1)
+        self.controls={}
         for name,symbol,callback in [('Микрофон','mic',self.toggle_mic),('Звук','headphones',self.toggle_sound),('Отключиться','end',main.end_voice_surface)]:
             button=Button('',symbol);button.setMinimumHeight(0);button.setFixedSize(32,28);button.setAccessibleName(name)
+            self.controls[symbol]=button
             if symbol=='end':button.setProperty('danger',True)
             button.clicked.connect(callback);row.addWidget(button)
         layout.addLayout(row)
@@ -40,10 +42,27 @@ class VoiceDock(QFrame):
     def toggle_mic(self):
         if self.main.call_window:self.main.call_window._mic_clicked()
         else:self.main.channels_page.toggle_voice_mute()
+        self.sync_controls()
 
     def toggle_sound(self):
         if self.main.call_window:self.main.call_window._sound_clicked()
         else:self.main.channels_page.toggle_voice_deafen()
+        self.sync_controls()
+
+    def sync_controls(self):
+        panel=getattr(self.main,"call_window",None)
+        channel=self.main.channels_page
+        muted=not panel.mic_enabled if panel else bool(getattr(channel,"_voice_muted",False))
+        deafened=not panel.sound_enabled if panel else bool(getattr(channel,"_voice_deafened",False))
+        for symbol,off,label in (("mic",muted,"Микрофон"),("headphones",deafened,"Звук")):
+            button=self.controls[symbol]
+            button.icon_name=symbol+"-off" if off else symbol
+            button.setProperty("danger",off)
+            button.setCheckable(True);button.setChecked(off)
+            state=label+(" выключен" if off else " включён")
+            button.setAccessibleName(state)
+            button.setToolTip(("Включить " if off else "Выключить ")+("микрофон" if symbol=="mic" else "звук"))
+            button.update()
 
     def get_progress(self):
         return self._progress

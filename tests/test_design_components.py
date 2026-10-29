@@ -41,6 +41,23 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_voice_dock_controls_follow_channel_and_private_call_state(self):
+        from PySide6.QtWidgets import QWidget
+        from ui.design.voice_dock import VoiceDock
+        main=QWidget();self.addCleanup(main.close)
+        main.open_voice_surface=lambda:None;main.end_voice_surface=lambda:None
+        main.call_window=None
+        main.channels_page=SimpleNamespace(_voice_muted=True,_voice_deafened=False)
+        dock=VoiceDock(main);dock.sync_controls()
+        self.assertEqual(dock.controls["mic"].icon_name,"mic-off")
+        self.assertTrue(dock.controls["mic"].isChecked())
+        self.assertFalse(dock.controls["headphones"].property("danger"))
+        main.call_window=SimpleNamespace(mic_enabled=True,sound_enabled=False)
+        dock.sync_controls()
+        self.assertEqual(dock.controls["mic"].icon_name,"mic")
+        self.assertEqual(dock.controls["headphones"].icon_name,"headphones-off")
+        self.assertTrue(dock.controls["headphones"].property("danger"))
+
     def test_voice_dock_animation_reverses_and_reserves_bottom_space(self):
         from PySide6.QtWidgets import QWidget
         from ui.design.voice_dock import VoiceDock
