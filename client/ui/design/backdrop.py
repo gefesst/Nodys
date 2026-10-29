@@ -19,6 +19,12 @@ def install(window):
             else "Непрозрачный фон"
         )
         return
+    if sys.platform == "win32":
+        try:
+            _install_windows(window, bool(window.property("translucent_background")))
+        except (AttributeError, RuntimeError, ValueError, OSError):
+            pass
+        return
     if not window.property("translucent_background"):
         window.backdrop_description = "Непрозрачный фон"
         return
@@ -46,21 +52,26 @@ def install(window):
 
             apply(window)
             window.backdrop_description = "macOS: NSVisualEffectView за фоном 96%"
-        elif sys.platform == "win32":
-            import ctypes
-
-            if sys.getwindowsversion().build < 22621:
-                return
-            value = ctypes.c_int(3)  # DWMSBT_TRANSIENTWINDOW, Windows 11 22H2+
-            result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                ctypes.c_void_p(int(window.winId())),
-                38,
-                ctypes.byref(value),
-                ctypes.sizeof(value),
-            )
-            if result == 0:
-                window.backdrop_description = (
-                    "Windows: системный Acrylic включён; визуальная проверка необходима"
-                )
     except (ImportError, AttributeError, RuntimeError, ValueError, OSError):
         pass
+
+
+def _install_windows(window, enabled):
+    import ctypes
+
+    if not enabled:
+        window.backdrop_description = "Непрозрачный фон"
+    if sys.getwindowsversion().build < 22621:
+        return
+    # Explicit NONE also removes a material installed before the preference changed.
+    # https://learn.microsoft.com/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type
+    value = ctypes.c_int(3 if enabled else 1)
+    result = ctypes.windll.dwmapi.DwmSetWindowAttribute(
+        ctypes.c_void_p(int(window.winId())), 38,
+        ctypes.byref(value), ctypes.sizeof(value),
+    )
+    if result == 0:
+        window.backdrop_description = (
+            "Windows: системный Acrylic включён; визуальная проверка необходима"
+            if enabled else "Непрозрачный фон"
+        )

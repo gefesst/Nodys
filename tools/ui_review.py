@@ -25,6 +25,7 @@ def main():
     parser.add_argument("--relogin-cycles", type=int, default=1)
     parser.add_argument("--resize-all", action="store_true")
     parser.add_argument("--visual-only", action="store_true")
+    parser.add_argument("--section",choices=("all","profile","voice","channels"),default="all")
     args = parser.parse_args()
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
@@ -45,6 +46,12 @@ def main():
             self.w = w
             self.path = Path(args.output)
             self.path.mkdir(parents=True, exist_ok=True)
+            import hashlib, subprocess
+            self.source_revision=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+            digest=hashlib.sha256()
+            for source in sorted(path for folder in ('client','server') for path in (ROOT/folder).rglob('*') if path.suffix in ('.py','.qss','.svg')):
+                digest.update(str(source.relative_to(ROOT)).encode());digest.update(source.read_bytes())
+            self.source_tree_sha256=digest.hexdigest()
             self.log = []
             self.visual_fixtures = []
             self.error = None
@@ -99,6 +106,75 @@ def main():
             self.log.append(name)
             print("Captured", name, flush=True)
 
+        def channel_states_review(self,m):
+            from unittest.mock import patch
+            m.show_channels();ch=m.channels_page
+            self.wait(predicate=lambda:bool(ch.channels) and not ch._loading_channels);yield
+            ch.stop_auto_update()
+            saved_channels=list(ch.channels)
+            with patch.object(ch,'load_channels'),patch.object(ch,'load_channel_invites'):
+                ch.active_channel=None;ch.main_stack.setCurrentWidget(ch.placeholder_page)
+                ch.channels=[];ch.render_channels(force=True);ch._set_channel_list_state('empty')
+                self.shot('40-channels-empty')
+                ch._show_channels_skeleton();self.shot('40b-channels-loading')
+                ch._set_channel_list_state('error');self.shot('40c-channels-error')
+                ch.channels=saved_channels;ch.render_channels(force=True);ch._set_channel_list_state('list')
+                ch._invites=[];ch._render_invites(force=True);ch._set_invites_dropdown_open(True)
+                self.shot('40d-channel-invites-empty')
+            self.visual_fixtures.extend(['40-channels-empty: empty local channel cache','40b-channels-loading: pending list renderer','40c-channels-error: failed list renderer','40d-channel-invites-empty: empty invites cache'])
+            ch.open_join_page();ch.join_code_input.setText('INVALID-CODE')
+            ch.join_channel();self.wait(predicate=lambda:not ch._joining_channel);yield
+            assert ch.main_stack.currentWidget() is ch.join_page and ch.join_feedback.text()
+            self.shot('40e-channel-join-error')
+
+        def microphone_review(self,m):
+            m.settings_page.check_microphone()
+            mic=m.settings_page.microphone_check
+            mic.listening();mic.level=40;mic.update_meter()
+            self.shot('29f-microphone-level')
+            mic.level=0;mic.last_signal=time.monotonic()-4;mic.update_meter()
+            self.shot('29g-microphone-silent')
+            mic.failed('Permission denied');self.shot('29h-microphone-permission')
+            mic.close()
+            self.visual_fixtures.extend(['29f-microphone-level: injected level; no audio device','29g-microphone-silent: injected silence; no audio device','29h-microphone-permission: injected permission error; no OS permission changed'])
+            yield
+
+        def profile_review(self,m):
+            m.show_profile()
+            self.wait()
+            yield
+            self.shot("19-profile")
+            m.profile_page.show_section("edit")
+            self.wait()
+            yield
+            self.shot("20-profile-edit")
+            m.profile_page.save_changes()
+            self.shot('20b-profile-saving')
+            self.wait(predicate=lambda:not m.profile_page._saving);yield
+            assert m.profile_page.feedback.text() == 'Профиль обновлён.'
+            self.shot('20c-profile-saved')
+            from unittest.mock import patch
+            p=m.profile_page
+            p.confirm_logout();self.shot('20d-profile-logout');p._confirmation.reject()
+            avatar_file=lab.path/'avatar-review.png'
+            p.avatar_label.grab().save(str(avatar_file))
+            before=p.avatar_path
+            with patch('ui.profile_page.QFileDialog.getOpenFileName',return_value=(str(avatar_file),'PNG')):
+                p.choose_avatar()
+            self.shot('20e-profile-avatar');p._confirmation.reject()
+            assert p.avatar_path==before
+            self.visual_fixtures.append('20e-profile-avatar: file picker supplied a generated test avatar; confirmation uses normal encoder')
+            from config import save_config
+            save_config({'api_port':lab.free_port()})
+            p.save_changes();self.wait(predicate=lambda:not p._saving);yield
+            self.shot('20f-profile-save-error')
+            assert p.feedback.text() and p.nickname_edit.text()
+            save_config(lab.config)
+            m.profile_page.show_section("password")
+            self.wait()
+            yield
+            self.shot("21-profile-password")
+
         def scenario(self):
             w = self.w
             self.wait(0.6)
@@ -151,6 +227,24 @@ def main():
             yield
             m = w.main_page
             lab.tokens[lab.me] = m.ctx.session_token
+            if args.section=="profile":
+                w.resize(1440,900)
+                yield from self.profile_review(m)
+                return
+            if args.section=="channels":
+                w.resize(1440,900)
+                yield from self.channel_states_review(m)
+                return
+            if args.section=="voice":
+                w.resize(1440,900)
+                m.show_channels()
+                self.wait(predicate=lambda:bool(m.channels_page.channels));yield
+                m.channels_page.open_channel(m.channels_page.channels[0])
+                self.wait(predicate=lambda:not m.channels_page._loading_channel_details);yield
+                m.show_settings()
+                self.wait();yield
+                yield from self.microphone_review(m)
+                return
             self.wait(1)
             yield
             for size in ((1120, 620), (1280, 780), (1440, 900)):
@@ -319,23 +413,7 @@ def main():
             self.wait()
             yield
             self.shot("18c-channel-members-roles")
-            m.show_profile()
-            self.wait()
-            yield
-            self.shot("19-profile")
-            m.profile_page.show_section("edit")
-            self.wait()
-            yield
-            self.shot("20-profile-edit")
-            m.profile_page.save_changes()
-            self.shot('20b-profile-saving')
-            self.wait(predicate=lambda:not m.profile_page._saving);yield
-            assert m.profile_page.feedback.text() == 'Профиль обновлён.'
-            self.shot('20c-profile-saved')
-            m.profile_page.show_section("password")
-            self.wait()
-            yield
-            self.shot("21-profile-password")
+            yield from self.profile_review(m)
             m.show_settings()
             self.wait()
             yield
@@ -462,6 +540,35 @@ def main():
                 m.call_window._end_clicked()
                 self.wait(predicate=lambda: m.calls.state is None)
                 yield
+            if args.synthetic_voice:
+                m._close_call_result()
+                m.show_channels();ch.open_channel(lab.channel);ch.switch_to_voice_tab()
+                self.wait(predicate=lambda:not ch._loading_channel_details);yield
+                ch.toggle_voice_join()
+                self.wait(predicate=lambda:ch._voice_joined);yield
+                remote= SyntheticVoiceClient(login=peer,token=lab.tokens[peer],host='127.0.0.1',port=lab.voice_port)
+                remote.start(room_id=ch._voice_room_id())
+                assert lab.request(peer,'set_channel_voice_presence',channel_id=lab.channel['id'],joined=True,speaking=False,sequence=time.time_ns())['status']=='ok'
+                ch.sync_voice_presence(force_pull=True)
+                self.wait(1);yield
+                ch.load_voice_participants(force=True)
+                self.wait(predicate=lambda:len(ch._voice_participants)>=2);yield
+                self.shot('29-channel-voice-active')
+                ch.toggle_voice_mute();self.shot('29b-channel-voice-muted');ch.toggle_voice_mute()
+                m.show_chats();m.refresh_voice_dock();self.shot('29c-channel-voice-dock')
+                with patch.object(ch._voice_client,'get_activity',return_value={'quality':'Переподключение'}):
+                    m.refresh_voice_dock();self.shot('29e-channel-voice-reconnecting')
+                self.visual_fixtures.append('29e-channel-voice-reconnecting: transport reconnecting status renderer')
+                m.open_voice_surface()
+                ch.stop_voice_session()
+                remote.stop()
+                lab.request(peer,'leave_channel_voice',channel_id=lab.channel['id'],sequence=time.time_ns())
+                self.wait(.5);yield
+                ch.load_voice_participants(force=True)
+                self.wait(predicate=lambda:not ch._voice_participants_loading);yield
+                assert not ch._voice_joined and not any(p['login']==lab.me for p in ch._voice_participants)
+                self.shot('29d-channel-voice-left')
+                yield from self.microphone_review(m)
             w.resize(1440, 900)
             m.show_profile()
             p = m.profile_page
@@ -709,6 +816,8 @@ def main():
             (self.path / "review.json").write_text(
                 json.dumps(
                     dict(
+                        source_revision=self.source_revision,
+                        source_tree_sha256=self.source_tree_sha256,
                         screens=self.log,
                         visual_fixtures=self.visual_fixtures,
                         error=self.error,

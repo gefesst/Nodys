@@ -81,6 +81,18 @@ class UiTests(unittest.TestCase):
         callback()
         retry.assert_not_called()
 
+    def test_muted_local_voice_card_ignores_stale_speaking_presence(self):
+        from ui.channels_page import VoiceParticipantItem
+        from PySide6.QtWidgets import QLabel
+        p=self.page
+        p._voice_joined=True;p._voice_muted=True
+        p._voice_participants=[{'login':p.ctx.login,'nickname':'Alice','speaking':True}]
+        p._render_voice_participants()
+        row=p.voice_members_container.findChild(VoiceParticipantItem)
+        self.assertFalse(row.property('speaking'))
+        self.assertIn('Микрофон выключен',[label.text() for label in row.findChildren(QLabel)])
+        self.assertEqual(row.width(),290)
+
     def test_cancelled_channel_join_does_not_resume_after_microphone_stops(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -94,6 +106,28 @@ class UiTests(unittest.TestCase):
         with patch.object(p,'toggle_voice_join') as resume:
             callback()
             resume.assert_not_called()
+
+    def test_removed_channel_rows_hide_before_deferred_destruction(self):
+        from ui.channels_page import ChannelListItem
+        p=self.page
+        p.channels=[{'id':1,'name':'Old'}];p.render_channels(force=True)
+        old=p.channels_container.findChild(ChannelListItem)
+        old.show()
+        p.channels=[];p.render_channels(force=True)
+        self.assertTrue(old.isHidden())
+
+    def test_channel_join_error_stays_in_form_and_retry_clears_it(self):
+        p=self.page;pending=[]
+        p.start_request=lambda data,callback:pending.append(callback)
+        p.open_join_page();p.join_code_input.setText('bad-code');p.join_channel()
+        self.assertFalse(p.join_confirm_btn.isEnabled())
+        pending.pop()({'status':'error','message':'Недействительный код'})
+        self.assertEqual(p.join_feedback.text(),'Недействительный код')
+        self.assertIs(p.main_stack.currentWidget(),p.join_page)
+        self.assertTrue(p.join_confirm_btn.isEnabled())
+        p.join_channel()
+        self.assertEqual(p.join_feedback.text(),'')
+        pending.pop()({'status':'error','message':'Повторная ошибка'})
 
     def test_settings_are_scrollable(self):
         from PySide6.QtWidgets import QScrollArea

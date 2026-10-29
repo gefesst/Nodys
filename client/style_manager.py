@@ -8,7 +8,7 @@ def load_styles(*names):
     for name, value in vars(tokens).items():
         if name.isupper():
             text = text.replace('@'+name+'@', str(value))
-    return text
+    return text.replace("@ASSETS@", (Path(__file__).parent/"ui/design/assets").as_posix())
 
 
 def apply_app_styles(app, *names):

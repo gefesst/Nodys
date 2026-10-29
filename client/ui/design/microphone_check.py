@@ -2,9 +2,10 @@
 
 import threading
 import time
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal, QTimer, Qt
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
-from .widgets import Button
+from .widgets import Button, ASSETS
+from PySide6.QtSvgWidgets import QSvgWidget
 
 
 class MeterSignals(QObject):
@@ -14,6 +15,8 @@ class MeterSignals(QObject):
 
 
 class MicrophoneCheck(QFrame):
+    closed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Проверка микрофона")
@@ -32,6 +35,8 @@ class MicrophoneCheck(QFrame):
         root = QHBoxLayout(self)
         root.setContentsMargins(22,16,18,16)
         root.setSpacing(16)
+        symbol=QSvgWidget(str(ASSETS/"mic.svg"));symbol.setFixedSize(22,22)
+        root.addWidget(symbol,0,Qt.AlignVCenter)
         column=QVBoxLayout();column.setSpacing(8)
         self.title=QLabel('Проверка микрофона')
         self.title.setStyleSheet('font-size:16px;font-weight:600;')
@@ -57,6 +62,8 @@ class MicrophoneCheck(QFrame):
 
     def listening(self):
         self.failed_state = False
+        self.start_button.hide()
+        self.meter.show()
         self.last_signal = time.monotonic()
         self.title.setText("Проверка микрофона")
         self.status.setText("Скажите несколько слов — индикатор покажет уровень.")
@@ -64,6 +71,7 @@ class MicrophoneCheck(QFrame):
     def update_meter(self):
         self.meter.setValue(self.level)
         if self.level > 1:
+            self.start_button.hide()
             self.last_signal = time.monotonic()
             self.title.setText("Проверка микрофона")
             self.status.setText("Скажите несколько слов — индикатор покажет уровень.")
@@ -71,6 +79,7 @@ class MicrophoneCheck(QFrame):
             self.title.setText("Пока не слышим микрофон")
             self.status.setText("Проверьте выбранное устройство и уровень громкости.")
             self.start_button.setEnabled(True)
+            self.start_button.show()
 
     def start(self):
         if self.worker and self.worker.is_alive():
@@ -114,6 +123,8 @@ class MicrophoneCheck(QFrame):
         self.start_button.setEnabled(True)
         self.timer.stop()
         self.meter.setValue(0)
+        if not self.failed_state:
+            self.start_button.show()
         if not self.stop_event.is_set() and not self.failed_state:
             self.status.setText("Проверка завершена. Звук не сохранялся.")
 
@@ -128,10 +139,13 @@ class MicrophoneCheck(QFrame):
         self.title.setText("Нет доступа к микрофону" if denied else "Микрофон недоступен")
         self.status.setText("Разрешите доступ к микрофону в настройках системы." if denied else message)
         self.status.setToolTip(message)
+        self.meter.setVisible(not denied)
+        self.start_button.setVisible(not denied)
         self.start_button.setEnabled(True)
         self.timer.stop()
 
     def closeEvent(self, event):
+        self.closed.emit()
         self.stop_event.set()
         self.timer.stop()
         super().closeEvent(event)

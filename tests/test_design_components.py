@@ -58,6 +58,21 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertIs(panel.results.currentWidget(),panel.empty)
         panel.close();host.close()
 
+    def test_windows_opaque_preference_removes_previous_backdrop(self):
+        from ui.design import backdrop
+        from unittest.mock import patch, Mock
+        import ctypes
+        setter=Mock(return_value=0)
+        window=SimpleNamespace(property=lambda name:False,winId=lambda:123)
+        with patch.object(backdrop.sys,'platform','win32'), \
+             patch.object(backdrop.sys,'getwindowsversion',return_value=SimpleNamespace(build=22621),create=True), \
+             patch.object(ctypes,'windll',SimpleNamespace(dwmapi=SimpleNamespace(DwmSetWindowAttribute=setter)),create=True), \
+             patch('PySide6.QtWidgets.QApplication.platformName',return_value='windows'):
+            backdrop.install(window)
+        self.assertEqual(setter.call_args.args[1],38)
+        self.assertEqual(setter.call_args.args[2]._obj.value,1)
+        self.assertEqual(window.backdrop_description,'Непрозрачный фон')
+
     def test_empty_state_shrinks_top_space_without_clipping_retry(self):
         from ui.design.state_surfaces import EmptyState
         from PySide6.QtWidgets import QPushButton

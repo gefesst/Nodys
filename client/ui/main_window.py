@@ -4,6 +4,7 @@ from application.session_cleanup import submit as submit_session_cleanup
 from PySide6.QtCore import QTimer, Qt, QRect, QEvent
 import os
 import socket
+import time
 from types import SimpleNamespace
 
 from PySide6.QtWidgets import (
@@ -677,12 +678,19 @@ class MainWindow(QWidget):
             activity=self.voice_client.get_activity()
             peer=panel.peer_nickname if panel else self.current_call_user or 'Собеседник'
             self.voice_dock.title.setText(peer)
-            self.voice_dock.status.setText('В разговоре · '+(panel.timer_lbl.text() if panel else 'Подключение…'))
+            reconnecting=activity.get('quality')=='Переподключение'
+            self.voice_dock.set_status('Восстанавливаем соединение…' if reconnecting else 'В разговоре · '+(panel.timer_lbl.text() if panel else 'Подключение…'),reconnecting)
             self.voice_dock.participants.setText(activity.get('quality','Подключение…'))
         elif channel:
             self.voice_dock.title.setText(str((self.channels_page.active_channel or {}).get('name','Голосовой канал')))
-            self.voice_dock.status.setText('В голосовом канале')
-            self.voice_dock.participants.setText(f'{len(self.channels_page._voice_participants)} участников')
+            voice=self.channels_page._voice_client
+            activity=voice.get_activity() if voice else {}
+            reconnecting=activity.get('quality')=='Переподключение'
+            elapsed=max(0,int(time.monotonic()-getattr(self.channels_page,'_voice_started_at',time.monotonic())))
+            self.voice_dock.set_status('Восстанавливаем соединение…' if reconnecting else f'В голосовом · {elapsed//60:02d}:{elapsed%60:02d}',reconnecting)
+            count=len(self.channels_page._voice_participants)
+            noun='участник' if count%10==1 and count%100!=11 else 'участника' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'участников'
+            self.voice_dock.participants.setText(f'{count} {noun}')
 
     def open_voice_surface(self):
         if self.call_window:

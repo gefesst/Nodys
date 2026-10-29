@@ -23,6 +23,10 @@ class VoiceDock(QFrame):
         layout.addLayout(row)
         self.hide()
 
+    def set_status(self, text, reconnecting=False):
+        self.status.setText(text)
+        self.status.setStyleSheet("font-size:12px;color:"+("#EAC184" if reconnecting else "#67D5AD")+";")
+
     def toggle_mic(self):
         if self.main.call_window:self.main.call_window._mic_clicked()
         else:self.main.channels_page.toggle_voice_mute()

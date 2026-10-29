@@ -402,6 +402,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         for i in reversed(range(self.list_layout.count() - 1)):
             item = self.list_layout.takeAt(i)
             if item and item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
 
     def _add_section_header(self, text: str):

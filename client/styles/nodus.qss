@@ -41,6 +41,8 @@ QMenu::item {padding:10px 24px;}
 QMenu::item:selected {background:#3A4D67;border-radius:6px;}
 QToolTip {background:@SURFACE@;color:@FG@;border:1px solid #536D92;padding:7px;}
 QComboBox {background:#253244;border:1px solid @EDGE@;border-radius:8px;padding:9px 12px;min-height:20px;}
+QComboBox::drop-down {border:0;width:32px;}
+QComboBox::down-arrow {image:url("@ASSETS@/chevron-down.svg");width:16px;height:16px;}
 QComboBox QAbstractItemView {background:#253244;selection-background-color:#3A4D67;}
 QCheckBox {spacing:10px;}
 QCheckBox::indicator {width:18px;height:18px;border:1px solid #536D92;border-radius:5px;background:@BACKGROUND@;}

@@ -191,7 +191,10 @@ class ActiveCallWindow(CallPanel):
         score = float(a.get("quality_score", 0.0) or 0.0)
         if quality is not None:
             self.quality_lbl.setText(f"Качество: {quality} · {lat} мс")
-            if score < 50:
+            if quality == "Переподключение":
+                self.state_lbl.setText("Восстанавливаем соединение…")
+                self.state_lbl.setStyleSheet("color:#EAC184;font-size:15px;")
+            elif score < 50:
                 self.state_lbl.setText("Связь нестабильна")
                 self.state_lbl.setStyleSheet("color:#ACB9CC;font-size:15px;")
             bars, color = self._bars_for_quality(score)
@@ -313,12 +316,14 @@ class OutgoingCallWindow(CallPanel):
         login = QLabel("@" + peer)
         login.setAlignment(Qt.AlignCenter)
         login.setFixedHeight(18)
+        login.setStyleSheet("font-size:14px;color:#ACB9CC;")
         root.addWidget(login)
         root.addSpacing(31)
         hint = QLabel("Ожидаем ответа")
         self.status_label = hint
         hint.setAlignment(Qt.AlignCenter)
         hint.setFixedHeight(22)
+        hint.setStyleSheet("font-size:15px;color:#ACB9CC;")
         root.addWidget(hint)
         root.addSpacing(99)
         button = Button("Отменить")

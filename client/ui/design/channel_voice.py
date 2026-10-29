@@ -6,6 +6,11 @@ from .widgets import Button
 
 def build(page):
     tab=QWidget()
+    page.voice_content=tab
+    scroll=QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setWidget(tab)
+    page.voice_surface_scroll=scroll
     layout=QVBoxLayout(tab)
     page.voice_tab_layout=layout
     layout.setContentsMargins(16,36,24,36)
@@ -17,9 +22,10 @@ def build(page):
     layout.addSpacing(9)
     page.voice_members_count=QLabel('Нет участников')
     page.voice_members_count.setObjectName('Muted')
+    page.voice_members_count.setStyleSheet("font-size:13px;color:#ACB9CC;")
     page.voice_members_count.setFixedHeight(16)
     layout.addWidget(page.voice_members_count)
-    layout.addSpacing(28)
+    layout.addSpacing(33)
     page.voice_members_scroll=QScrollArea()
     page.voice_members_scroll.setWidgetResizable(True)
     page.voice_members_container=QWidget()
@@ -70,5 +76,11 @@ def build(page):
     page.voice_access_hint_lbl.setObjectName('Muted')
     layout.addWidget(page.voice_access_hint_lbl)
     page.voice_controls=controls
+    page.voice_microphone_host=QWidget()
+    page.voice_microphone_layout=QVBoxLayout(page.voice_microphone_host)
+    page.voice_microphone_layout.setContentsMargins(0,0,0,33)
+    page.voice_microphone_layout.setSpacing(0)
+    page.voice_microphone_host.hide()
+    layout.addWidget(page.voice_microphone_host)
     layout.addWidget(controls)
-    return tab
+    return scroll

@@ -17,13 +17,19 @@ MAPPING = {
     'friends-mini':'08-mini-profile', 'friends-remove':'06d-friend-remove-confirm',
     'friends-search-empty':'06b-friends-search-empty', 'friends-error':'06c-friends-network-error',
     '01-chat':'09-private-chat', 'chat-none':'08b-chat-none', 'chat-multiline':'10-chat-multiline',
+    'channels-empty':'40-channels-empty','channels-loading':'40b-channels-loading','channels-error':'40c-channels-error',
+    'channels-invites-empty':'40d-channel-invites-empty','channels-join-error':'40e-channel-join-error',
     'channels-list':'11a-channel-list', 'channels-invites':'11b-channel-invites',
     'channels-text':'12-channel-text', 'channels-create':'15-channel-create',
     'channels-join':'16-channel-join', 'channels-voice-empty':'14-channel-voice',
+    'idea-voice-reconnect':'29e-channel-voice-reconnecting',
+    'idea-mic-check':'29f-microphone-level','idea-mic-silent':'29g-microphone-silent','idea-mic-permission':'29h-microphone-permission',
+    'channels-voice-active':'29-channel-voice-active','channels-voice-muted':'29b-channel-voice-muted',
     'settings-loading':'16b-channel-settings-loading','settings-error':'17a-channel-settings-error',
     'settings-info':'17-channel-settings', 'settings-roles':'18b-channel-permissions',
     'settings-members':'18c-channel-members-roles', 'settings-regenerate':'17b-channel-regenerate-confirm',
     'settings-delete':'17c-channel-delete-confirm', 'profile-main':'19-profile',
+    'profile-logout':'20d-profile-logout','profile-avatar':'20e-profile-avatar','profile-error':'20f-profile-save-error',
     'profile-edit':'20-profile-edit', 'profile-password':'21-profile-password',
     'profile-saving':'20b-profile-saving','profile-saved':'20c-profile-saved',
     'general-settings':'22-settings', 'idea-quick-switch':'22c-quick-switch',
@@ -39,6 +45,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--references',type=Path,required=True)
     parser.add_argument('--captures',type=Path,required=True)
+    parser.add_argument('--additional-captures',type=Path,action='append',default=[])
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
@@ -46,7 +53,9 @@ def main():
     report=[];cards=[]
     for item in catalog:
         slug=item['slug'];name=MAPPING.get(slug)
-        actual=args.captures/'sizes'/f'{name}-1440.png' if name else None
+        actual=None
+        if name:
+            actual=next((folder/'sizes'/f'{name}-1440.png' for folder in [args.captures]+args.additional_captures if (folder/'sizes'/f'{name}-1440.png').exists()),None)
         reference=args.references/f'{slug}.png'
         record={'slug':slug,'title':item['title'],'capture':None,'visual_acceptance':'unverified'}
         folder=args.output/slug;folder.mkdir(exist_ok=True)
@@ -58,6 +67,13 @@ def main():
             live=Image.open(actual).convert('RGB')
             if live.size==ref.size:
                 record['capture']=str(actual.resolve())
+                run=actual.parent.parent/'review.json'
+                record['run_report']=str(run.resolve())
+                if run.exists():
+                    metadata=json.loads(run.read_text())
+                    record['source_revision']=metadata.get('source_revision')
+                    record['source_tree_sha256']=metadata.get('source_tree_sha256')
+                    record['run_error']=metadata.get('error')
                 live.save(folder/'actual.png')
                 Image.blend(ref,live,.5).save(folder/'overlay.png')
                 ImageChops.difference(ref,live).save(folder/'difference.png')

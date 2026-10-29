@@ -265,10 +265,10 @@ class VoiceParticipantItem(QFrame):
         speaking=bool(self.participant.get('speaking'))
         self.setObjectName('ChannelVoiceMemberItem')
         self.setProperty('speaking',speaking)
-        self.setMinimumWidth(180)
+        self.setFixedWidth(290)
         self.setFixedHeight(225)
         layout=QVBoxLayout(self);layout.setContentsMargins(20,28,20,24);layout.setSpacing(0)
-        avatar=AvatarLabel(72);avatar.set_avatar(self.participant.get('avatar',''),login,name)
+        avatar=AvatarLabel(72);avatar.setProperty('own_avatar',login==current_login);avatar.set_avatar(self.participant.get('avatar',''),login,name)
         avatar.setProperty('speaking',speaking)
         layout.addWidget(avatar,0,Qt.AlignHCenter)
         layout.addSpacing(19)
@@ -524,6 +524,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);ip.addWidget(divider)
         ip.addSpacing(52)
         sb_l.removeWidget(self.invites_dropdown)
+        self.invites_dropdown.setObjectName("ChannelInvitesPageBody")
         self.invites_scroll.setMaximumHeight(16777215)
         self.invites_layout.setSpacing(24)
         ip.addWidget(self.invites_dropdown,1)
@@ -644,7 +645,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         join_fields.addWidget(self.join_code_input);join_fields.addSpacing(18)
         code_hint = QLabel("Код можно получить у участника канала.");code_hint.setObjectName("FriendsSubtitle");code_hint.setFixedHeight(17)
         join_fields.addWidget(code_hint);join_l.addLayout(join_fields)
-        join_l.addSpacing(146)
+        from ui.design.state_surfaces import InlineNote
+        feedback_space=QWidget();feedback_space.setFixedHeight(146)
+        feedback_layout=QVBoxLayout(feedback_space)
+        feedback_layout.setContentsMargins(26,38,0,62)
+        self.join_feedback=InlineNote();self.join_feedback.set_tone('error');self.join_feedback.setMaximumWidth(800)
+        feedback_layout.addWidget(self.join_feedback)
+        join_l.addWidget(feedback_space)
 
         join_actions = QHBoxLayout()
         join_actions.setContentsMargins(26,0,0,0);join_actions.setSpacing(16)
@@ -986,7 +993,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if hasattr(self,'voice_tab_layout'):
             self.voice_tab_layout.setContentsMargins(16,36,24,66 if self.height()>=800 else 16)
         if hasattr(self,'voice_members_scroll'):
-            columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//310))
+            columns=max(1,min(3,(max(0,self.voice_members_scroll.width()-12)+20)//310))
             if columns!=getattr(self,'_voice_columns',None):
                 self._voice_columns=columns
                 self._render_voice_participants()
@@ -1063,6 +1070,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 continue
             w = item.widget()
             if w is not None:
+                w.hide()
                 w.deleteLater()
 
 
@@ -1080,6 +1088,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             action = {'empty':'Создать канал','error':'Повторить','list':None}[state]
             callback = self.open_create_page if state == 'empty' else lambda: self.load_channels(force_refresh=True)
             surface = EmptyState(title,'Общайтесь в тексте и собирайтесь в голосовом канале.',action,callback)
+            surface.set_top_offset(148)
         stack.addWidget(surface)
 
     def _show_channels_skeleton(self, count: int = 6):
@@ -1106,6 +1115,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 continue
             w = item.widget()
             if w is not None:
+                w.hide()
                 w.deleteLater()
 
     def _render_invites(self, force: bool = False):
@@ -1120,7 +1130,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         if not invites:
             from ui.design.state_surfaces import EmptyState
-            empty=EmptyState('Приглашений пока нет','Когда вас пригласят в канал, приглашение появится здесь.')
+            empty=EmptyState('Нет новых приглашений','Когда вас пригласят в канал, приглашение появится здесь.')
+            empty.set_top_offset(134)
             self.invites_layout.insertWidget(0,empty)
             return
 
@@ -1143,12 +1154,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         for i in reversed(range(self.members_layout.count() - 1)):
             item = self.members_layout.takeAt(i)
             if item and item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
 
     def _clear_voice_members_list(self):
         for i in reversed(range(self.voice_members_layout.count())):
             item = self.voice_members_layout.takeAt(i)
             if item and item.widget():
+                item.widget().hide()
                 item.widget().deleteLater()
 
     def _set_channel_send_busy(self, busy: bool):
@@ -1436,6 +1449,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
         self.hide_settings_confirm()
         self.join_code_input.clear()
+        self.join_feedback.clear()
         self.main_stack.setCurrentWidget(self.join_page)
         if self.messages_timer.isActive():
             self.messages_timer.stop()
@@ -1536,16 +1550,18 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         code = self.join_code_input.text().strip().upper()
         if not code:
-            self.show_toast("Введите код канала")
+            self.join_feedback.setText("Введите код канала")
             return
 
+        self.join_feedback.clear()
         self._joining_channel = True
+        self.join_confirm_btn.setEnabled(False)
         payload = {"action": "join_channel", "code": code}
 
         def cb(resp):
             try:
                 if resp.get("status") != "ok":
-                    self.show_toast(resp.get("message", "Не удалось подключиться к каналу"))
+                    self.join_feedback.setText(resp.get("message", "Не удалось подключиться к каналу"))
                     return
 
                 ch = resp.get("channel") or {}
@@ -1557,6 +1573,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self.open_default_view()
             finally:
                 self._joining_channel = False
+                self.join_confirm_btn.setEnabled(True)
 
         self.start_request(payload, cb)
 
@@ -1705,22 +1722,27 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._clear_voice_members_list()
 
         participants = self._voice_participants or []
+        self.voice_members_layout.setAlignment(Qt.AlignTop | (Qt.AlignLeft if participants else Qt.AlignmentFlag(0)))
         count=len(participants)
         self.voice_members_count.setText('Нет участников' if not count else f'{count} участников')
         if not participants:
             from ui.design.state_surfaces import EmptyState
             empty=EmptyState('Пока тихо','Подключитесь к голосовому первым.')
             empty.layout().setContentsMargins(0,0,20,0)
+            empty.set_top_offset(0)
+            empty.setMinimumHeight(174)
             self.voice_members_layout.addWidget(empty,0,0,1,3)
             return
 
-        columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//310))
+        columns=max(1,min(3,(max(0,self.voice_members_scroll.width()-12)+20)//310))
         self._voice_columns=columns
         for i,part in enumerate(participants):
+            if part.get("login")==self.ctx.login:
+                part=dict(part,muted=self._voice_muted,speaking=bool(part.get("speaking")) and not self._voice_muted)
             row = VoiceParticipantItem(participant=part, current_login=self.ctx.login)
             self.voice_members_layout.addWidget(row,i//columns,i%columns)
         for column in range(3):
-            self.voice_members_layout.setColumnStretch(column,1 if column<columns else 0)
+            self.voice_members_layout.setColumnStretch(column,0)
 
     def load_voice_participants(self, force: bool = False):
         if not self._alive or not self.active_channel:
@@ -1842,7 +1864,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 speaking = False
                 try:
                     activity = self._voice_client.get_activity()
-                    speaking = bool(activity.get("me_speaking", False))
+                    speaking = bool(activity.get("me_speaking", False)) and not self._voice_muted
                 except Exception:
                     speaking = False
                 self._push_voice_presence(speaking=speaking, joined=True)
@@ -2381,6 +2403,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
         self._voice_muted = not self._voice_muted
         self._apply_voice_local_controls()
+        self._render_voice_participants()
+        self.update_voice_status()
+        self._last_voice_presence_push_ts=0
+        self.sync_voice_presence()
 
     def toggle_voice_deafen(self):
         if not self._voice_joined:
@@ -2453,6 +2479,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 return
             self._voice_transitioning = False
             self._voice_joined = True
+            self._voice_started_at=time.monotonic()
             self._last_voice_presence_push_ts = 0.0
             self._apply_voice_local_controls()
             self.voice_status_lbl.setText("Вы подключены к голосовому каналу")
@@ -2527,10 +2554,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             latency = activity.get("latency_ms", 0)
             jitter = activity.get("jitter_ms", 0)
             buffer_frames = int(activity.get("buffer_frames", 0) or 0)
-            me = bool(activity.get("me_speaking", False))
+            me = bool(activity.get("me_speaking", False)) and not self._voice_muted
             peer = bool(activity.get("peer_speaking", False))
 
-            if self._voice_deafened:
+            if quality == "Переподключение":
+                state = "Восстанавливаем соединение…"
+            elif self._voice_deafened:
                 state = "Вы в канале (звук выключен)"
             elif self._voice_muted and peer:
                 state = "Вы без микрофона · говорит другой участник"
