@@ -335,7 +335,7 @@ class UiTests(unittest.TestCase):
         from types import SimpleNamespace
         from unittest.mock import Mock
         from ui.main_window import MainWindow
-        window = SimpleNamespace(ctx=SimpleNamespace(session_token='test'),current_call_user=None,
+        window = SimpleNamespace(ctx=SimpleNamespace(session_token='test'),current_call_user=None,ui_sounds=Mock(),
             voice_client=None,call_window=None,_hide_incoming_inline=Mock(),
             _show_incoming_inline=Mock(),_start_voice_for_peer=Mock(),_open_call_window=Mock(),
             _close_call_window=Mock(),_close_call_result=Mock())
@@ -343,6 +343,7 @@ class UiTests(unittest.TestCase):
         MainWindow._reconcile_call_state(window,state)
         MainWindow._reconcile_call_state(window,state)
         window._start_voice_for_peer.assert_called_once_with('bob')
+        window.ui_sounds.call_state.assert_called_once_with(state)
         MainWindow._reconcile_call_state(window,None)
         self.assertIsNone(window.current_call_user)
         MainWindow._reconcile_call_state(window,dict(state,call_id='2'))

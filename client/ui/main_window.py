@@ -168,6 +168,8 @@ class MainWindow(QWidget):
         self.current_call_user = None
         self.voice_client = None
         self.call_window = None
+        from audio.ui_sounds import UISounds
+        self.ui_sounds = UISounds(self)
         self.calls = CallController(lambda: self.ctx, self)
         self.calls.state_changed.connect(self._reconcile_call_state)
         self.calls.result_ready.connect(self._show_call_result)
@@ -399,6 +401,7 @@ class MainWindow(QWidget):
 
     def _respond_incoming_inline(self, accept: bool):
         if self.calls.respond(accept):
+            self.ui_sounds.stop_ringing()
             self._set_incoming_buttons_enabled(False)
 
     def _incoming_response_finished(self, success):
@@ -768,6 +771,7 @@ class MainWindow(QWidget):
         if getattr(self, "_rendered_call_key", None) == key:
             return
         self._rendered_call_key = key
+        self.ui_sounds.call_state(state)
         outgoing = getattr(self, 'outgoing_window', None)
         if outgoing is not None:
             outgoing.finished_by_server = True
@@ -795,7 +799,7 @@ class MainWindow(QWidget):
         elif state.get('status') == 'ringing':
             from ui.call_window import OutgoingCallWindow
             call_id = state['call_id']
-            self.outgoing_window = OutgoingCallWindow(peer, lambda: self.calls.end_call(call_id, peer), self)
+            self.outgoing_window = OutgoingCallWindow(peer, lambda: (self.ui_sounds.stop_ringing(), self.calls.end_call(call_id, peer)), self)
             self.outgoing_window.show()
 
     def _start_voice_for_peer(self, peer_login: str):
@@ -842,14 +846,17 @@ class MainWindow(QWidget):
         token = self.ctx.session_token
         def on_end_call():
             if self.ctx.session_token == token and call_id:
+                self.ui_sounds.stop_ringing()
                 self.calls.end_call(call_id, peer_login)
 
         def on_mic_toggle(enabled: bool):
+            self.ui_sounds.play("mic_on" if enabled else "mic_off")
             if self.voice_client:
                 self.voice_client.set_mic_enabled(enabled)
             self.voice_dock.sync_controls()
 
         def on_sound_toggle(enabled: bool):
+            self.ui_sounds.play("sound_on" if enabled else "sound_off")
             if self.voice_client:
                 self.voice_client.set_sound_enabled(enabled)
             self.voice_dock.sync_controls()
@@ -954,6 +961,7 @@ class MainWindow(QWidget):
         """
         from user_context import UserContext
         self.ctx = self._snapshot_context(UserContext())
+        self.ui_sounds.reset()
         self.calls.reset()
         self.is_logging_out = False
 
@@ -1083,6 +1091,7 @@ class MainWindow(QWidget):
 
     def _stop_background_work(self):
         """One nonblocking cleanup path for logout and application close."""
+        self.ui_sounds.shutdown()
         self.calls.reset()
         outgoing = getattr(self, 'outgoing_window', None)
         if outgoing is not None:

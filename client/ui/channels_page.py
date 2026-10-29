@@ -2510,10 +2510,15 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             except Exception:
                 pass
 
+    def _play_voice_sound(self, name):
+        sounds=getattr(self._main_window,"ui_sounds",None)
+        if sounds is not None:sounds.play(name)
+
     def toggle_voice_mute(self):
         if not self._voice_joined:
             return
         self._voice_muted = not self._voice_muted
+        self._play_voice_sound("mic_off" if self._voice_muted else "mic_on")
         self._apply_voice_local_controls()
         self._render_voice_participants()
         self.update_voice_status()
@@ -2524,6 +2529,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         if not self._voice_joined:
             return
         self._voice_deafened = not self._voice_deafened
+        self._play_voice_sound("sound_off" if self._voice_deafened else "sound_on")
         self._apply_voice_local_controls()
 
     def _preserve_voice_focus(self):
@@ -2606,6 +2612,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             self._voice_transitioning = False
             self.connected_voice_room_id=selected_room_id
             self._voice_joined = True
+            self._play_voice_sound("voice_join")
             self._voice_started_at=time.monotonic()
             self._last_voice_presence_push_ts = 0.0
             self._apply_voice_local_controls()
@@ -2646,6 +2653,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self._voice_client = None
 
         was_joined = bool(self._voice_joined)
+        if was_joined:self._play_voice_sound("voice_leave")
         self._voice_joined = False
         self.connected_voice_room_id=None
         self._last_voice_presence_push_ts = 0.0

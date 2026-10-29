@@ -35,6 +35,7 @@ dist/
 
 # ===== Audio temp (на будущее) =====
 *.wav
+!client/assets/sounds/*.wav
 *.ogg
 *.mp3
 
