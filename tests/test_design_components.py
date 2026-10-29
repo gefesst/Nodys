@@ -70,6 +70,23 @@ class DesignGeometryTests(unittest.TestCase):
         ChatsPage.handle_friends(page,dict(status="ok",friends=friends))
         self.assertEqual([row['login'] for row in page.dialog_model.rows], ['recent','older','empty'])
 
+    def test_closed_selector_ignores_wheel_but_keeps_keyboard_selection(self):
+        from PySide6.QtCore import Qt, QPoint, QPointF
+        from PySide6.QtGui import QWheelEvent
+        from PySide6.QtTest import QTest
+        from ui.design.widgets import ScrollSafeComboBox
+        combo = ScrollSafeComboBox()
+        combo.addItems(['Default', 'Device A', 'Device B'])
+        combo.show()
+        self.addCleanup(combo.close)
+        event = QWheelEvent(QPointF(10,10), QPointF(10,10), QPoint(), QPoint(0,-120),
+                            Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+        self.app.sendEvent(combo, event)
+        self.assertEqual(combo.currentIndex(), 0)
+        self.assertFalse(event.isAccepted())
+        QTest.keyClick(combo, Qt.Key_Down)
+        self.assertEqual(combo.currentIndex(), 1)
+
     def test_inline_menu_stays_inside_window_and_escape_does_not_activate(self):
         from PySide6.QtWidgets import QWidget, QPushButton
         from PySide6.QtCore import QPoint, Qt
@@ -82,6 +99,8 @@ class DesignGeometryTests(unittest.TestCase):
         menu.popup(host.mapToGlobal(QPoint(1100,610)))
         self.assertLessEqual(menu.geometry().right(),host.width()-12)
         self.assertLessEqual(menu.geometry().bottom(),host.height()-12)
+        QTest.keyClick(menu.buttons[0], Qt.Key_Down)
+        self.assertTrue(menu.buttons[0].property('keyboardFocus'))
         QTest.keyClick(menu.buttons[0],Qt.Key_Escape)
         self.assertFalse(fired)
         self.assertFalse(menu.isVisible())

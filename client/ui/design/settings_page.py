@@ -14,14 +14,14 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 from config import load_config, save_config
-from .widgets import Button
+from .widgets import Button, ScrollSafeComboBox
 
 
 class SettingsPage(QWidget):
     def __init__(self, main):
         super().__init__(main)
         self.main = main
-        from PySide6.QtWidgets import QComboBox, QStackedWidget
+        from PySide6.QtWidgets import QStackedWidget
         from concurrent.futures import ThreadPoolExecutor
 
         self.preferences = load_config()
@@ -89,7 +89,7 @@ class SettingsPage(QWidget):
             fields.addSpacing(13)
 
         def combo():
-            widget = QComboBox()
+            widget = ScrollSafeComboBox()
             widget.setMaximumWidth(720)
             widget.setStyleSheet(
                 "QComboBox {min-height:26px;max-height:26px;padding:9px 14px;background:#17212D;} QComboBox::drop-down {border:0;width:28px;}"

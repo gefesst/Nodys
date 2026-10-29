@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QListView,
     QAbstractItemView,
+    QComboBox,
 )
 from PySide6.QtSvg import QSvgRenderer
 from .motion import reduced
@@ -41,6 +42,15 @@ from .tokens import ACC, FG, SUB, MUT, EDGE, GREEN, RED
 
 ASSETS = Path(__file__).parent / "assets"
 ICONS = {}
+
+
+class ScrollSafeComboBox(QComboBox):
+    """A closed selector never changes settings while scrolling its page."""
+    def wheelEvent(self, event):
+        if self.view().isVisible():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
 
 
 class ElidedLabel(QLabel):

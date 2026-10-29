@@ -1,7 +1,18 @@
 """Keyboard-accessible context menu contained by the application window."""
 from shiboken6 import isValid
 from PySide6.QtCore import Qt, QEvent
-from PySide6.QtWidgets import QApplication, QFrame, QVBoxLayout, QPushButton, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QVBoxLayout, QPushButton, QWidget, QStyle, QStyleOptionButton, QStylePainter
+
+
+class MenuButton(QPushButton):
+    def paintEvent(self, event):
+        option = QStyleOptionButton()
+        self.initStyleOption(option)
+        # Retain keyboard focus, but render the approved highlight instead of
+        # the platform's dotted rectangle inside the custom menu.
+        option.state &= ~QStyle.State_HasFocus
+        painter = QStylePainter(self)
+        painter.drawControl(QStyle.CE_PushButton, option)
 
 
 class ActionMenu(QFrame):
@@ -20,10 +31,11 @@ class ActionMenu(QFrame):
         self.hide()
 
     def addAction(self, text, callback):
-        button=QPushButton(text,self);button.setFixedHeight(40)
+        button=MenuButton(text,self);button.setFixedHeight(40)
+        button.setAttribute(Qt.WA_MacShowFocusRect,False)
         button.setProperty('no_focus_ring',True)
         color='#FFA7AE' if self.danger else '#EDF2FA'
-        button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"]:focus {background:#3A4D67;}')
+        button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"] {background:#3A4D67;}')
         def activate():
             self.close()
             callback()
@@ -65,7 +77,10 @@ class ActionMenu(QFrame):
             if event.key() in (Qt.Key_Up,Qt.Key_Down):
                 current=QApplication.focusWidget()
                 index=self.buttons.index(current) if current in self.buttons else 0
-                self.buttons[(index+(1 if event.key()==Qt.Key_Down else -1))%len(self.buttons)].setFocus(Qt.TabFocusReason)
+                button=self.buttons[(index+(1 if event.key()==Qt.Key_Down else -1))%len(self.buttons)]
+                button.setProperty('keyboardFocus',True)
+                button.style().unpolish(button);button.style().polish(button)
+                button.setFocus(Qt.TabFocusReason)
                 return True
         if event.type()==QEvent.MouseButtonPress and self.isVisible():
             if isinstance(watched,QWidget) and watched is not self and not self.isAncestorOf(watched):

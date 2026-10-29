@@ -12,7 +12,8 @@ from PySide6.QtWidgets import (
 
 
 def build(page):
-    from PySide6.QtWidgets import QScrollArea, QPushButton, QLineEdit, QComboBox
+    from PySide6.QtWidgets import QScrollArea, QPushButton, QLineEdit
+    from .widgets import ScrollSafeComboBox
     from ui.avatar_widget import AvatarLabel
 
     page._settings_revision = 0
@@ -93,7 +94,7 @@ def build(page):
         button.clicked.connect(handler)
         setattr(page, attr, button)
     for attr in ("settings_text_perm_combo", "settings_voice_perm_combo"):
-        combo = QComboBox()
+        combo = ScrollSafeComboBox()
         combo.setObjectName("ChannelAccessCombo")
         for label, role in [
             ("Все участники", "member"),
