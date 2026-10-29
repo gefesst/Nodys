@@ -132,6 +132,8 @@ class MainWindow(QWidget):
         root.addWidget(workspace,1)
         from ui.design.voice_dock import VoiceDock
         self.voice_dock=VoiceDock(self)
+        self.channels_page.channel_inner_stack.currentChanged.connect(lambda _: self.refresh_voice_dock())
+        self.channels_page.main_stack.currentChanged.connect(lambda _: self.refresh_voice_dock())
 
 
         # Политика polling (инициализируем до первого переключения вкладок).
@@ -231,6 +233,8 @@ class MainWindow(QWidget):
         except Exception:
             pass
         self._apply_polling_policy()
+        if hasattr(self,"voice_dock"):
+            self.refresh_voice_dock()
 
     def _on_application_state_changed(self, _state):
         self._apply_polling_policy()
@@ -680,16 +684,14 @@ class MainWindow(QWidget):
         self.refresh_voice_dock()
 
     def refresh_voice_dock(self):
-        private = bool(self.voice_client)
+        private = bool(getattr(self, "voice_client", None))
         channel = bool(getattr(self.channels_page,'_voice_joined',False))
         panel=getattr(self,'call_window',None)
         channel_surface=(self.stack.currentWidget() is self.channels_page and
             self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
             self.channels_page.channel_inner_stack.currentIndex()==1)
         visible=(private and not (panel and panel.isVisible())) or (channel and not channel_surface)
-        self.voice_dock.setVisible(visible)
-        for page in (self.chats_page,self.channels_page):
-            page.voice_dock_space.setVisible(visible)
+        self.voice_dock.set_present(visible)
         self.voice_dock.position()
         if private:
             activity=self.voice_client.get_activity()
@@ -711,7 +713,7 @@ class MainWindow(QWidget):
 
     def open_voice_surface(self):
         if self.call_window:
-            self.call_window.show();self.call_window.raise_();self.voice_dock.hide()
+            self.call_window.show();self.call_window.raise_();self.voice_dock.set_present(False)
         else:
             self.show_channels();self.channels_page.switch_to_voice_tab()
 
@@ -720,7 +722,7 @@ class MainWindow(QWidget):
             self.call_window._end_clicked()
         else:
             self.channels_page.stop_voice_session()
-        self.voice_dock.hide()
+        self.voice_dock.set_present(False)
 
     def handle_call_events(self, response):
         self.calls.receive(response)

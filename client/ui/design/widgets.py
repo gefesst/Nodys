@@ -107,13 +107,12 @@ class ScrollSafeComboBox(QComboBox):
         self.setStyleSheet("QComboBox {min-height:24px;max-height:24px;padding:10px 40px 10px 14px;background:#17212D;border:1px solid #354458;border-radius:10px;} QComboBox:hover {border-color:#536D92;} QComboBox:focus,QComboBox:on {border-color:#91ADFF;} QComboBox::drop-down {border:0;width:32px;}" + COMBO_ARROW_STYLE)
 
     def showPopup(self):
-        super().showPopup()
         popup = self.view().window()
-        # Clip the popup itself; rounded QSS alone leaves square native corners.
-        from PySide6.QtGui import QRegion
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(popup.rect()), 10, 10)
-        popup.setMask(QRegion(path.toFillPolygon().toPolygon()))
+        popup.setAttribute(Qt.WA_TranslucentBackground)
+        popup.setAutoFillBackground(False)
+        popup.setStyleSheet("QFrame {background:transparent;border:0;}")
+        popup.clearMask()
+        super().showPopup()
 
     def wheelEvent(self, event):
         if self.view().isVisible():

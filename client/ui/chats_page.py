@@ -72,8 +72,9 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.voice_dock_space=QWidget()
         self.voice_dock_space.setFixedHeight(170)
         self.voice_dock_space.hide()
-        left.addWidget(self.voice_dock_space)
         left.addWidget(self.list_status)
+        left.addWidget(self.voice_dock_space)
+        self.list_status.hide()
         root.addWidget(sidebar)
         self.workspace=QStackedWidget()
         root.addWidget(self.workspace,1)
@@ -185,6 +186,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
     def handle_friends(self, response):
         if response.get('status') != 'ok':
             self.list_status.setText(response.get('message', 'Не удалось загрузить диалоги'))
+            self.list_status.show()
             return  # A transient failure must not remove the selected friend/draft.
         self._friends_received_at = time.monotonic()
         rows = sorted(response.get('friends', []), key=lambda r: r.get('nickname', r['login']).casefold())
@@ -208,10 +210,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
     def filter_friends(self, text):
         self.dialog_model.filter(text)
-        count=len(self.dialog_model.rows)
-        noun='диалог' if count%10==1 and count%100!=11 else 'диалога' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'диалогов'
-        self.list_status.setText((f'Найдено: {count} {noun}' if text else
-            f'{count} {noun} · {sum(bool(row.get("online")) for row in self.dialog_model.rows)} в сети') if count or text else 'Добавьте друзей, чтобы начать общение')
+        self.list_status.clear()
+        self.list_status.hide()
         if self.active_friend and not self.dialogs.currentIndex().isValid():
             for i, row in enumerate(self.dialog_model.rows):
                 if row['login'] == self.active_friend['login']:

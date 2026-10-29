@@ -124,6 +124,12 @@ from PySide6.QtWidgets import QStackedWidget
 class TransitionStack(QStackedWidget):
     def setCurrentWidget(self, widget):
         old = self.currentWidget()
+        if old is widget:
+            return
+        for overlay in self.findChildren(PageOverlay, options=Qt.FindDirectChildrenOnly):
+            overlay.animation.stop()
+            overlay.hide()
+            overlay.deleteLater()
         snapshot = (
             old.grab()
             if old is not None

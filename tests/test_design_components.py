@@ -41,6 +41,29 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_voice_dock_animation_reverses_and_reserves_bottom_space(self):
+        from PySide6.QtWidgets import QWidget
+        from ui.design.voice_dock import VoiceDock
+        from PySide6.QtCore import QAbstractAnimation
+        main=QWidget();main.resize(1120,620)
+        main.chats_page=SimpleNamespace(voice_dock_space=QWidget(main))
+        main.channels_page=SimpleNamespace(voice_dock_space=QWidget(main))
+        main.open_voice_surface=lambda:None
+        main.end_voice_surface=lambda:None
+        dock=VoiceDock(main);main.show();self.addCleanup(main.close)
+        dock.set_present(True)
+        dock.animation.setCurrentTime(90)
+        self.assertGreater(dock.get_progress(),0)
+        self.assertLess(dock.get_progress(),1)
+        dock.set_present(False)
+        dock.animation.setCurrentTime(180)
+        self.assertTrue(dock.isHidden())
+        self.assertEqual(main.chats_page.voice_dock_space.height(),0)
+        dock.set_present(True);dock.animation.setCurrentTime(180)
+        self.assertEqual(dock.y()+dock.height(),main.height()-14)
+        self.assertEqual(main.chats_page.voice_dock_space.height(),152)
+        self.assertEqual(dock.animation.state(),QAbstractAnimation.Stopped)
+
     def test_structural_surfaces_keep_one_alpha_layer(self):
         from app_window import AppWindow
         from ui.design.shell import TitleBar
@@ -96,6 +119,8 @@ class DesignGeometryTests(unittest.TestCase):
         self.addCleanup(combo.close)
         combo.showPopup(); self.app.processEvents()
         self.assertTrue(combo.view().isVisible())
+        self.assertTrue(combo.view().window().mask().isEmpty())
+        self.assertTrue(combo.view().window().testAttribute(Qt.WA_TranslucentBackground))
         self.assertEqual(combo.view().sizeHintForRow(0),40)
         QTest.keyClick(combo.view(), Qt.Key_Down)
         QTest.keyClick(combo.view(), Qt.Key_Return)

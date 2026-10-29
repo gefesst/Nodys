@@ -39,6 +39,7 @@ class Conversation(QWidget):
         self.unread_initialized = False
         self.rows = []
         self.loading = False
+        self.history_loaded = False
         self.history_error = False
         self.older = self.newer = False
         self.at_latest = True
@@ -160,6 +161,7 @@ class Conversation(QWidget):
         self.offline_note.clear()
         self.connection_restored.hide();self.recovery_timer.stop()
         self.loading = False
+        self.history_loaded = False
         self.history_error = False
         self.identity, self.name = identity, name
         self.unread_boundary = None
@@ -226,6 +228,7 @@ class Conversation(QWidget):
                 self.update_controls(keep_hint=True)
                 return
             self.mark_connected()
+            self.history_loaded = True
             self.history_error = False
             incoming = response.get("messages", [])
             if direction == "poll" and not self.at_latest:
@@ -366,6 +369,10 @@ class Conversation(QWidget):
                 )
             )
             previous_author, previous_date = author, date
+        if rendered == self.model.rows:
+            self._applying = False
+            self.update_controls()
+            return
         old_count = self.model.rowCount()
         self.model.sync(rendered)
         self.view.doItemsLayout()
@@ -401,7 +408,7 @@ class Conversation(QWidget):
     def update_controls(self, keep_hint=False):
         self._update_new_messages()
         surface = self.view if self.rows else (
-            self.loading_state if self.loading else
+            self.loading_state if self.loading and not getattr(self, "history_loaded", False) else
             self.error_state if self.history_error else self.empty_state)
         self.history_stack.setCurrentWidget(surface)
         # Background polling must not insert a status row and shift the history.

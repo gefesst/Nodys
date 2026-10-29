@@ -165,6 +165,21 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(self.chat.model.rows[0].avatar, "channel-avatar")
         self.assertEqual(self.chat.model.rows[0].name, "Channel Bob")
 
+    def test_empty_private_and_channel_poll_keeps_empty_surface(self):
+        from unittest.mock import patch
+        for channel in (False, True):
+            self.chat.channel = channel
+            self.chat.select("bob")
+            self.requests[-1][1]({"status":"ok","messages":[]})
+            self.assertIs(self.chat.history_stack.currentWidget(),self.chat.empty_state)
+            with patch.object(self.chat.view,"doItemsLayout") as layout:
+                for _ in range(3):
+                    self.chat.load("poll")
+                    self.assertIs(self.chat.history_stack.currentWidget(),self.chat.empty_state)
+                    self.requests[-1][1]({"status":"ok","messages":[]})
+                    self.assertIs(self.chat.history_stack.currentWidget(),self.chat.empty_state)
+                layout.assert_not_called()
+
     def test_background_poll_does_not_move_history_or_composer(self):
         from PySide6.QtTest import QTest
         self.owner.ctx.nickname = "Alice"
