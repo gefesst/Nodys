@@ -41,6 +41,29 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_interactive_cursor_stays_consistent_across_child_surfaces(self):
+        from ui.design.motion import MotionFilter
+        from PySide6.QtWidgets import QWidget,QVBoxLayout,QLineEdit,QPlainTextEdit,QPushButton,QLabel
+        from PySide6.QtCore import Qt,QEvent
+        from PySide6.QtGui import QEnterEvent
+        host=QWidget();layout=QVBoxLayout(host);field=QLineEdit();editor=QPlainTextEdit();button=QPushButton('Action')
+        for control in (field,editor,button):layout.addWidget(control)
+        child=QLabel('Icon',button)
+        watcher=MotionFilter(host);watcher.watch(host)
+        host.show();self.addCleanup(host.close);self.app.processEvents()
+        for _ in range(3):
+            for control,shape in ((field,Qt.IBeamCursor),(editor,Qt.IBeamCursor),(editor.viewport(),Qt.IBeamCursor),(button,Qt.PointingHandCursor),(child,Qt.PointingHandCursor)):
+                control.setCursor(Qt.ArrowCursor)
+                self.app.sendEvent(control,QEnterEvent(control.rect().center(),control.rect().center(),control.rect().center()))
+                self.assertEqual(control.cursor().shape(),shape)
+                control.style().unpolish(control);control.style().polish(control)
+                watcher.eventFilter(control,QEvent(QEvent.HoverMove))
+                self.assertEqual(control.cursor().shape(),shape)
+        self.assertEqual(editor.verticalScrollBar().cursor().shape(),Qt.ArrowCursor)
+        button.setEnabled(False);self.app.processEvents()
+        self.assertEqual(button.cursor().shape(),Qt.ArrowCursor)
+        self.assertIsNone(self.app.overrideCursor())
+
     def test_tooltips_blocked_for_dynamic_widgets_without_losing_accessibility(self):
         from ui.design.motion import TooltipBlocker
         from PySide6.QtCore import QEvent

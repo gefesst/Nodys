@@ -13,6 +13,8 @@ from PySide6.QtWidgets import (
     QWidget,
     QApplication,
     QPushButton,
+    QAbstractButton,
+    QAbstractSlider,
     QLineEdit,
     QPlainTextEdit,
     QTextEdit,
@@ -27,6 +29,21 @@ def reduced():
     return bool(app and app.property("reduce_motion"))
 
 
+def interactive_cursor(widget):
+    """Resolve the owner of a viewport/label without overriding independent controls."""
+    current=widget
+    while isinstance(current,QWidget):
+        if isinstance(current,QAbstractSlider):
+            return Qt.ArrowCursor
+        if isinstance(current,(QLineEdit,QPlainTextEdit,QTextEdit)):
+            return Qt.IBeamCursor if current.isEnabled() else Qt.ArrowCursor
+        if isinstance(current,(QAbstractButton,QComboBox)):
+            return Qt.PointingHandCursor if current.isEnabled() else Qt.ArrowCursor
+        if current.isWindow():break
+        current=current.parentWidget()
+    return None
+
+
 class MotionFilter(QObject):
     def watch(self, widget):
         if not isinstance(widget, QWidget) or getattr(widget, '_nodus_motion_watched', False):
@@ -34,6 +51,10 @@ class MotionFilter(QObject):
         widget._nodus_motion_watched = True
         if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit, QTextEdit, QComboBox)):
             widget.setAttribute(Qt.WA_MacShowFocusRect, False)
+        shape=interactive_cursor(widget)
+        if shape is not None:
+            widget.setCursor(shape)
+            widget.setMouseTracking(True)
         widget.installEventFilter(self)
         for child in widget.findChildren(QWidget):
             self.watch(child)
@@ -43,6 +64,12 @@ class MotionFilter(QObject):
         if kind == QEvent.ChildPolished:
             self.watch(event.child())
             return False
+        if kind in (QEvent.Enter,QEvent.MouseMove,QEvent.HoverMove,QEvent.EnabledChange):
+            shape=interactive_cursor(widget)
+            if shape is not None:
+                # Keep Cocoa/Qt cursor ownership on the actual field/button under the
+                # pointer, including editor viewports and labels inside controls.
+                widget.setCursor(shape)
         if kind not in (QEvent.Enter, QEvent.Leave, QEvent.FocusIn,
                         QEvent.FocusOut, QEvent.Resize, QEvent.Show):
             return False
