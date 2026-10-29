@@ -461,7 +461,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                 'Список появится после восстановления соединения.','Повторить',self.refresh)
             self.list_layout.insertWidget(0,empty)
         elif not count:
-            empty=self._make_empty_state('Ничего не найдено' if query else ('Нет заявок' if self.view_mode=='requests' else 'Пока нет друзей'),'Попробуйте другой поиск.' if query else 'Добавьте человека по его логину.',None if query or self.view_mode=='requests' else 'Добавить друга',self.toggle_add_friend_panel)
+            empty=self._make_empty_state('Ничего не найдено' if query else ('Пока нет заявок' if self.view_mode=='requests' else 'Пока нет друзей'),'Попробуйте другой поиск.' if query else ('Новые заявки в друзья появятся здесь.' if self.view_mode=='requests' else 'Добавьте человека по его логину.'),None if query or self.view_mode=='requests' else 'Добавить друга',self.toggle_add_friend_panel)
             self.list_layout.insertWidget(self.list_layout.count()-1,empty)
         self.view_buttons['requests'].setText('Заявки'+(f' · {len(self._requests_data)}' if self._requests_data else ''))
         self.scroll.setUpdatesEnabled(True)

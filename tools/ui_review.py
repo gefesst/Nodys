@@ -159,6 +159,15 @@ def main():
                 yield
                 self.shot(f"04-friends-{size[0]}")
             self.shot("04-friends-all")
+            friends=m.friends_page
+            saved_friends=list(friends._friends_data)
+            friends._friends_data=[];friends._render_if_needed(force=True)
+            self.shot('04b-friends-empty')
+            friends._show_skeleton(count=6)
+            self.shot('04c-friends-loading')
+            friends._friends_data=saved_friends;friends._render_if_needed(force=True)
+            self.visual_fixtures.extend(['04b-friends-empty: empty local friend cache','04c-friends-loading: loading renderer'])
+
             m.friends_page.set_view("online")
             self.wait()
             yield
@@ -167,12 +176,20 @@ def main():
             self.wait()
             yield
             self.shot("06-friends-requests")
+            saved_requests=list(m.friends_page._requests_data)
+            m.friends_page._requests_data=[];m.friends_page._render_if_needed(force=True)
+            self.shot('06a-friends-requests-empty')
+            m.friends_page._requests_data=saved_requests;m.friends_page._render_if_needed(force=True)
+            self.visual_fixtures.append('06a-friends-requests-empty: empty local requests cache')
+
             m.friends_page.set_view("all")
             m.friends_page.filter_input.setText("no-such-friend")
             self.wait();yield
             self.shot("06b-friends-search-empty")
             m.friends_page.filter_input.clear()
             from config import save_config
+            m.friends_page.set_polling_enabled(False)
+            self.wait(predicate=lambda:not m.friends_page._loading_friends);yield
             save_config({'api_port':lab.free_port()})
             m.friends_page.load_friends()
             self.wait(predicate=lambda:not m.friends_page._loading_friends);yield
@@ -180,6 +197,8 @@ def main():
             save_config(lab.config)
             m.friends_page.load_friends()
             self.wait(predicate=lambda:not m.friends_page._loading_friends);yield
+            assert any(f["login"]==lab.people[0][0] for f in m.friends_page._friends_data), "Friend list did not recover after network restoration"
+            m.friends_page.set_polling_enabled(True)
             m.friends_page.confirm_and_remove_friend(lab.people[0][0])
             self.wait();yield
             self.shot("06d-friend-remove-confirm")
@@ -204,6 +223,22 @@ def main():
             self.wait(predicate=lambda: len(m.chats_page.conversation.rows) > 0)
             yield
             self.shot("09-private-chat")
+            c=m.chats_page.conversation
+            saved_rows=c.rows
+            c.scope.invalidate()
+            from unittest.mock import patch
+            with patch.object(c,"load"):
+                c.rows=[]
+                c.loading=False;c.history_error=False;c.update_controls()
+                self.shot('09b-chat-empty')
+                assert c.history_stack.currentWidget() is c.empty_state
+                c.loading=True;c.update_controls();self.shot('09c-chat-loading')
+                assert c.history_stack.currentWidget() is c.loading_state
+                c.loading=False;c.history_error=True;c.update_controls();self.shot('09d-chat-error')
+                assert c.history_stack.currentWidget() is c.error_state
+                c.rows=saved_rows;c.history_error=False;c.update_controls()
+                self.visual_fixtures.extend(['09b-chat-empty: empty local history','09c-chat-loading: pending history','09d-chat-error: failed initial history'])
+
             c = m.chats_page.conversation
             c.editor.setPlainText("Проверка настоящего приложения\nВторая строка")
             self.shot("10-chat-multiline")

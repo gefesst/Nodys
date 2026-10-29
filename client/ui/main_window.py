@@ -533,6 +533,7 @@ class MainWindow(QWidget):
     # ==================================================
 
     def set_active_nav(self, active_btn):
+        if active_btn is not None and not active_btn.hasFocus(): active_btn.setFocus(Qt.MouseFocusReason)
         panel=getattr(self,"call_window",None)
         if panel is not None and panel.isVisible():
             panel.hide()
@@ -667,7 +668,10 @@ class MainWindow(QWidget):
         channel_surface=(self.stack.currentWidget() is self.channels_page and
             self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
             self.channels_page.channel_inner_stack.currentIndex()==1)
-        self.voice_dock.setVisible((private and not (panel and panel.isVisible())) or (channel and not channel_surface))
+        visible=(private and not (panel and panel.isVisible())) or (channel and not channel_surface)
+        self.voice_dock.setVisible(visible)
+        for page in (self.chats_page,self.channels_page):
+            page.voice_dock_space.setVisible(visible)
         self.voice_dock.position()
         if private:
             activity=self.voice_client.get_activity()

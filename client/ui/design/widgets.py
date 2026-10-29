@@ -152,6 +152,8 @@ class Button(QPushButton):
         self.icon_name = icon_name
         self.primary = primary
         self._hover = 0.0
+        self._keyboard_focus = False
+        self.setAttribute(Qt.WA_MacShowFocusRect,False)
         self.setMinimumHeight(40)
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -170,6 +172,15 @@ class Button(QPushButton):
             ),
             46,
         )
+
+    def focusInEvent(self,event):
+        self._keyboard_focus=event.reason() in (Qt.TabFocusReason,Qt.BacktabFocusReason,Qt.ShortcutFocusReason)
+        super().focusInEvent(event)
+        self.update()
+
+    def focusOutEvent(self,event):
+        super().focusOutEvent(event)
+        self.update()
 
     def get_hover(self):
         return self._hover
@@ -218,7 +229,7 @@ class Button(QPushButton):
         p.setPen(Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
         p.setBrush(bg)
         p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 9, 9)
-        color = "#142039" if self.primary else SUB if self.property("flat") else FG
+        color = ACC if self.primary and self.property("flat") else "#142039" if self.primary else SUB if self.property("flat") else FG
         if self.property("danger"):
             color = RED
         if self.property("text_color"):
@@ -234,7 +245,7 @@ class Button(QPushButton):
             x += 26
         p.setPen(QColor(color))
         p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, self.text())
-        if self.hasFocus():
+        if self.hasFocus() and self._keyboard_focus:
             p.setBrush(Qt.NoBrush)
             p.setPen(QPen(QColor(ACC), 2))
             p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 11, 11)
@@ -257,7 +268,7 @@ class RoundCallButton(Button):
         icon(painter,self.icon_name,QRectF(15,15,22,22),RED if danger or off else FG)
         if off:
             painter.setPen(QPen(QColor(RED),1.65));painter.drawLine(15,16,37,38)
-        if self.hasFocus():
+        if self.hasFocus() and self._keyboard_focus:
             painter.setBrush(Qt.NoBrush);painter.setPen(QPen(QColor(ACC),2));painter.drawEllipse(QRectF(1,1,50,50))
 
 
@@ -271,11 +282,11 @@ class DialogDelegate(QStyledItemDelegate):
         self._avatars = OrderedDict()
 
     def sizeHint(self, o, i):
-        return QSize(300, 80)
+        return QSize(300, 84)
 
     def paint(self, p, o, index):
         d = index.data(Qt.UserRole)
-        r = o.rect.adjusted(6, 3, -6, -3)
+        r = o.rect.adjusted(0, 3, 0, -7)
         p.save()
         p.setRenderHint(QPainter.Antialiasing)
         selected = bool(o.state & QStyle.State_Selected)

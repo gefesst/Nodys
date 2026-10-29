@@ -1,6 +1,7 @@
 """Opt-in level check. Audio samples are never stored, sent, or played back."""
 
 import threading
+import time
 from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
 from .widgets import Button
@@ -21,13 +22,13 @@ class MicrophoneCheck(QFrame):
         self.setStyleSheet("QFrame#MicrophoneCheck {background:#202D3D;border:1px solid #354152;border-radius:12px;}")
         self.stop_event = threading.Event()
         self.level = 0
+        self.last_signal = time.monotonic()
         self.worker = None
+        self.failed_state = False
         self.signals = MeterSignals(self)
         self.signals.error.connect(self.failed)
         self.signals.finished.connect(self.completed)
-        self.signals.ready.connect(
-            lambda: self.status.setText("Говорите: отображается только уровень сигнала")
-        )
+        self.signals.ready.connect(self.listening)
         root = QHBoxLayout(self)
         root.setContentsMargins(22,16,18,16)
         root.setSpacing(16)
@@ -40,7 +41,7 @@ class MicrophoneCheck(QFrame):
         self.status.setStyleSheet('font-size:13px;color:#ACB9CC;')
         column.addWidget(self.status)
         root.addLayout(column,1)
-        self.meter=QProgressBar();self.meter.setRange(0,100);self.meter.setTextVisible(False)
+        self.meter=QProgressBar();self.meter.setRange(0,100);self.meter.setValue(0);self.meter.setTextVisible(False)
         self.meter.setFixedSize(140,12)
         self.meter.setStyleSheet('QProgressBar {background:#354152;border:0;border-radius:6px;} QProgressBar::chunk {background:#67D5AD;border-radius:6px;}')
         root.addWidget(self.meter)
@@ -52,11 +53,31 @@ class MicrophoneCheck(QFrame):
         stop.clicked.connect(self.close);root.addWidget(stop)
         self.timer = QTimer(self)
         self.timer.setInterval(100)
-        self.timer.timeout.connect(lambda: self.meter.setValue(self.level))
+        self.timer.timeout.connect(self.update_meter)
+
+    def listening(self):
+        self.failed_state = False
+        self.last_signal = time.monotonic()
+        self.title.setText("Проверка микрофона")
+        self.status.setText("Скажите несколько слов — индикатор покажет уровень.")
+
+    def update_meter(self):
+        self.meter.setValue(self.level)
+        if self.level > 1:
+            self.last_signal = time.monotonic()
+            self.title.setText("Проверка микрофона")
+            self.status.setText("Скажите несколько слов — индикатор покажет уровень.")
+        elif time.monotonic() - self.last_signal >= 3:
+            self.title.setText("Пока не слышим микрофон")
+            self.status.setText("Проверьте выбранное устройство и уровень громкости.")
+            self.start_button.setEnabled(True)
 
     def start(self):
         if self.worker and self.worker.is_alive():
+            self.listening()
+            self.start_button.setEnabled(False)
             return
+        self.listening()
         self.start_button.setEnabled(False)
         self.stop_event.clear()
         self.timer.start()
@@ -93,9 +114,7 @@ class MicrophoneCheck(QFrame):
         self.start_button.setEnabled(True)
         self.timer.stop()
         self.meter.setValue(0)
-        if not self.stop_event.is_set() and not self.status.text().startswith(
-            "Микрофон недоступен"
-        ):
+        if not self.stop_event.is_set() and not self.failed_state:
             self.status.setText("Проверка завершена. Звук не сохранялся.")
 
     def hideEvent(self, event):
@@ -104,7 +123,11 @@ class MicrophoneCheck(QFrame):
         super().hideEvent(event)
 
     def failed(self, message):
-        self.status.setText(message)
+        self.failed_state = True
+        denied=any(term in message.casefold() for term in ("permission", "not permitted", "access denied", "разрешение запрещено"))
+        self.title.setText("Нет доступа к микрофону" if denied else "Микрофон недоступен")
+        self.status.setText("Разрешите доступ к микрофону в настройках системы." if denied else message)
+        self.status.setToolTip(message)
         self.start_button.setEnabled(True)
         self.timer.stop()
 

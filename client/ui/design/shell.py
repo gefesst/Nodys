@@ -1,7 +1,7 @@
 """Native movable frameless shell; content retains full opacity."""
 
 from PySide6.QtCore import Qt, QRectF, QSize
-from PySide6.QtGui import QPainter, QColor
+from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 from .widgets import Button, icon, font
 from .tokens import FG, ACC, SUB
@@ -92,6 +92,9 @@ class NavButton(Button):
         p.setPen(QColor(FG if active else SUB))
         p.setFont(font(11, True))
         p.drawText(QRectF(0, 38, 64, 25), Qt.AlignCenter, self.text().split(" (")[0])
+        if self.hasFocus() and self._keyboard_focus:
+            p.setBrush(Qt.NoBrush);p.setPen(QPen(QColor(ACC),2))
+            p.drawRoundedRect(QRectF(2,1,60,66),14,14)
         if "(" in self.text():
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(ACC))

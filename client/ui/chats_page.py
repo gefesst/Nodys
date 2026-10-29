@@ -1,12 +1,13 @@
 """Private conversations: real data, scoped requests and shared Nodus components."""
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListView, QFrame, QStackedWidget,QSizePolicy
 from application.request_scope import RequestScope
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
 from ui.design.tokens import LIST_WIDTH
-from ui.design.widgets import Button, DialogDelegate, Toast
+from ui.design.widgets import Button, DialogDelegate, Toast, ASSETS
 from ui.design.models import DialogModel
 from ui.design.conversation import Conversation
 
@@ -33,18 +34,22 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         sidebar.setObjectName('SectionSidebar')
         sidebar.setFixedWidth(LIST_WIDTH)
         left = QVBoxLayout(sidebar)
-        left.setContentsMargins(22, 32, 20, 20)
+        left.setContentsMargins(12, 32, 12, 20)
         left.setSpacing(12)
         eyebrow = QLabel('ЛИЧНЫЕ')
         eyebrow.setObjectName('Eyebrow')
+        eyebrow.setContentsMargins(10,0,10,0)
         left.addWidget(eyebrow)
         title = QLabel('Сообщения')
         title.setObjectName('PageTitle')
+        title.setContentsMargins(10,0,10,0)
         left.addWidget(title)
         self.search = QLineEdit()
         self.search.setPlaceholderText('Найти диалог')
+        self.search.addAction(QIcon(str(ASSETS/'search.svg')),QLineEdit.LeadingPosition)
         self.search.textChanged.connect(self.filter_friends)
-        left.addWidget(self.search)
+        search_row=QHBoxLayout();search_row.setContentsMargins(10,0,10,0)
+        search_row.addWidget(self.search);left.addLayout(search_row)
         self.dialog_model = DialogModel(self)
         self.dialogs = QListView()
         self.dialogs.setModel(self.dialog_model)
@@ -58,6 +63,11 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.list_status = QLabel('Загрузка диалогов…')
         self.list_status.setWordWrap(True)
         self.list_status.setObjectName('Muted')
+        self.list_status.setContentsMargins(10,0,10,0)
+        self.voice_dock_space=QWidget()
+        self.voice_dock_space.setFixedHeight(170)
+        self.voice_dock_space.hide()
+        left.addWidget(self.voice_dock_space)
         left.addWidget(self.list_status)
         root.addWidget(sidebar)
         self.workspace=QStackedWidget()
@@ -65,6 +75,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         from ui.design.state_surfaces import EmptyState
         self.no_dialog=EmptyState("Выберите диалог","Все разговоры — здесь. Выберите человека слева.")
         self.no_dialog.layout().setContentsMargins(40,262,48,20)
+        self.no_dialog.set_top_offset(262)
         self.workspace.addWidget(self.no_dialog)
         self.chat_body=QWidget()
         body = QVBoxLayout(self.chat_body)
@@ -175,8 +186,6 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             row['summary'] = self.dialog_summaries.get(row['login'], {})
         self.dialog_model.replace(rows)
         self.filter_friends(self.search.text())
-        self.list_status.setText('Добавьте друзей, чтобы начать общение' if not rows else
-                                 f'{len(rows)} диалогов · {sum(bool(r.get("online")) for r in rows)} в сети')
         if self.active_friend:
             found = next((r for r in rows if r['login'] == self.active_friend['login']), None)
             if found:
@@ -190,6 +199,10 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
     def filter_friends(self, text):
         self.dialog_model.filter(text)
+        count=len(self.dialog_model.rows)
+        noun='диалог' if count%10==1 and count%100!=11 else 'диалога' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'диалогов'
+        self.list_status.setText((f'Найдено: {count} {noun}' if text else
+            f'{count} {noun} · {sum(bool(row.get("online")) for row in self.dialog_model.rows)} в сети') if count or text else 'Добавьте друзей, чтобы начать общение')
         if self.active_friend:
             for i, row in enumerate(self.dialog_model.rows):
                 if row['login'] == self.active_friend['login']:

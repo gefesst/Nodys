@@ -53,6 +53,48 @@ class UiTests(unittest.TestCase):
         retry.click()
         self.assertEqual(p.channel_state_stack.currentWidget().findChild(QPushButton).text(),'Создать канал')
 
+    def test_call_audio_starts_before_settings_page_has_been_opened(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from ui.main_window import MainWindow
+        state=SimpleNamespace(current_call_user='bob',voice_client=None,
+            channels_page=SimpleNamespace(stop_voice_session=Mock()),
+            ctx=SimpleNamespace(login='alice',session_token='synthetic'),_show_call_notice=Mock())
+        with patch('ui.main_window.VoiceSession') as session, patch('ui.main_window.get_voice_endpoint',return_value=('127.0.0.1',12345)):
+            MainWindow._start_voice_for_peer(state,'bob')
+            session.return_value.start.assert_called_once_with(peer_login='bob')
+            state._show_call_notice.assert_not_called()
+
+    def test_audio_waiting_for_microphone_does_not_resume_an_old_call(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from ui.main_window import MainWindow
+        retry=Mock()
+        state=SimpleNamespace(current_call_user='bob',
+            settings_page=SimpleNamespace(stop_microphone_check=lambda:False),
+            calls=SimpleNamespace(state={'call_id':'old'}),
+            ctx=SimpleNamespace(session_token='synthetic'),_start_voice_for_peer=retry)
+        with patch('ui.main_window.QTimer.singleShot') as timer:
+            MainWindow._start_voice_for_peer(state,'bob')
+            callback=timer.call_args.args[1]
+        state.calls.state={'call_id':'new'}
+        callback()
+        retry.assert_not_called()
+
+    def test_cancelled_channel_join_does_not_resume_after_microphone_stops(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        p=self.page
+        p.active_channel={'id':1,'name':'Channel'}
+        p._main_window=SimpleNamespace(settings_page=SimpleNamespace(stop_microphone_check=lambda:False))
+        with patch('ui.channels_page.QTimer.singleShot') as timer:
+            p.toggle_voice_join()
+            callback=timer.call_args.args[1]
+        p.stop_voice_session()
+        with patch.object(p,'toggle_voice_join') as resume:
+            callback()
+            resume.assert_not_called()
+
     def test_settings_are_scrollable(self):
         from PySide6.QtWidgets import QScrollArea
         node = self.page.settings_name_input
@@ -251,6 +293,30 @@ class UiTests(unittest.TestCase):
         MainWindow.perform_logout(window)
         window._queue_session_cleanup.assert_called_once_with('logout')
         window._do_logout_transition.assert_called_once()
+
+    def test_voice_dock_leaves_dialog_rows_scrollable_above_it(self):
+        from ui.main_window import MainWindow
+        from unittest.mock import Mock
+        from PySide6.QtCore import QPoint
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow()
+            self.addCleanup(window.deleteLater)
+            self.addCleanup(window.prepare_to_close_app)
+            window.voice_client=Mock(get_activity=lambda:{'quality':'Хорошее'})
+            window.current_call_user='bob'
+            window.show_chats()
+            window.show()
+            for width,height in ((1120,578),(1440,858)):
+                window.resize(width,height)
+                window.refresh_voice_dock()
+                self.app.processEvents()
+                view=window.chats_page.dialogs
+                bottom=view.mapTo(window,QPoint(0,view.height())).y()
+                self.assertLessEqual(bottom,window.voice_dock.y())
+            window.voice_client=None
+            window.refresh_voice_dock()
+            self.assertTrue(window.chats_page.voice_dock_space.isHidden())
+            window.close()
 
     def test_main_window_navigation_and_cleanup_are_repeatable(self):
         from ui.main_window import MainWindow

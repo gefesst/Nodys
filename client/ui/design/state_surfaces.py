@@ -1,8 +1,8 @@
 """Shared empty/error and loading surfaces from the approved desktop layouts."""
 
-from PySide6.QtCore import Qt, QRectF
+from PySide6.QtCore import Qt, QRectF, QSize
 from PySide6.QtGui import QPainter, QColor
-from PySide6.QtWidgets import QWidget, QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QWidget, QFrame, QLabel, QVBoxLayout, QLayout
 from .widgets import Button, icon, draw_text
 from .tokens import ACC, FG, SUB
 
@@ -25,7 +25,10 @@ class EmptyState(QFrame):
     def __init__(self, title, description, action=None, callback=None):
         super().__init__()
         self.setObjectName("EmptyState")
+        self.preferred_top=114
+        self.body_height=239 if action else 174
         layout = QVBoxLayout(self)
+        layout.setSizeConstraint(QLayout.SetNoConstraint)
         layout.setContentsMargins(0, 114, 20, 20)
         layout.setSpacing(0)
         layout.addWidget(StateIcon(), 0, Qt.AlignHCenter)
@@ -52,6 +55,21 @@ class EmptyState(QFrame):
                 button.clicked.connect(callback)
             layout.addWidget(button, 0, Qt.AlignHCenter)
         layout.addStretch()
+
+
+    def set_top_offset(self, top):
+        self.preferred_top=top
+        margins=self.layout().contentsMargins()
+        self.layout().setContentsMargins(margins.left(),top,margins.right(),margins.bottom())
+
+    def minimumSizeHint(self):
+        return QSize(240,self.body_height+12)
+
+    def resizeEvent(self,event):
+        margins=self.layout().contentsMargins()
+        top=min(self.preferred_top,max(12,self.height()-self.body_height))
+        self.layout().setContentsMargins(margins.left(),top,margins.right(),margins.bottom())
+        super().resizeEvent(event)
 
 
 class LoadingState(QWidget):

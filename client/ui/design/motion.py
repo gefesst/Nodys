@@ -79,7 +79,8 @@ class MotionFilter(QObject):
         if kind not in (QEvent.Enter, QEvent.Leave, QEvent.FocusIn,
                         QEvent.FocusOut, QEvent.Resize, QEvent.Show):
             return False
-        if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit)) and kind in (
+        if (not hasattr(widget,"_keyboard_focus") and not widget.property("no_focus_ring")
+            and isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit))) and kind in (
             QEvent.Enter,
             QEvent.Leave,
             QEvent.FocusIn,

@@ -477,6 +477,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channels_scroll.setWidget(self.channels_container)
         sb_l.addSpacing(13)
         sb_l.addWidget(self.channels_scroll, 1)
+        self.voice_dock_space=QWidget()
+        self.voice_dock_space.setFixedHeight(170)
+        self.voice_dock_space.hide()
+        sb_l.addWidget(self.voice_dock_space)
         sb_l.removeWidget(self.sidebar_actions_separator)
         sb_l.addWidget(self.sidebar_actions_separator)
         sb_l.removeWidget(invites_header);sb_l.addWidget(invites_header)
@@ -2409,7 +2413,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         settings=getattr(self._main_window,'settings_page',None)
         if settings is not None and not settings.stop_microphone_check():
             channel_id=self._active_channel_id()
-            QTimer.singleShot(50,lambda:self.toggle_voice_join() if self._alive and self._active_channel_id()==channel_id and not self._voice_joined else None)
+            epoch=getattr(self,"_voice_epoch",0)
+            QTimer.singleShot(50,lambda:self.toggle_voice_join() if self._alive and self._active_channel_id()==channel_id and getattr(self,"_voice_epoch",0)==epoch and not self._voice_joined else None)
             return
 
         # Avoid audio device conflicts with private peer-to-peer calls

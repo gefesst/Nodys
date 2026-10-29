@@ -79,8 +79,11 @@ class Conversation(QWidget):
             'Напишите первое сообщение в канале.' if channel else 'Напишите собеседнику — он увидит сообщение здесь.')
         self.loading_state = LoadingState()
         self.error_state = EmptyState('История пока недоступна' if channel else 'Не удалось загрузить сообщения',
-            'Не удалось загрузить сообщения канала.' if channel else 'Не удалось загрузить сообщения.',
+            'Не удалось загрузить сообщения канала.' if channel else 'Проверьте соединение и попробуйте ещё раз.',
             'Повторить', lambda: self.load('latest'))
+        if not channel:
+            for surface in (self.empty_state,self.error_state):
+                surface.set_top_offset(158)
         for surface in (self.empty_state, self.loading_state, self.error_state):
             self.history_stack.addWidget(surface)
         root.addWidget(self.history_stack, 1)

@@ -41,6 +41,54 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_quick_switch_arrow_keys_and_empty_result(self):
+        from PySide6.QtWidgets import QWidget
+        from PySide6.QtTest import QTest
+        from PySide6.QtCore import Qt
+        from ui.design.quick_switch import QuickSwitch
+        host=QWidget();host.resize(1440,900)
+        host.friends_page=SimpleNamespace(_friends_data=[{'login':'alice'},{'login':'bob'}])
+        host.channels_page=SimpleNamespace(channels=[])
+        panel=QuickSwitch(host)
+        QTest.keyClick(panel.query,Qt.Key_Down)
+        self.assertEqual(panel.list.currentIndex().row(),1)
+        QTest.keyClick(panel.query,Qt.Key_Up)
+        self.assertEqual(panel.list.currentIndex().row(),0)
+        panel.query.setText('missing')
+        self.assertIs(panel.results.currentWidget(),panel.empty)
+        panel.close();host.close()
+
+    def test_empty_state_shrinks_top_space_without_clipping_retry(self):
+        from ui.design.state_surfaces import EmptyState
+        from PySide6.QtWidgets import QPushButton
+        panel=EmptyState('Не удалось загрузить сообщения','Проверьте соединение и попробуйте ещё раз.','Повторить')
+        self.addCleanup(panel.close)
+        panel.set_top_offset(158)
+        panel.resize(600,340);panel.show();self.app.processEvents()
+        retry=panel.findChild(QPushButton)
+        self.assertLessEqual(retry.geometry().bottom(),panel.height())
+        self.assertLess(panel.layout().contentsMargins().top(),158)
+        panel.resize(900,600);self.app.processEvents()
+        self.assertEqual(panel.layout().contentsMargins().top(),158)
+
+    def test_microphone_silence_recovers_and_permission_error_survives_completion(self):
+        from ui.design.microphone_check import MicrophoneCheck
+        from unittest.mock import patch
+        panel=MicrophoneCheck()
+        self.addCleanup(panel.close)
+        with patch('ui.design.microphone_check.time.monotonic',return_value=10):
+            panel.listening()
+        with patch('ui.design.microphone_check.time.monotonic',return_value=14):
+            panel.update_meter()
+            self.assertEqual(panel.title.text(),'Пока не слышим микрофон')
+            panel.level=40
+            panel.update_meter()
+            self.assertEqual(panel.title.text(),'Проверка микрофона')
+        panel.failed('Permission denied')
+        panel.completed()
+        self.assertEqual(panel.title.text(),'Нет доступа к микрофону')
+        self.assertEqual(panel.status.text(),'Разрешите доступ к микрофону в настройках системы.')
+
     def test_inline_microphone_check_releases_stream_on_close(self):
         import threading
         import numpy as np

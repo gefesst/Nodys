@@ -243,6 +243,8 @@ class SettingsPage(QWidget):
             self.microphone_layout.addWidget(self.microphone_check)
             self.microphone_host.show()
         self.microphone_check.show()
+        if not channels.active_channel:
+            QTimer.singleShot(0,lambda:self.scroll.ensureWidgetVisible(self.microphone_check))
 
     def set_reduced_motion(self, value):
         from PySide6.QtWidgets import QApplication
