@@ -65,20 +65,87 @@ class DesignGeometryTests(unittest.TestCase):
 
     def test_icon_only_buttons_paint_at_their_actual_center(self):
         from unittest.mock import patch
+        from PySide6.QtCore import QRectF
+        from ui.design.widgets import Button, ASSETS
+        for asset in ASSETS.glob('*.svg'):
+            for width, height in ((24,54), (28,28), (32,28), (32,40), (38,38), (44,44), (64,44)):
+                with self.subTest(symbol=asset.stem, size=(width,height)):
+                    button = Button('', asset.stem)
+                    button.setFixedSize(width, height)
+                    for state in ('normal', 'hover', 'pressed', 'disabled'):
+                        button._hover = float(state == 'hover')
+                        button.setDown(state == 'pressed')
+                        button.setEnabled(state != 'disabled')
+                        rects=[]
+                        with patch('ui.design.widgets.icon', new=lambda p,n,r,c: rects.append(QRectF(r))):
+                            button.grab()
+                        rect = rects[-1]
+                        self.assertEqual(rect.center().x(), width / 2, state)
+                        self.assertEqual(rect.center().y(), height / 2, state)
+                    button.close()
+
+    def test_labeled_buttons_center_the_whole_group_or_keep_left_alignment(self):
+        from unittest.mock import patch
+        from PySide6.QtCore import QRectF
         from ui.design.widgets import Button
-        for symbol, width, height in (
-            ('n', 44, 44), ('keyboard', 40, 40), ('settings', 40, 40),
-            ('info', 32, 40), ('send', 38, 38),
-        ):
-            with self.subTest(symbol=symbol):
-                button = Button('', symbol)
-                button.setFixedSize(width, height)
-                with patch('ui.design.widgets.icon') as paint_icon:
+        for label, symbol in (('Позвонить','phone'), ('Написать','chat'),
+                              ('Копировать диагностику','copy'), ('Голос','wave')):
+            for left_aligned in (False,True):
+                button = Button(label,symbol)
+                button.setFixedSize(320,40)
+                button.setProperty('align_left',left_aligned)
+                rects=[]
+                with patch('ui.design.widgets.icon', new=lambda p,n,r,c: rects.append(QRectF(r))):
                     button.grab()
-                rect = paint_icon.call_args.args[2]
-                self.assertEqual(rect.center().x(), width / 2)
-                self.assertEqual(rect.center().y(), height / 2)
+                rect = rects[-1]
+                if left_aligned:
+                    self.assertEqual(rect.left(),12)
+                else:
+                    right = rect.right()+8+button.fontMetrics().horizontalAdvance(label)
+                    self.assertAlmostEqual((rect.left()+right)/2,button.width()/2,delta=0.5)
+                self.assertEqual(rect.center().y(),20)
                 button.close()
+
+    def test_navigation_and_call_icons_have_independent_centered_painting(self):
+        from unittest.mock import patch
+        from PySide6.QtCore import QRectF
+        from ui.design.widgets import RoundCallButton
+        from ui.design.shell import NavButton
+        for symbol in ('users','chat','hash','profile'):
+            button=NavButton('Раздел',symbol)
+            for active in (False,True):
+                button.setProperty('active',active)
+                rects=[]
+                with patch('ui.design.shell.icon', new=lambda p,n,r,c: rects.append(QRectF(r))):
+                    button.grab()
+                rect=rects[-1]
+                self.assertEqual(rect.center().x(),button.width()/2)
+                self.assertEqual(rect.center().y(),19)
+            button.close()
+        for symbol in ('mic','headphones','end'):
+            button=RoundCallButton('Управление звонком',symbol)
+            rects=[]
+            with patch('ui.design.widgets.icon', new=lambda p,n,r,c: rects.append(QRectF(r))):
+                button.grab()
+            rect=rects[-1]
+            self.assertEqual(rect.center().x(),button.width()/2)
+            self.assertEqual(rect.center().y(),button.height()/2)
+            button.close()
+
+    def test_round_call_controls_keep_circle_height_inside_layout(self):
+        from PySide6.QtWidgets import QWidget, QHBoxLayout
+        from ui.design.widgets import RoundCallButton
+        host=QWidget()
+        layout=QHBoxLayout(host)
+        buttons=[RoundCallButton('Микрофон','mic'),RoundCallButton('Звук','headphones'),
+                 RoundCallButton('Завершить','end',danger=True)]
+        for button in buttons:
+            layout.addWidget(button)
+        host.resize(300,80);host.show();self.app.processEvents()
+        self.addCleanup(host.close)
+        for button in buttons:
+            self.assertEqual(button.size().toTuple(),(52,52))
+            self.assertEqual(button.sizeHint().toTuple(),(52,52))
 
     def test_dialog_poll_preserves_search_selection_and_accessibility_index(self):
         from PySide6.QtWidgets import QListView

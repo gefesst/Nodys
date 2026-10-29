@@ -305,6 +305,9 @@ class RoundCallButton(Button):
         self.setProperty('danger',danger)
         self.setAccessibleName(label)
 
+    def sizeHint(self):
+        return QSize(52, 52)
+
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
         danger=bool(self.property('danger'))
