@@ -698,13 +698,14 @@ class MainWindow(QWidget):
         private = bool(getattr(self, "voice_client", None))
         channel = bool(getattr(self.channels_page,'_voice_joined',False))
         panel=getattr(self,'call_window',None)
-        channel_surface=(self.stack.currentWidget() is self.channels_page and
-            self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
-            self.channels_page.channel_inner_stack.currentIndex()==1 and
-            self.channels_page.viewing_connected_room())
-        visible=(private and not (panel and panel.isVisible())) or (channel and not channel_surface)
+        channel_surface=self.stack.currentWidget() is self.channels_page
+        visible=not channel_surface and ((private and not (panel and panel.isVisible())) or channel)
         self.voice_dock.sync_controls()
         self.voice_dock.set_present(visible)
+        if channel_surface:
+            self.voice_dock.animation.stop()
+            self.voice_dock.set_progress(0.0)
+            self.voice_dock.hide()
         self.voice_dock.position()
         if private:
             activity=self.voice_client.get_activity()

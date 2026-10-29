@@ -531,6 +531,11 @@ class UiTests(unittest.TestCase):
                 view=window.chats_page.dialogs
                 bottom=view.mapTo(window,QPoint(0,view.height())).y()
                 self.assertLessEqual(bottom,window.voice_dock.y())
+            window.show_channels();window.refresh_voice_dock()
+            self.assertTrue(window.voice_dock.isHidden())
+            self.assertEqual(window.channels_page.voice_dock_space.height(),0)
+            window.show_chats();window.refresh_voice_dock()
+            self.assertTrue(window.voice_dock._present)
             window.voice_client=None
             window.refresh_voice_dock()
             window.voice_dock.animation.setCurrentTime(180)
