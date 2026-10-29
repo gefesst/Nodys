@@ -33,7 +33,6 @@ class ActionMenu(QFrame):
     def addAction(self, text, callback):
         button=MenuButton(text,self);button.setFixedHeight(40)
         button.setAttribute(Qt.WA_MacShowFocusRect,False)
-        button.setProperty('no_focus_ring',True)
         button.setProperty('keyboardFocus',False)
         color='#FFA7AE' if self.danger else '#EDF2FA'
         button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"] {background:#3A4D67;}')

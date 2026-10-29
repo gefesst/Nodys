@@ -188,7 +188,7 @@ class DesignGeometryTests(unittest.TestCase):
         from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout
         from PySide6.QtCore import QEvent, Qt
         from PySide6.QtGui import QFocusEvent
-        from ui.design.motion import MotionFilter, FocusRing
+        from ui.design.motion import MotionFilter
         from ui.design.widgets import Button, RoundCallButton
         from ui.design.shell import NavButton
         from ui.design.action_menu import MenuButton
@@ -204,7 +204,7 @@ class DesignGeometryTests(unittest.TestCase):
             for event in (QEvent(QEvent.Enter),QFocusEvent(QEvent.FocusIn,Qt.TabFocusReason),
                           QEvent(QEvent.Leave),QFocusEvent(QEvent.FocusOut)):
                 self.app.sendEvent(button,event)
-                self.assertFalse(button.findChildren(FocusRing),type(button).__name__)
+                self.assertFalse(hasattr(button,"_focus_ring"),type(button).__name__)
             self.assertFalse(button.testAttribute(Qt.WA_MacShowFocusRect))
 
     def test_button_icons_contrast_with_surfaces_through_hover_and_selection(self):
@@ -742,9 +742,9 @@ class DesignGeometryTests(unittest.TestCase):
 
     def test_motion_tracks_late_fields_without_application_global_filter(self):
         from PySide6.QtWidgets import QWidget, QLineEdit, QVBoxLayout
-        from PySide6.QtCore import QEvent, QChildEvent
+        from PySide6.QtCore import QEvent, QChildEvent, Qt
         from PySide6.QtGui import QFocusEvent
-        from ui.design.motion import MotionFilter, FocusRing
+        from ui.design.motion import MotionFilter
         window = QWidget()
         layout = QVBoxLayout(window)
         controller = MotionFilter(window)
@@ -756,9 +756,32 @@ class DesignGeometryTests(unittest.TestCase):
         window.show(); self.app.processEvents()
         self.app.sendEvent(window, QChildEvent(QEvent.ChildPolished, field))
         self.app.sendEvent(field, QFocusEvent(QEvent.FocusIn))
-        self.assertIsInstance(field._focus_ring, FocusRing)
-        self.assertEqual(field._focus_ring.geometry(), field.rect())
-        self.assertEqual(field._focus_ring.animation.endValue(), 1.0)
+        self.assertTrue(field._nodus_motion_watched)
+        self.assertFalse(field.testAttribute(Qt.WA_MacShowFocusRect))
+        self.assertFalse(hasattr(field, "_focus_ring"))
         self.app.sendEvent(field, QFocusEvent(QEvent.FocusOut))
-        self.assertEqual(field._focus_ring.animation.endValue(), 0.0)
+        self.assertFalse(hasattr(field, "_focus_ring"))
         window.close()
+
+    def test_search_focus_has_only_one_border_and_composer_uses_its_outer_frame(self):
+        from PySide6.QtWidgets import QWidget,QLineEdit,QFrame,QPlainTextEdit
+        from PySide6.QtCore import Qt,QEvent
+        from PySide6.QtGui import QFocusEvent
+        from ui.design.motion import MotionFilter
+        host=QWidget();host.resize(320,170);self.addCleanup(host.close)
+        field=QLineEdit(host);field.setGeometry(20,20,240,46)
+        field.setStyleSheet('QLineEdit {background:#18212A;border:1px solid #354152;border-radius:10px;padding:0;min-height:0;} QLineEdit:focus {border-color:#91ADFF;}')
+        frame=QFrame(host);frame.setObjectName('ComposerFrame');frame.setGeometry(20,90,260,60)
+        editor=QPlainTextEdit(frame);editor.setObjectName('MessageComposer')
+        controller=MotionFilter(host);controller.watch(host)
+        host.show();host.activateWindow();field.setFocus(Qt.TabFocusReason);self.app.processEvents()
+        self.assertTrue(field.hasFocus())
+        image=host.grab().toImage()
+        self.assertEqual(image.pixelColor(140,20).name(),'#91adff')
+        for y in (22,23,24):
+            self.assertEqual(image.pixelColor(140,y).name(),'#18212a')
+        self.app.sendEvent(editor,QFocusEvent(QEvent.FocusIn,Qt.TabFocusReason))
+        self.assertTrue(frame.property('editorFocused'))
+        self.assertFalse(hasattr(editor,'_focus_ring'))
+        self.app.sendEvent(editor,QFocusEvent(QEvent.FocusOut))
+        self.assertFalse(frame.property('editorFocused'))

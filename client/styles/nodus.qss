@@ -41,6 +41,7 @@ QMenu::item {padding:10px 24px;}
 QMenu::item:selected {background:#3A4D67;border-radius:6px;}
 QToolTip {background:@SURFACE@;color:@FG@;border:1px solid #536D92;padding:7px;}
 QComboBox {background:#253244;border:1px solid @EDGE@;border-radius:8px;padding:9px 12px;min-height:20px;}
+QComboBox:focus {border-color:@ACC@;}
 QComboBox::drop-down {border:0;width:32px;}
 QComboBox::down-arrow {image:url("@ASSETS@/chevron-down.svg");width:16px;height:16px;}
 QComboBox QAbstractItemView {background:#253244;selection-background-color:#3A4D67;}
@@ -80,6 +81,7 @@ QLabel#FriendItemSub {font-size:13px;}
 
 QLabel#ChatTitle {font-size:21px;font-weight:600;}
 QFrame#ComposerFrame {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+QFrame#ComposerFrame[editorFocused="true"] {border-color:@ACC@;}
 QPlainTextEdit#MessageComposer {background:transparent;border:0;}
 
 QLabel#ReadOnlyField {background:@SURFACE@;border:1px solid @EDGE@;border-radius:9px;padding:12px 14px;color:@SUB@;}

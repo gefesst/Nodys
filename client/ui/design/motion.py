@@ -8,13 +8,15 @@ from PySide6.QtCore import (
     Qt,
     QEasingCurve,
 )
-from PySide6.QtGui import QPainter, QPen, QColor
+from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import (
     QWidget,
     QApplication,
     QPushButton,
     QLineEdit,
     QPlainTextEdit,
+    QTextEdit,
+    QComboBox,
     QDialog,
     QMenu,
 )
@@ -25,52 +27,12 @@ def reduced():
     return bool(app and app.property("reduce_motion"))
 
 
-class FocusRing(QWidget):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)
-        # Parent field styles may constrain content height; the overlay follows
-        # the entire control, including its padding and border.
-        self.setStyleSheet("min-width:0;min-height:0;max-width:16777215;max-height:16777215;padding:0;border:0;background:transparent;")
-        self._level = 0.0
-        self.animation = QPropertyAnimation(self, b"level", self)
-        self.animation.setEasingCurve(QEasingCurve.OutCubic)
-
-    def get_level(self):
-        return self._level
-
-    def set_level(self, value):
-        self._level = value
-        self.update()
-
-    level = Property(float, get_level, set_level)
-
-    def change(self, value):
-        self.setGeometry(self.parentWidget().rect())
-        self.raise_()
-        self.show()
-        self.animation.stop()
-        self.animation.setDuration(0 if reduced() else 130)
-        self.animation.setStartValue(self._level)
-        self.animation.setEndValue(value)
-        self.animation.start()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        color = QColor("#91ADFF")
-        color.setAlpha(int(150 * self._level))
-        painter.setPen(QPen(color, 1))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -2, -2), 10, 10)
-
-
 class MotionFilter(QObject):
     def watch(self, widget):
         if not isinstance(widget, QWidget) or getattr(widget, '_nodus_motion_watched', False):
             return
         widget._nodus_motion_watched = True
-        if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit)):
+        if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit, QTextEdit, QComboBox)):
             widget.setAttribute(Qt.WA_MacShowFocusRect, False)
         widget.installEventFilter(self)
         for child in widget.findChildren(QWidget):
@@ -84,25 +46,13 @@ class MotionFilter(QObject):
         if kind not in (QEvent.Enter, QEvent.Leave, QEvent.FocusIn,
                         QEvent.FocusOut, QEvent.Resize, QEvent.Show):
             return False
-        if (not hasattr(widget,"_keyboard_focus") and not widget.property("no_focus_ring")
-            and isinstance(widget, (QLineEdit, QPlainTextEdit))) and kind in (
-            QEvent.Enter,
-            QEvent.Leave,
-            QEvent.FocusIn,
-            QEvent.FocusOut,
-            QEvent.Resize,
-        ):
-            if not hasattr(widget, "_focus_ring") and kind in (
-                QEvent.Enter,
-                QEvent.FocusIn,
-            ):
-                widget._focus_ring = FocusRing(widget)
-            ring = getattr(widget, "_focus_ring", None)
-            if ring:
-                if kind == QEvent.Resize:
-                    ring.setGeometry(widget.rect())
-                else:
-                    ring.change(1.0 if kind in (QEvent.Enter, QEvent.FocusIn) else 0.0)
+        if isinstance(widget, QPlainTextEdit) and widget.objectName() == "MessageComposer":
+            frame = widget.parentWidget()
+            if frame is not None and frame.objectName() == "ComposerFrame" and kind in (QEvent.FocusIn, QEvent.FocusOut):
+                frame.setProperty("editorFocused", kind == QEvent.FocusIn)
+                frame.style().unpolish(frame)
+                frame.style().polish(frame)
+                frame.update()
         if (
             isinstance(widget, (QDialog, QMenu))
             and kind == QEvent.Show

@@ -71,7 +71,6 @@ class QuickSwitch(OverlayDialog):
         root.setContentsMargins(20, 20, 20, 44)
         root.setSpacing(12)
         self.query = QLineEdit()
-        self.query.setProperty("no_focus_ring",True)
         self.query.setPlaceholderText("Имя друга или название канала")
         self.query.setFixedHeight(54)
         header=QHBoxLayout();header.setSpacing(16)
