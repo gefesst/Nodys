@@ -55,6 +55,9 @@ class MotionFilter(QObject):
         if shape is not None:
             widget.setCursor(shape)
             widget.setMouseTracking(True)
+            # Propagated moves let ancestor widgets restore their arrow cursor
+            # on Cocoa even while the pointer remains inside this control.
+            widget.setAttribute(Qt.WA_NoMousePropagation, True)
         widget.installEventFilter(self)
         for child in widget.findChildren(QWidget):
             self.watch(child)

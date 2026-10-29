@@ -41,6 +41,64 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_native_cursor_completion_respects_inactive_app_and_other_cursors(self):
+        from application.cursor_runtime import DesktopApplication
+        from PySide6.QtWidgets import QLineEdit
+        from PySide6.QtCore import Qt
+        from unittest.mock import Mock, patch
+
+        field = QLineEdit()
+        self.addCleanup(field.close)
+        native = Mock()
+        bridge = SimpleNamespace(NSCursor=SimpleNamespace(
+            IBeamCursor=lambda: native, pointingHandCursor=lambda: native,
+            arrowCursor=lambda: native,
+        ))
+        app = SimpleNamespace(applicationState=lambda: Qt.ApplicationActive,
+                              overrideCursor=lambda: None, widgetAt=lambda p: field)
+        with patch.dict(sys.modules, {'AppKit': bridge}):
+            DesktopApplication._finish_mouse_move(app)
+            native.set.assert_called_once()
+            native.reset_mock()
+            app.applicationState = lambda: Qt.ApplicationInactive
+            DesktopApplication._finish_mouse_move(app)
+            native.set.assert_not_called()
+            app.applicationState = lambda: Qt.ApplicationActive
+            app.overrideCursor = lambda: object()
+            DesktopApplication._finish_mouse_move(app)
+            native.set.assert_not_called()
+
+    def test_button_mouse_moves_do_not_reach_arrow_cursor_parent(self):
+        from ui.design.motion import MotionFilter
+        from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout
+        from PySide6.QtCore import Qt, QEvent, QPointF
+        from PySide6.QtGui import QMouseEvent
+
+        class Parent(QWidget):
+            moves = 0
+            def mouseMoveEvent(self, event):
+                self.moves += 1
+                super().mouseMoveEvent(event)
+
+        host = Parent()
+        host.setMouseTracking(True)
+        button = QPushButton("Action")
+        QVBoxLayout(host).addWidget(button)
+        watcher = MotionFilter(host)
+        watcher.watch(host)
+        host.show()
+        self.addCleanup(host.close)
+        self.app.processEvents()
+        before = host.moves
+        for x in (5, 15, 25, 35):
+            point = QPointF(x, 10)
+            self.app.sendEvent(button, QMouseEvent(
+                QEvent.MouseMove, point, QPointF(button.mapToGlobal(point.toPoint())),
+                Qt.NoButton, Qt.NoButton, Qt.NoModifier,
+            ))
+        self.assertEqual(host.moves, before)
+        self.assertEqual(button.cursor().shape(), Qt.PointingHandCursor)
+
     def test_interactive_cursor_stays_consistent_across_child_surfaces(self):
         from ui.design.motion import MotionFilter
         from PySide6.QtWidgets import QWidget,QVBoxLayout,QLineEdit,QPlainTextEdit,QPushButton,QLabel
