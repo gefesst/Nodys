@@ -375,7 +375,9 @@ class Button(QPushButton):
         if not self.isEnabled():
             color = "#7C8A9D"
         p.setFont(self.font())
-        width = p.fontMetrics().horizontalAdvance(self.text())
+        available=max(0,self.width()-24-(26 if self.icon_name and self.text() else 0))
+        label=p.fontMetrics().elidedText(self.text(),Qt.ElideRight,available)
+        width = p.fontMetrics().horizontalAdvance(label)
         # The 8 px gap belongs between an icon and its label. Reserving it
         # for icon-only buttons shifts every symbol 4 px left of its centre.
         total = width + ((18 + (8 if self.text() else 0)) if self.icon_name else 0)
@@ -385,7 +387,7 @@ class Button(QPushButton):
             icon(p, self.icon_name, QRectF(x, (self.height() - 18) / 2, 18, 18), symbol_color)
             x += 26
         p.setPen(QColor(color))
-        p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, self.text())
+        p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, label)
 
 
 def set_voice_button_state(button, symbol, enabled, label=None):
@@ -732,6 +734,14 @@ class Composer(QPlainTextEdit):
         self.setMaximumHeight(130)
         self.setTabChangesFocus(True)
         self.textChanged.connect(self.adjust_height)
+        self._resize_height_timer=QTimer(self)
+        self._resize_height_timer.setSingleShot(True)
+        self._resize_height_timer.timeout.connect(self.adjust_height)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if event.size().width()!=event.oldSize().width() and hasattr(self,'_resize_height_timer'):
+            self._resize_height_timer.start(0)
 
     def adjust_height(self):
         lines = max(1, int(self.document().documentLayout().documentSize().height()))
@@ -760,6 +770,7 @@ class Toast(QWidget):
         self.timer = QTimer(self)
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self.hide)
+        parent.installEventFilter(self)
         self.hide()
 
     def get_progress(self):
@@ -771,14 +782,21 @@ class Toast(QWidget):
 
     progress = Property(float, get_progress, set_progress)
 
-    def show_message(self, text):
-        self.message = text
+    def eventFilter(self, watched, event):
+        if watched is self.parent() and event.type()==QEvent.Resize:
+            self.reposition()
+        return super().eventFilter(watched,event)
+
+    def reposition(self):
         self.setGeometry(
             max(12, self.parent().width() - 600),
             self.parent().height() - 66,
             min(560, self.parent().width() - 24),
             46,
         )
+    def show_message(self, text):
+        self.message = text
+        self.reposition()
         self.show()
         self.raise_()
         self.anim.stop()

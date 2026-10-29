@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
     QPushButton, QFileDialog, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from config import load_config, save_config, clear_config
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -54,7 +54,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         logout=Button('Выйти из аккаунта');logout.setFont(font(14));logout.setProperty('danger',True);logout.setProperty('flat',True);logout.setProperty('align_left',True)
         logout.setFixedHeight(46);logout.clicked.connect(self.confirm_logout);side.addWidget(logout);side.addStretch()
         outer.addWidget(sidebar)
-        scroll=QScrollArea();scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
+        scroll=QScrollArea();self.scroll=scroll;scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
         content=QWidget();scroll.setWidget(content)
         self.layout=QVBoxLayout(content);self.layout.setContentsMargins(40,32,48,30);self.layout.setSpacing(0)
         self.page_title=QLabel('Ваш профиль');self.page_title.setObjectName('FriendsTitle');self.page_title.setFixedHeight(34)
@@ -105,10 +105,19 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def show_section(self,key):
         self._profile_section = key
-        for name,button in self.profile_tabs.items():button.setChecked(name==key)
+        for name,button in self.profile_tabs.items():
+            button.primary=name==key
+            button.update()
         self.edit_block.setVisible(True);self.password_block.setVisible(key=='password')
         self.save_button.setVisible(True);self.password_button_wrapper.setVisible(key!='password')
         self.page_title.setText('Ваш профиль')
+        QTimer.singleShot(0,self._scroll_to_section)
+
+    def _scroll_to_section(self):
+        if self._profile_section=='password':
+            self.scroll.ensureWidgetVisible(self.save_button,0,24)
+        else:
+            self.scroll.verticalScrollBar().setValue(0)
 
     def confirm_logout(self):
         from ui.design.dialogs import confirm

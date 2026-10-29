@@ -1058,6 +1058,7 @@ class MainWindow(QWidget):
             try:
                 if hasattr(self.channels_page, "reset_for_user"):
                     self.channels_page.reset_for_user()
+                    self.channels_page.load_channels(force_refresh=True)
             except Exception:
                 pass
 

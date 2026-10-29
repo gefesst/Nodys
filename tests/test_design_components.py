@@ -60,6 +60,28 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertLessEqual(editor.height(),130)
         editor.clear();self.app.processEvents();self.assertEqual(editor.height(),44)
 
+    def test_composer_reflows_on_width_change_without_editing_draft(self):
+        from ui.design.widgets import Composer
+        from PySide6.QtTest import QTest
+        editor=Composer();editor.resize(900,44);editor.show();self.addCleanup(editor.close)
+        draft='Текст сообщения при изменении ширины окна. ' * 3
+        editor.setPlainText(draft);QTest.qWait(30)
+        wide=editor.height()
+        editor.resize(220,editor.height());QTest.qWait(30)
+        self.assertGreater(editor.height(),wide)
+        self.assertLessEqual(editor.height(),130)
+        editor.resize(900,editor.height());QTest.qWait(30)
+        self.assertEqual(editor.height(),wide)
+        self.assertEqual(editor.toPlainText(),draft)
+
+    def test_toast_stays_inside_resized_parent(self):
+        from PySide6.QtWidgets import QWidget
+        from ui.design.widgets import Toast
+        host=QWidget();host.resize(1440,900);host.show();self.addCleanup(host.close)
+        toast=Toast(host);toast.show_message('Сохранено')
+        host.resize(1120,620);self.app.processEvents()
+        self.assertTrue(host.rect().contains(toast.geometry()))
+
     def test_dialogs_stay_compact_and_five_fit_at_available_heights(self):
         from ui.design.widgets import DialogDelegate
         from ui.design.models import DialogModel
@@ -862,7 +884,7 @@ class DesignGeometryTests(unittest.TestCase):
         from unittest.mock import Mock
         callbacks=[]
         selected=[2]
-        page=SimpleNamespace(_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
+        page=SimpleNamespace(conversation=SimpleNamespace(prefetched={},history_cache={},prefetch=Mock()),_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
             _channels_loaded_once=True,_channel_navigation_revision=1,
             start_request=lambda payload,callback:callbacks.append(callback),
             _active_channel_id=lambda:selected[0],_apply_channel_header=Mock(),
@@ -880,7 +902,7 @@ class DesignGeometryTests(unittest.TestCase):
         from ui.channels_page import ChannelsPage
         from unittest.mock import Mock
         callbacks=[]
-        page=SimpleNamespace(_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
+        page=SimpleNamespace(conversation=SimpleNamespace(prefetched={},history_cache={},prefetch=Mock()),_alive=True,_loading_channels=False,ctx=SimpleNamespace(login='alice'),
             _channels_loaded_once=True,
             start_request=lambda payload,callback:callbacks.append(callback),
             _active_channel_id=lambda:1,_apply_channel_header=Mock(),

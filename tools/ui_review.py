@@ -72,6 +72,7 @@ def main():
         def wait(self, seconds=0.4, predicate=None):
             self.until = time.monotonic() + seconds
             self.predicate = predicate
+            self.wait_deadline=time.monotonic()+max(15,seconds+2)
 
         def advance(self):
             if getattr(self,"capturing",False):
@@ -79,6 +80,8 @@ def main():
             try:
                 if time.monotonic() > self.deadline:
                     raise TimeoutError("Review timed out")
+                if self.predicate and time.monotonic()>self.wait_deadline:
+                    raise TimeoutError("UI state did not settle within 15 seconds")
                 if time.monotonic() < self.until or (
                     self.predicate and not self.predicate()
                 ):
@@ -928,6 +931,8 @@ def main():
                 original_request(data, completed)
             c.request = history_request
             c.select(lab.people[0][0], "Алексей Морозов")
+            self.wait(predicate=lambda: not c.loading);yield
+            c.load("latest")
             self.wait(predicate=lambda: not c.loading and len(c.rows) == 80)
             yield
             for _ in range(2):

@@ -32,6 +32,51 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_settings_and_profile_navigation_scroll_to_visible_controls(self):
+        from ui.main_window import MainWindow
+        from PySide6.QtCore import QPoint
+        from PySide6.QtTest import QTest
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow();self.addCleanup(window.prepare_to_close_app);self.addCleanup(window.deleteLater)
+            window.resize(1120,620);window.show()
+            window.show_settings()
+            settings=window.settings_page
+            window.stack.setCurrentWidget(settings);self.app.processEvents()
+            settings.select_section('Звук');self.app.processEvents()
+            self.assertTrue(settings.section_buttons['Звук'].primary)
+            self.assertGreater(settings.scroll.verticalScrollBar().value(),0)
+            settings.select_section('Внешний вид')
+            self.assertEqual(settings.scroll.verticalScrollBar().value(),0)
+            profile=window.profile_page
+            window.stack.setCurrentWidget(profile);self.app.processEvents()
+            profile.show_section('password');QTest.qWait(30)
+            self.assertTrue(profile.profile_tabs['password'].primary)
+            viewport=profile.scroll.viewport()
+            for widget in (profile.password_edit,profile.current_password_edit,profile.save_button):
+                top=widget.mapTo(viewport,QPoint(0,0)).y()
+                self.assertGreaterEqual(top,0)
+                self.assertLessEqual(top+widget.height(),viewport.height())
+            profile.show_section('main');QTest.qWait(30)
+            self.assertEqual(profile.scroll.verticalScrollBar().value(),0)
+
+    def test_voice_controls_remain_visible_at_minimum_window_height(self):
+        from PySide6.QtCore import QPoint
+        p=self.page
+        p.main_stack.setCurrentWidget(p.channel_page)
+        p.channel_inner_stack.setCurrentIndex(1)
+        p.resize(1032,578);p.show();self.app.processEvents()
+        for visible in (False,True):
+            p.voice_quality_lbl.setVisible(visible)
+            p.voice_access_hint_lbl.setVisible(visible)
+            self.app.processEvents()
+            for button in (p.voice_join_btn,p.voice_mute_btn,p.voice_deafen_btn):
+                point=button.mapTo(p,QPoint(0,0))
+                self.assertGreaterEqual(point.y(),0)
+                self.assertLessEqual(point.y()+button.height(),p.height())
+        scroll=p.voice_surface_scroll.verticalScrollBar()
+        scroll.setValue(scroll.maximum());self.app.processEvents()
+        self.assertLessEqual(p.voice_join_btn.mapTo(p,QPoint(0,0)).y()+40,p.height())
+
     def test_navigation_requests_data_even_when_window_is_inactive(self):
         from ui.main_window import MainWindow
         from unittest.mock import Mock

@@ -23,12 +23,17 @@ class VoiceNotice(QWidget):
 
 
 def build(page):
+    surface=QWidget()
+    outer=QVBoxLayout(surface)
+    outer.setContentsMargins(0,0,0,16)
+    outer.setSpacing(12)
     tab=QWidget()
     page.voice_content=tab
     scroll=QScrollArea()
     scroll.setWidgetResizable(True)
     scroll.setWidget(tab)
     page.voice_surface_scroll=scroll
+    outer.addWidget(scroll,1)
     layout=QVBoxLayout(tab)
     page.voice_tab_layout=layout
     layout.setContentsMargins(16,36,24,36)
@@ -97,5 +102,8 @@ def build(page):
     page.voice_microphone_layout.setSpacing(0)
     page.voice_microphone_host.hide()
     layout.addWidget(page.voice_microphone_host)
-    layout.addWidget(controls)
-    return scroll
+    footer=QHBoxLayout()
+    footer.setContentsMargins(16,0,24,0)
+    footer.addWidget(controls)
+    outer.addLayout(footer)
+    return surface

@@ -191,6 +191,20 @@ class ConversationTests(unittest.TestCase):
         stale(self.response("carol"))
         self.assertFalse(self.chat.prefetched)
 
+    def test_channel_prefetch_uses_channel_scope_and_first_open_cache(self):
+        self.chat.channel=True
+        self.chat.prefetch([41,42,43])
+        self.assertEqual(len(self.requests),2)
+        self.assertEqual(self.requests[0][0]['action'],'get_channel_messages')
+        self.assertEqual(self.requests[0][0]['channel_id'],41)
+        self.assertNotIn('to_user',self.requests[0][0])
+        self.requests[0][1](self.response())
+        self.chat.select(41)
+        self.assertTrue(self.chat.history_loaded)
+        self.assertEqual(len(self.chat.model.rows),2)
+        self.assertEqual(self.requests[-1][0]['channel_id'],41)
+        self.assertEqual(self.requests[-1][0]['after_id'],2)
+
     def test_first_open_keeps_composer_and_history_in_place_until_reply(self):
         self.chat.select("bob")
         self.assertTrue(self.chat.loading)

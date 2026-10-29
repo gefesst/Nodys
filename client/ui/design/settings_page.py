@@ -44,8 +44,11 @@ class SettingsPage(QWidget):
         side.addWidget(heading)
         side.addSpacing(18)
         self.panels = QStackedWidget()
+        self.section_buttons={}
         for text in ("Внешний вид", "Звук", "Подключение"):
             button = Button(text)
+            self.section_buttons[text]=button
+            button.primary=text=="Внешний вид"
             button.setProperty("flat", True)
             button.setProperty("align_left", True)
             button.setFixedHeight(46)
@@ -103,6 +106,7 @@ class SettingsPage(QWidget):
         )
         fields.addSpacing(32)
         sound = QLabel("Звук")
+        self.sound_heading=sound
         sound.setObjectName("FieldHeading")
         sound.setFixedHeight(26)
         fields.addWidget(sound)
@@ -200,9 +204,12 @@ class SettingsPage(QWidget):
         return list_devices(sd)
 
     def select_section(self, section):
+        for name,button in self.section_buttons.items():
+            button.primary=name==section
+            button.update()
         self.panels.setCurrentIndex(1 if section == "Подключение" else 0)
         if section == "Звук":
-            self.scroll.ensureWidgetVisible(self.input_device)
+            self.scroll.verticalScrollBar().setValue(max(0,self.sound_heading.mapTo(self.scroll.widget(),self.sound_heading.rect().topLeft()).y()-24))
         elif section == "Внешний вид":
             self.scroll.verticalScrollBar().setValue(0)
 

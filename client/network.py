@@ -273,7 +273,11 @@ class NetworkThread(QObject):
     # ---------------- internal ----------------
     def _emit_if_alive(self, payload: dict):
         if not self._abort_event.is_set() and not NetworkThread._quitting:
-            self._completed.emit(payload)
+            try:
+                self._completed.emit(payload)
+            except RuntimeError:
+                # The GUI can be destroyed while a socket reply is in flight.
+                self._abort_event.set()
 
     def _prepare_payload(self) -> Dict[str, Any]:
         obj = dict(self.data or {})

@@ -183,7 +183,9 @@ class Conversation(QWidget):
                     self.prefetched.move_to_end(peer)
                     while len(self.prefetched)>20:self.prefetched.popitem(last=False)
                 self._drain_prefetch()
-            self.request(dict(action="get_messages",to_user=peer,paged=True,limit=self.PAGE),done)
+            data=dict(action="get_channel_messages" if self.channel else "get_messages",paged=True,limit=self.PAGE)
+            data["channel_id" if self.channel else "to_user"]=peer
+            self.request(data,done)
 
     def select(self, identity, name="", can_send=True):
         self.remember_draft()

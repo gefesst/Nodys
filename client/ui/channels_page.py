@@ -1653,6 +1653,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     return
 
                 self.channels = resp.get("channels", []) or []
+                available={int(channel['id']) for channel in self.channels}
+                for cache in (self.conversation.prefetched,self.conversation.history_cache):
+                    for identity in list(cache):
+                        if identity not in available:cache.pop(identity,None)
+                self.conversation.prefetch([int(channel['id']) for channel in self.channels])
                 self._set_channel_list_state("list" if self.channels else "empty")
 
                 # keep active channel if still exists

@@ -35,6 +35,18 @@ class NetworkDeliveryTests(unittest.TestCase):
             self.spin(lambda:len(callbacks)==1 and request not in NetworkThread._inflight)
         self.assertNotEqual(workers[0],threading.get_ident())
         self.assertEqual(callbacks,[threading.get_ident()])
+    def test_late_reply_after_native_object_destroyed_is_discarded(self):
+        from shiboken6 import delete
+        request=NetworkThread('localhost',1,{'action':'status'})
+        delete(request)
+        errors=[]
+        def reply():
+            try:request._emit_if_alive({'status':'ok'})
+            except Exception as error:errors.append(error)
+        worker=threading.Thread(target=reply);worker.start();worker.join(1)
+        self.assertEqual(errors,[])
+        self.assertTrue(request._abort_event.is_set())
+
     def test_abort_after_queueing_suppresses_completion(self):
         callbacks=[];request=NetworkThread('localhost',1,{'action':'status'})
         request.finished.connect(callbacks.append)
