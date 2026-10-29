@@ -1,6 +1,6 @@
 """Bounded real-message view with keyset history, scoped replies and safe drafts."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
 from PySide6.QtWidgets import (
@@ -60,7 +60,9 @@ class Conversation(QWidget):
         self.model = MessageModel(self)
         self.view = MessageList()
         self.view.setModel(self.model)
-        self.delegate = MessageDelegate(self.view, owner.ctx.login)
+        self.delegate = MessageDelegate(
+            self.view, owner.ctx.login, lambda: owner.ctx.nickname or owner.ctx.login
+        )
         self.view.setItemDelegate(self.delegate)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
@@ -81,10 +83,10 @@ class Conversation(QWidget):
         self.editor.textChanged.connect(self.edited)
         self.send_button = Button("", "send", True)
         self.send_button.setAccessibleName("Отправить сообщение")
-        self.send_button.setFixedSize(48, 46)
+        self.send_button.setFixedSize(38, 38)
         self.send_button.clicked.connect(self.send)
         compose.addWidget(self.editor, 1)
-        compose.addWidget(self.send_button, 0, Qt.AlignBottom)
+        compose.addWidget(self.send_button, 0, Qt.AlignVCenter)
         root.addWidget(compose_frame)
         self.send_status = QLabel("Enter — отправить · Shift + Enter — новая строка")
         self.send_status.setObjectName("Muted")
@@ -243,7 +245,15 @@ class Conversation(QWidget):
             author = row["from_user"]
             date = (row.get("created_at") or "")[:10]
             try:
-                date_label = datetime.strptime(date, "%Y-%m-%d").strftime("%d.%m.%Y")
+                day = datetime.strptime(date, "%Y-%m-%d").date()
+                today = datetime.now().date()
+                date_label = (
+                    "Сегодня"
+                    if day == today
+                    else "Вчера"
+                    if day == today - timedelta(days=1)
+                    else day.strftime("%d.%m.%Y")
+                )
             except ValueError:
                 date_label = date
             name = (

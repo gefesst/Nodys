@@ -239,7 +239,8 @@ class RequestRouter:
         if action == "get_unread_counts":
             counts = self.messages.get_unread_counts(current_user)
             total = sum(counts.values())
-            return {"status": "ok", "counts": counts, "total": total}
+            return {"status": "ok", "counts": counts, "total": total,
+                    "summaries": self.messages.get_dialog_summaries(current_user)}
 
         # Channels
         if action == "create_channel":

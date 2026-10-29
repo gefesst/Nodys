@@ -64,7 +64,10 @@ class MicrophoneCheck(QDialog):
             def callback(data, frames, timing, status):
                 self.level = min(100, int(float(np.max(np.abs(data))) * 250))
 
-            with sd.InputStream(channels=1, callback=callback):
+            from config import load_config
+            from audio.devices import resolve_device
+            device=resolve_device(sd,load_config().get("audio_input_device"),"input")
+            with sd.InputStream(device=device,channels=1, callback=callback):
                 self.signals.ready.emit()
                 self.stop_event.wait(30)
         except Exception as error:

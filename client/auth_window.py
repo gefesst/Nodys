@@ -17,17 +17,17 @@ class AuthWindow(QWidget):
 
         self.setObjectName("AuthPage")
 
-        from ui.design.auth import build_auth_layout, field
+        from ui.design.auth import build_auth_layout, field, finish_auth_layout
         from ui.design.widgets import Button
         layout = build_auth_layout(self, 'С возвращением', 'Ваше место для общения')
         self.login = field(layout, 'Логин')
         self.password = field(layout, 'Пароль', True)
         self.password.returnPressed.connect(self.login_user)
         self.login.returnPressed.connect(lambda:self.password.setFocus())
-        self.status_label=QLabel();self.status_label.setObjectName('ErrorLabel');self.status_label.setWordWrap(True);layout.addWidget(self.status_label)
-        layout.addStretch()
-        self.btn_login=Button('Войти',primary=True);self.btn_login.clicked.connect(self.login_user);layout.addWidget(self.btn_login)
-        self.btn_register=Button('Нет аккаунта? Регистрация');self.btn_register.setProperty('flat',True);self.btn_register.clicked.connect(self.open_register);layout.addWidget(self.btn_register)
+        self.status_label=QLabel();self.status_label.setObjectName('ErrorLabel');self.status_label.setWordWrap(True)
+        self.btn_login=Button('Войти',primary=True);self.btn_login.clicked.connect(self.login_user)
+        self.btn_register=Button('Нет аккаунта? Регистрация');self.btn_register.setProperty('flat',True);self.btn_register.clicked.connect(self.open_register)
+        finish_auth_layout(layout,self.status_label,self.btn_login,self.btn_register)
 
     def login_user(self):
         if self.thread and self.thread.isRunning():

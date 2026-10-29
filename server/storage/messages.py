@@ -63,3 +63,20 @@ class MessageRepository:
                 (current_user,),
             )
             return {row[0]: int(row[1]) for row in cur.fetchall()}
+
+    def get_dialog_summaries(self, current_user):
+        """Return only the authenticated user's latest message for each peer."""
+        with database_connection(self.database) as conn:
+            rows = conn.execute(
+                """WITH owned AS (
+                       SELECT to_user AS peer, id FROM messages WHERE from_user=?
+                       UNION ALL
+                       SELECT from_user AS peer, id FROM messages WHERE to_user=?
+                   ), latest AS (SELECT peer, MAX(id) AS id FROM owned GROUP BY peer)
+                   SELECT latest.peer, m.from_user, substr(m.text,1,160), m.timestamp
+                   FROM latest JOIN messages m ON m.id=latest.id""",
+                (current_user, current_user),
+            )
+            return {peer: {"text": text, "timestamp": timestamp,
+                           "outgoing": sender == current_user}
+                    for peer, sender, text, timestamp in rows}

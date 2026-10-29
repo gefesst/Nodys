@@ -79,7 +79,13 @@ class VoiceClient:
             raise
 
     def _start_audio(self):
+        from config import load_config
+        from audio.devices import resolve_device
+        preferences=load_config()
+        input_device=resolve_device(sd,preferences.get("audio_input_device"),"input")
+        output_device=resolve_device(sd,preferences.get("audio_output_device"),"output")
         self.in_stream = sd.InputStream(
+            device=input_device,
             samplerate=self.sample_rate,
             channels=self.channels,
             dtype=self.dtype,
@@ -87,6 +93,7 @@ class VoiceClient:
             callback=self._capture_cb
         )
         self.out_stream = sd.OutputStream(
+            device=output_device,
             samplerate=self.sample_rate,
             channels=self.channels,
             dtype=self.dtype,

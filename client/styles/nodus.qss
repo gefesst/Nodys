@@ -9,7 +9,7 @@ QLabel#Muted,QLabel#FriendItemSub,QLabel#AddPanelHint,QLabel#ChannelAccessHint,Q
 QLineEdit,QPlainTextEdit,QTextEdit {background:@BACKGROUND@;border:1px solid @EDGE@;border-radius:10px;padding:11px 14px;selection-background-color:#405A7C;min-height:20px;}
 QLineEdit:focus,QPlainTextEdit:focus,QTextEdit:focus {border-color:@ACC@;}
 QLineEdit:disabled,QPlainTextEdit:disabled {color:@MUT@;}
-QPushButton {background:#28364A;border:1px solid @EDGE@;border-radius:10px;padding:10px 16px;font-weight:600;min-height:20px;}
+QPushButton {background:#28364A;border:1px solid @EDGE@;border-radius:10px;padding:10px 16px;font-weight:600;min-height:18px;}
 QPushButton:hover {background:#33465F;border-color:#536D92;}
 QPushButton:pressed {background:#354866;}
 QPushButton:focus {border:1px solid @ACC@;}
@@ -102,3 +102,10 @@ QLabel#ChannelVoiceMemberMeta {font-size:12px;color:@SUB@;}
 QLabel#FriendsTitle {font-size:28px;font-weight:700;}
 QLabel#PageTitle {font-size:26px;font-weight:700;}
 QFrame#FriendItem {border-radius:12px;}
+
+QDialog#OverlayDialog {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
+
+QLabel#FieldTitle {font-size:13px;}
+
+QFrame#ChannelMemberItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
+QPushButton#ChannelSettingsTab:checked {background:@ACC@;color:#142039;border-color:@ACC@;}

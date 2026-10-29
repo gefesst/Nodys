@@ -33,7 +33,7 @@ class AvatarLabel(QLabel):
             pix = self._make_initials_avatar(nickname or login or "U")
 
         # Делаем внутреннее изображение немного меньше, чтобы обводка была хорошо видна
-        inner = max(8, self.size_px - 2)
+        inner = max(8, self.size_px)
         self.setPixmap(self._to_circle(pix, inner))
 
     def set_online(self, online: bool | None, ring_color: str | None = None):
@@ -178,5 +178,5 @@ class AvatarLabel(QLabel):
         if not parts:
             return "U"
         if len(parts) == 1:
-            return parts[0][0].upper()
+            return parts[0][:2].upper()
         return (parts[0][0] + parts[1][0]).upper()

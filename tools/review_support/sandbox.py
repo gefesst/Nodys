@@ -25,17 +25,19 @@ class Sandbox:
         server.init_chat_db()
         self.tokens = {}
         self.people = [
-            ("proto_alexey", "Алексей Морозов"),
-            ("proto_anna", "Анна Смирнова"),
-            ("proto_maria", "Мария Ким"),
+            ("alexey", "Алексей Морозов"),
+            ("anna", "Анна Смирнова"),
+            ("maria", "Мария Ким"),
+            ("sergey", "Сергей Волков"),
         ]
-        self.me = "proto_andrey"
+        self.me = "andrey"
         for login, name in [(self.me, "Андрей")] + self.people:
             assert server.add_user(login, secrets.token_urlsafe(20), name, "")
             self.tokens[login] = server.create_session(login)[0]
             if login != self.me:
                 server.send_friend_request(self.me, login)
                 server.accept_friend_request(self.me, login)
+        server.set_session_offline(self.tokens["sergey"])
         texts = [
             "Привет! Собрал всё в одном месте.\nПосмотри, когда будет минутка.",
             "Сегодня проверим каналы и звонки?",
@@ -50,7 +52,7 @@ class Sandbox:
                     peer if i in (2, 4) else self.me,
                     t,
                 )
-        self.channel = server.create_channel(self.me, "Локальный аудиотест")
+        self.channel = server.create_channel(self.me, "Свои люди")
         server.join_channel_by_code(self.people[0][0], self.channel["code"])
         self.port = self.free_port()
         self.voice_port = self.free_port(socket.SOCK_DGRAM)

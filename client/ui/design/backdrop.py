@@ -10,6 +10,15 @@ def install(window):
         window.backdrop_description = "Offscreen: системные эффекты не проверяются"
         return
     window.backdrop_description = "Фон 96%; системное размытие недоступно"
+    existing = getattr(window, "_native_backdrop", None)
+    if existing is not None:
+        existing.setHidden_(not bool(window.property("translucent_background")))
+        window.backdrop_description = (
+            "macOS: NSVisualEffectView за фоном 96%"
+            if window.property("translucent_background")
+            else "Непрозрачный фон"
+        )
+        return
     if not window.property("translucent_background"):
         window.backdrop_description = "Непрозрачный фон"
         return
@@ -34,6 +43,7 @@ def install(window):
             parent.addSubview_positioned_relativeTo_(effect, -1, view)
             window._native_backdrop = effect
             from .window_shape import apply
+
             apply(window)
             window.backdrop_description = "macOS: NSVisualEffectView за фоном 96%"
         elif sys.platform == "win32":

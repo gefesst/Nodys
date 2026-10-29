@@ -620,7 +620,13 @@ class MainWindow(QWidget):
 
     def open_quick_switch(self):
         from ui.design.quick_switch import QuickSwitch
+        if getattr(self, "quick_switch", None) is not None:
+            self.quick_switch.raise_()
+            self.quick_switch.query.setFocus()
+            return
         self.quick_switch = QuickSwitch(self)
+        self.quick_switch.setAttribute(Qt.WA_DeleteOnClose)
+        self.quick_switch.finished.connect(lambda _: setattr(self,"quick_switch",None))
         self.quick_switch.show()
 
     def show_settings(self):

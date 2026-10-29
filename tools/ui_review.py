@@ -210,16 +210,28 @@ def main():
             ch.open_create_page()
             self.wait()
             yield
+            ch.create_name_input.setText("Свои люди")
             self.shot("15-channel-create")
             ch.open_join_page()
             self.wait()
             yield
+            ch.join_code_input.setText("A1B2C3D4")
             self.shot("16-channel-join")
             ch.open_channel(ch.channels[0])
             ch.open_channel_settings()
             self.wait(0.6)
             yield
             self.shot("17-channel-settings")
+            old_code = ch.settings_code_lbl.text()
+            ch.ask_regenerate_channel_code()
+            self.wait(); yield
+            self.shot("17b-channel-regenerate-confirm")
+            ch._confirmation.reject()
+            assert ch.settings_code_lbl.text() == old_code
+            ch.ask_delete_channel()
+            self.wait(); yield
+            self.shot("17c-channel-delete-confirm")
+            ch.hide_settings_confirm()
             ch.settings_scroll.verticalScrollBar().setValue(
                 ch.settings_scroll.verticalScrollBar().maximum()
             )

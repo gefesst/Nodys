@@ -251,6 +251,50 @@ class DesignGeometryTests(unittest.TestCase):
         callbacks[0]({'status':'ok','channels':[{'id':1,'name':'Outdated'}]})
         self.assertEqual(page.active_channel['name'],'Current')
 
+    def test_overlay_stays_inside_host_and_releases_shade_on_escape(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit
+        from ui.design.overlay import OverlayDialog
+        host = QWidget(); host.resize(1120,620);host.show()
+        dialog = OverlayDialog(host,520,420)
+        layout = QVBoxLayout(dialog);field = QLineEdit();layout.addWidget(field)
+        dialog.open();self.app.processEvents()
+        self.assertFalse(dialog.isWindow())
+        self.assertTrue(dialog.shade.isVisible())
+        for width,height in ((1120,620),(1440,900)):
+            host.resize(width,height);self.app.processEvents()
+            self.assertTrue(host.rect().contains(dialog.geometry()))
+            self.assertEqual(dialog.shade.geometry(),host.rect())
+        for _ in range(5):
+            QTest.keyClick(field,Qt.Key_Tab);self.app.processEvents()
+            self.assertTrue(dialog.isAncestorOf(self.app.focusWidget()))
+        QTest.keyClick(field,Qt.Key_Escape);self.app.processEvents()
+        self.assertFalse(dialog.isVisible())
+        self.assertFalse(dialog.shade.isVisible())
+        dialog.open();self.app.processEvents();dialog.accept()
+        self.assertFalse(dialog.shade.isVisible())
+        host.close()
+
+    def test_confirmation_cancel_is_safe_and_accept_runs_once(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from PySide6.QtWidgets import QWidget, QPushButton
+        from ui.design.dialogs import confirm
+        host = QWidget(); host.resize(1120,620); host.show()
+        calls = []
+        dialog = confirm(host, "Удалить канал?", "Проверка", "Удалить", lambda: calls.append(1), danger=True)
+        self.app.processEvents()
+        self.assertTrue(host.rect().contains(dialog.geometry()))
+        QTest.keyClick(dialog, Qt.Key_Escape)
+        self.assertEqual(calls, [])
+        dialog = confirm(host, "Удалить канал?", "Проверка", "Удалить", lambda: calls.append(1), danger=True)
+        button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Удалить")
+        QTest.mouseClick(button, Qt.LeftButton)
+        self.assertEqual(calls, [1])
+        self.assertFalse(dialog.shade.isVisible())
+        host.close()
+
     def test_quick_switch_repeated_filtering_and_target_selection(self):
         from PySide6.QtWidgets import QWidget
         from unittest.mock import Mock

@@ -669,13 +669,25 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         friend=next((f for f in self._friends_data if f['login']==login),None)
         if not friend:return
         from ui.design.widgets import Button
-        dialog=QDialog(self);dialog.setWindowTitle('Профиль');dialog.setMinimumWidth(340);dialog.setAttribute(Qt.WA_DeleteOnClose)
-        layout=QVBoxLayout(dialog);layout.setContentsMargins(28,28,28,28);layout.setSpacing(16)
-        avatar=AvatarLabel(size=72);avatar.set_avatar(friend.get('avatar',''),login,friend.get('nickname',''));layout.addWidget(avatar,0,Qt.AlignHCenter)
-        name=QLabel(friend.get('nickname',login));name.setObjectName('PageTitle');layout.addWidget(name)
-        layout.addWidget(QLabel('@'+login+' · '+('В сети' if friend.get('online') else 'Не в сети')))
-        for text,icon,action in [('Написать','chat',lambda:self.open_friend_chat(login)),('Позвонить','phone',lambda:self.call_friend(login))]:
-            button=Button(text,icon);button.clicked.connect(lambda checked=False,action=action:(dialog.close(),action()));layout.addWidget(button)
+        from ui.design.overlay import OverlayDialog
+        dialog=OverlayDialog(self,356,390,anchor="right",dim=False)
+        dialog.setWindowTitle('Профиль');dialog.setAttribute(Qt.WA_DeleteOnClose)
+        layout=QVBoxLayout(dialog);layout.setContentsMargins(30,29,30,24);layout.setSpacing(0)
+        avatar=AvatarLabel(size=80);avatar.set_avatar(friend.get('avatar',''),login,friend.get('nickname',''))
+        avatar.set_online(friend.get('online',False));layout.addWidget(avatar,0,Qt.AlignHCenter)
+        layout.addSpacing(15)
+        name=QLabel(friend.get('nickname',login));name.setObjectName('ChannelFormTitle')
+        name.setAlignment(Qt.AlignCenter);name.setFixedHeight(24);layout.addWidget(name)
+        layout.addSpacing(13)
+        status=QLabel('@'+login+' · '+('В сети' if friend.get('online') else 'Не в сети'))
+        status.setAlignment(Qt.AlignCenter);status.setFixedHeight(17)
+        status.setStyleSheet('font-size:13px;color:#67D5AD;' if friend.get('online') else 'font-size:13px;color:#ACB9CC;')
+        layout.addWidget(status);layout.addSpacing(37)
+        for text,icon,action in [('Написать',None,lambda:self.open_friend_chat(login)),('Позвонить',None,lambda:self.call_friend(login))]:
+            button=Button(text,icon,primary=text=='Написать');button.setFixedHeight(40)
+            button.clicked.connect(lambda checked=False,action=action:(dialog.close(),action()));layout.addWidget(button)
+            layout.addSpacing(16)
+        layout.addStretch()
         dialog.show();self._mini_profile=dialog
 
     def confirm_and_remove_friend(self, friend_login: str):

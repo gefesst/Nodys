@@ -169,17 +169,18 @@ class ChannelMemberItem(QFrame):
         self.member = member or {}
 
         self.setObjectName("ChannelMemberItem")
+        self.setFixedHeight(90)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(8)
+        lay.setContentsMargins(22, 20, 22, 20)
+        lay.setSpacing(18)
 
         login = self.member.get("login", "")
         nickname = self.member.get("nickname", login or "Пользователь")
         role = (self.member.get("role") or "member").strip().lower()
         online = bool(self.member.get("online", False))
 
-        avatar = AvatarLabel(size=38)
+        avatar = AvatarLabel(size=42)
         avatar.set_avatar(path=self.member.get("avatar", ""), login=login, nickname=nickname)
         avatar.set_online(online, ring_color="#2b2d31")
         lay.addWidget(avatar)
@@ -190,28 +191,25 @@ class ChannelMemberItem(QFrame):
 
         name_lbl = QLabel(nickname)
         name_lbl.setObjectName("ChannelMemberName")
+        name_lbl.setStyleSheet("font-size:16px;font-weight:600;")
+        name_lbl.setMinimumWidth(0)
+        name_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         text_col.addWidget(name_lbl)
 
-        state = "в сети" if online else "не в сети"
-        sub_lbl = QLabel(f"{login} · {state}")
+        role_name = {"owner":"Владелец", "admin":"Администратор", "moderator":"Модератор", "member":"Участник"}.get(role, "Участник")
+        sub_lbl = QLabel(role_name)
         sub_lbl.setObjectName("ChannelMemberSub")
+        sub_lbl.setStyleSheet("font-size:13px;color:#91ADFF;")
         text_col.addWidget(sub_lbl)
 
         lay.addLayout(text_col, 1)
 
         if role == "owner":
-            role_text = "ВЛАДЕЛЕЦ"
-        elif role == "admin":
-            role_text = "АДМИН"
-        elif role == "moderator":
-            role_text = "МОДЕРАТОР"
-        else:
-            role_text = "УЧАСТНИК"
-
-        role_lbl = QLabel(role_text)
-        role_lbl.setObjectName("ChannelMemberRoleBadge")
-        role_lbl.setProperty("role", role)
-        lay.addWidget(role_lbl)
+            owner = QPushButton("Владелец")
+            owner.setObjectName("ChannelSecondaryButton")
+            owner.setFixedSize(168,40)
+            owner.setEnabled(False)
+            lay.addWidget(owner)
 
         can_assign = bool(permissions.get("assign_roles", False))
         can_manage = bool(permissions.get("manage_members", False))
@@ -236,7 +234,8 @@ class ChannelMemberItem(QFrame):
                     role_actions.append(("Сделать участником", "member"))
 
             if role_actions:
-                btn = QPushButton('Изменить роль ▾')
+                btn = QPushButton('Сменить роль')
+                btn.setFixedSize(168,40)
                 btn.setObjectName('ChannelTinyActionButton')
                 menu = QMenu(btn)
                 for txt, new_role in role_actions:
@@ -245,9 +244,13 @@ class ChannelMemberItem(QFrame):
                 lay.addWidget(btn)
 
         if can_manage and role != "owner" and login and login != current_login:
-            remove_btn = QPushButton("Удалить")
+            remove_btn = QPushButton("···")
+            remove_btn.setFixedSize(40,40)
+            remove_btn.setAccessibleName("Действия с участником")
             remove_btn.setObjectName("ChannelTinyDangerButton")
-            remove_btn.clicked.connect(partial(on_remove, login))
+            remove_menu = QMenu(remove_btn)
+            remove_menu.addAction("Удалить из канала", partial(on_remove, login))
+            remove_btn.setMenu(remove_menu)
             lay.addWidget(remove_btn)
 
 
@@ -820,286 +823,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.main_stack.addWidget(self.channel_page)
 
         # Settings page (stage 2)
-        self.settings_page = QWidget()
-        settings_outer = QVBoxLayout(self.settings_page)
-        settings_outer.setContentsMargins(0, 0, 0, 0)
-        self.settings_scroll = QScrollArea()
-        self.settings_scroll.setWidgetResizable(True)
-        self.settings_scroll.setFrameShape(QFrame.NoFrame)
-        settings_content = QWidget()
-        self.settings_scroll.setWidget(settings_content)
-        settings_outer.addWidget(self.settings_scroll)
-        sp_root = QVBoxLayout(settings_content)
-        sp_root.setSizeConstraint(QVBoxLayout.SetMinimumSize)
-        sp_root.setContentsMargins(0, 0, 0, 0)
-        sp_root.setSpacing(10)
-
-        sp_top = QFrame()
-        sp_top.setObjectName("ChannelSettingsTopBar")
-        sp_top_l = QHBoxLayout(sp_top)
-        sp_top_l.setContentsMargins(12, 8, 12, 8)
-        sp_top_l.setSpacing(8)
-
-        self.settings_back_btn = QPushButton("← Назад")
-        self.settings_back_btn.setObjectName("ChannelSecondaryButton")
-        self.settings_back_btn.clicked.connect(self.close_channel_settings)
-        sp_top_l.addWidget(self.settings_back_btn, 0, Qt.AlignLeft)
-
-        self.settings_title_lbl = QLabel("Настройки канала")
-        self.settings_title_lbl.setObjectName("ChannelOpenTitle")
-        self.settings_title_lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.settings_title_lbl.setWordWrap(True)
-        sp_top_l.addWidget(self.settings_title_lbl, 1)
-
-        sp_top_l.addSpacing(10)
-        sp_root.addWidget(sp_top)
-
-        # general settings
-        general = QFrame()
-        general.setObjectName("FlatForm")
-        self.settings_general_card = general
-        general.setMaximumWidth(840)
-        g_l = QVBoxLayout(general)
-        g_l.setContentsMargins(12, 12, 12, 12)
-        g_l.setSpacing(8)
-
-        g_title = QLabel("Основное")
-        g_title.setObjectName("ChannelSettingsSectionTitle")
-        g_l.addWidget(g_title)
-
-        self.settings_avatar_row = QHBoxLayout()
-        self.settings_avatar_row.setSpacing(10)
-
-        self.settings_avatar_preview = AvatarLabel(size=66)
-        self.settings_avatar_preview.set_avatar(path="", login="channel", nickname="Канал")
-        self.settings_avatar_preview.set_online(None)
-        self.settings_avatar_row.addWidget(self.settings_avatar_preview, 0, Qt.AlignTop)
-
-        self.settings_controls_col = QVBoxLayout()
-        self.settings_controls_col.setSpacing(8)
-
-        self.settings_buttons_grid = QGridLayout()
-        self.settings_buttons_grid.setContentsMargins(0, 0, 0, 0)
-        self.settings_buttons_grid.setHorizontalSpacing(8)
-        self.settings_buttons_grid.setVerticalSpacing(8)
-
-        self.settings_pick_avatar_btn = QPushButton("Сменить аватар")
-        self.settings_pick_avatar_btn.setObjectName("ChannelSecondaryButton")
-        self.settings_pick_avatar_btn.clicked.connect(self.pick_settings_avatar)
-        self.settings_buttons_grid.addWidget(self.settings_pick_avatar_btn, 0, 0)
-
-        self.settings_copy_code_btn = QPushButton("Скопировать код")
-        self.settings_copy_code_btn.setObjectName("ChannelSecondaryButton")
-        self.settings_copy_code_btn.clicked.connect(self.copy_channel_code)
-        self.settings_buttons_grid.addWidget(self.settings_copy_code_btn, 0, 1)
-
-        self.settings_regen_code_btn = QPushButton("Обновить код")
-        self.settings_regen_code_btn.setObjectName("ChannelSecondaryButton")
-        self.settings_regen_code_btn.clicked.connect(self.regenerate_channel_code)
-        self.settings_buttons_grid.addWidget(self.settings_regen_code_btn, 0, 2)
-        self.settings_buttons_grid.setColumnStretch(3, 1)
-
-        self.settings_controls_col.addLayout(self.settings_buttons_grid)
-
-        self.settings_name_input = QLineEdit()
-        self.settings_name_input.setObjectName("ChannelInput")
-        self.settings_name_input.setPlaceholderText("Название канала")
-        self.settings_name_input.setMinimumHeight(36)
-        self.settings_controls_col.addWidget(self.settings_name_input)
-
-        self.settings_avatar_row.addLayout(self.settings_controls_col, 1)
-        g_l.addLayout(self.settings_avatar_row)
-
-        code_row = QHBoxLayout()
-        code_caption = QLabel("Код приглашения:")
-        code_caption.setObjectName("ChannelFormHint")
-        code_row.addWidget(code_caption)
-
-        self.settings_code_lbl = QLabel("—")
-        self.settings_code_lbl.setObjectName("ChannelSettingsCode")
-        code_row.addWidget(self.settings_code_lbl)
-        code_row.addStretch()
-        g_l.addLayout(code_row)
-
-        self.settings_invite_block = QWidget()
-        self.settings_invite_block.setObjectName("ChannelInviteBlock")
-        self.settings_invite_row = QHBoxLayout(self.settings_invite_block)
-        self.settings_invite_row.setContentsMargins(0, 2, 0, 0)
-        self.settings_invite_row.setSpacing(8)
-
-        self.settings_invite_caption = QLabel("Пригласить по логину:")
-        self.settings_invite_caption.setObjectName("ChannelFormHint")
-        self.settings_invite_row.addWidget(self.settings_invite_caption)
-
-        self.settings_invite_login_input = QLineEdit()
-        self.settings_invite_login_input.setObjectName("ChannelInput")
-        self.settings_invite_login_input.setPlaceholderText("Логин пользователя")
-        self.settings_invite_login_input.returnPressed.connect(self.send_channel_invite)
-        self.settings_invite_row.addWidget(self.settings_invite_login_input, 1)
-
-        self.settings_invite_btn = QPushButton("Пригласить")
-        self.settings_invite_btn.setObjectName("ChannelSecondaryButton")
-        self.settings_invite_btn.setMinimumWidth(112)
-        self.settings_invite_btn.clicked.connect(self.send_channel_invite)
-        self.settings_invite_row.addWidget(self.settings_invite_btn)
-
-        g_l.addWidget(self.settings_invite_block)
-
-        self.settings_invite_status = QLabel("")
-        self.settings_invite_status.setObjectName("ChannelFormHint")
-        self.settings_invite_status.setVisible(False)
-        g_l.addWidget(self.settings_invite_status)
-
-        g_actions = QHBoxLayout()
-        g_actions.setContentsMargins(0, 2, 0, 0)
-        g_actions.addStretch()
-        self.settings_save_btn = QPushButton("Сохранить")
-        self.settings_save_btn.setObjectName("ChannelPrimaryButton")
-        self.settings_save_btn.clicked.connect(self.save_channel_settings)
-        g_actions.addWidget(self.settings_save_btn)
-        install_opacity_feedback(self.settings_save_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-        g_l.addLayout(g_actions)
-
-        sp_root.addWidget(general)
-
-        access_card = QFrame()
-        access_card.setObjectName("FlatForm")
-        access_card.setMaximumWidth(840)
-        self.settings_access_card = access_card
-        a_l = QVBoxLayout(access_card)
-        a_l.setContentsMargins(12, 12, 12, 12)
-        a_l.setSpacing(8)
-
-        a_title = QLabel("Права доступа")
-        a_title.setObjectName("ChannelSettingsSectionTitle")
-        a_l.addWidget(a_title)
-
-        self.settings_text_perm_row = QHBoxLayout()
-        t_lbl = QLabel("Кто может писать в текстовый канал:")
-        t_lbl.setObjectName("ChannelAccessLabel")
-        t_lbl.setWordWrap(True)
-        self.settings_text_perm_row.addWidget(t_lbl, 1)
-
-        self.settings_text_perm_combo = QComboBox()
-        self.settings_text_perm_combo.setObjectName("ChannelAccessCombo")
-        self.settings_text_perm_combo.addItem("Все участники", "member")
-        self.settings_text_perm_combo.addItem("Только модераторы и выше", "moderator")
-        self.settings_text_perm_combo.addItem("Только админы", "admin")
-        self.settings_text_perm_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.settings_text_perm_row.addWidget(self.settings_text_perm_combo)
-        a_l.addLayout(self.settings_text_perm_row)
-
-        self.settings_voice_perm_row = QHBoxLayout()
-        v_lbl = QLabel("Кто может входить в голосовой:")
-        v_lbl.setObjectName("ChannelAccessLabel")
-        v_lbl.setWordWrap(True)
-        self.settings_voice_perm_row.addWidget(v_lbl, 1)
-
-        self.settings_voice_perm_combo = QComboBox()
-        self.settings_voice_perm_combo.setObjectName("ChannelAccessCombo")
-        self.settings_voice_perm_combo.addItem("Все участники", "member")
-        self.settings_voice_perm_combo.addItem("Только модераторы и выше", "moderator")
-        self.settings_voice_perm_combo.addItem("Только админы", "admin")
-        self.settings_voice_perm_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.settings_voice_perm_row.addWidget(self.settings_voice_perm_combo)
-        a_l.addLayout(self.settings_voice_perm_row)
-
-        a_hint = QLabel("Владелец канала имеет полный доступ независимо от настроек")
-        a_hint.setObjectName("ChannelAccessHint")
-        a_hint.setWordWrap(True)
-        a_l.addWidget(a_hint)
-
-        sp_root.addWidget(access_card)
-
-        members_card = QFrame()
-        members_card.setObjectName("ChannelSettingsCard")
-        self.settings_members_card = members_card
-        m_l = QVBoxLayout(members_card)
-        m_l.setContentsMargins(12, 12, 12, 12)
-        m_l.setSpacing(8)
-
-        m_title = QLabel("Участники")
-        m_title.setObjectName("ChannelSettingsSectionTitle")
-        m_l.addWidget(m_title)
-
-        self.members_scroll = QScrollArea()
-        self.members_scroll.setObjectName("ChannelMembersScroll")
-        self.members_scroll.setMinimumHeight(180)
-        self.members_scroll.setWidgetResizable(True)
-
-        self.members_container = QWidget()
-        self.members_layout = QVBoxLayout(self.members_container)
-        self.members_layout.setContentsMargins(0, 0, 0, 0)
-        self.members_layout.setSpacing(6)
-        self.members_layout.addStretch()
-
-        self.members_scroll.setWidget(self.members_container)
-        m_l.addWidget(self.members_scroll, 1)
-
-        danger_row = QHBoxLayout()
-        danger_row.addStretch()
-
-        self.leave_channel_btn = QPushButton("Выйти из канала")
-        self.leave_channel_btn.setObjectName("ChannelTinyDangerButton")
-        self.leave_channel_btn.clicked.connect(self.ask_leave_channel)
-        danger_row.addWidget(self.leave_channel_btn)
-        install_opacity_feedback(self.leave_channel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        self.delete_channel_btn = QPushButton("Удалить канал")
-        self.delete_channel_btn.setObjectName("ChannelTinyDangerButton")
-        self.delete_channel_btn.clicked.connect(self.ask_delete_channel)
-        danger_row.addWidget(self.delete_channel_btn)
-        install_opacity_feedback(self.delete_channel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        m_l.addLayout(danger_row)
-
-        sp_root.addWidget(members_card)
-
-        self.settings_confirm = QFrame()
-        self.settings_confirm.setObjectName("ChannelInlineConfirm")
-        self.settings_confirm.setVisible(False)
-        c_l = QHBoxLayout(self.settings_confirm)
-        c_l.setContentsMargins(12, 8, 12, 8)
-        c_l.setSpacing(8)
-
-        self.settings_confirm_text = QLabel("")
-        self.settings_confirm_text.setObjectName("ChannelInlineConfirmText")
-        self.settings_confirm_text.setWordWrap(True)
-        c_l.addWidget(self.settings_confirm_text, 1)
-
-        self.settings_confirm_cancel = QPushButton("Отмена")
-        self.settings_confirm_cancel.setObjectName("ChannelSecondaryButton")
-        self.settings_confirm_cancel.clicked.connect(self.hide_settings_confirm)
-        c_l.addWidget(self.settings_confirm_cancel)
-        install_opacity_feedback(self.settings_confirm_cancel, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        self.settings_confirm_apply = QPushButton("Подтвердить")
-        self.settings_confirm_apply.setObjectName("ChannelTinyDangerButton")
-        self.settings_confirm_apply.clicked.connect(self.apply_settings_confirm)
-        c_l.addWidget(self.settings_confirm_apply)
-        install_opacity_feedback(self.settings_confirm_apply, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        sp_root.addWidget(self.settings_confirm)
-        sp_root.addStretch()
-
-        sections = QHBoxLayout()
-        self.settings_sections = {}
-        for key, label in [('general','Основное'),('access','Разрешения'),('members','Участники и роли')]:
-            button = QPushButton(label)
-            button.setCheckable(True)
-            button.clicked.connect(lambda checked=False, key=key: self.show_settings_section(key))
-            self.settings_sections[key] = button
-            sections.addWidget(button)
-        sp_root.insertLayout(1, sections)
-        g_actions.removeWidget(self.settings_save_btn)
-        sp_root.insertWidget(sp_root.count()-1, self.settings_save_btn, 0, Qt.AlignLeft)
-        self.show_settings_section('general')
-
-        self._settings_revision = 0
-        self.settings_name_input.textEdited.connect(self._mark_settings_edited)
-        self.settings_text_perm_combo.activated.connect(self._mark_settings_edited)
-        self.settings_voice_perm_combo.activated.connect(self._mark_settings_edited)
-        self.main_stack.addWidget(self.settings_page)
+        from ui.design.channel_settings import build as build_settings
+        build_settings(self)
 
         root.addWidget(right, 3)
 
@@ -1344,88 +1069,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if getattr(self, "_toast", None):
             self._toast.show(text, msec)
 
-    def _rebuild_settings_buttons_grid(self, stacked: bool):
-        if not getattr(self, "settings_buttons_grid", None):
-            return
-
-        while self.settings_buttons_grid.count():
-            item = self.settings_buttons_grid.takeAt(0)
-            # widgets remain owned by parent; no extra handling required
-            _ = item
-
-        buttons = [
-            self.settings_pick_avatar_btn,
-            self.settings_copy_code_btn,
-            self.settings_regen_code_btn,
-        ]
-        for btn in buttons:
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        if stacked:
-            self.settings_buttons_grid.addWidget(self.settings_pick_avatar_btn, 0, 0, 1, 2)
-            self.settings_buttons_grid.addWidget(self.settings_copy_code_btn, 1, 0)
-            self.settings_buttons_grid.addWidget(self.settings_regen_code_btn, 1, 1)
-            self.settings_buttons_grid.setColumnStretch(0, 1)
-            self.settings_buttons_grid.setColumnStretch(1, 1)
-            self.settings_buttons_grid.setColumnStretch(2, 0)
-            self.settings_buttons_grid.setColumnStretch(3, 0)
-        else:
-            self.settings_buttons_grid.addWidget(self.settings_pick_avatar_btn, 0, 0)
-            self.settings_buttons_grid.addWidget(self.settings_copy_code_btn, 0, 1)
-            self.settings_buttons_grid.addWidget(self.settings_regen_code_btn, 0, 2)
-            self.settings_buttons_grid.setColumnStretch(0, 0)
-            self.settings_buttons_grid.setColumnStretch(1, 0)
-            self.settings_buttons_grid.setColumnStretch(2, 0)
-            self.settings_buttons_grid.setColumnStretch(3, 1)
-
-    def _set_box_layout_direction(self, layout, direction):
-        if isinstance(layout, QBoxLayout):
-            if layout.direction() != direction:
-                layout.setDirection(direction)
-
     def _apply_settings_responsive_layout(self, force: bool = False):
-        if not getattr(self, "settings_page", None):
-            return
-
-        area_w = self.main_stack.width() if getattr(self, "main_stack", None) else self.width()
-        area_w = max(0, int(area_w or self.width() or 0))
-
-        narrow = area_w < 620
-        stacked_buttons = area_w < 620
-        stacked_rows = area_w < 620
-        mode = (narrow, stacked_buttons, stacked_rows)
-
-        if (not force) and mode == getattr(self, "_settings_layout_mode", None):
-            return
-        self._settings_layout_mode = mode
-
-        self._set_box_layout_direction(
-            self.settings_avatar_row,
-            QBoxLayout.TopToBottom if narrow else QBoxLayout.LeftToRight,
-        )
-        self.settings_avatar_row.setSpacing(8 if narrow else 10)
-
-        self._rebuild_settings_buttons_grid(stacked=stacked_buttons)
-
-        self._set_box_layout_direction(
-            self.settings_invite_row,
-            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
-        )
-        self.settings_invite_btn.setMinimumWidth(0 if stacked_rows else 112)
-
-        self._set_box_layout_direction(
-            self.settings_text_perm_row,
-            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
-        )
-        self._set_box_layout_direction(
-            self.settings_voice_perm_row,
-            QBoxLayout.TopToBottom if stacked_rows else QBoxLayout.LeftToRight,
-        )
-
-        self.settings_text_perm_combo.setMinimumWidth(0 if stacked_rows else 210)
-        self.settings_voice_perm_combo.setMinimumWidth(0 if stacked_rows else 210)
-
-        self.settings_invite_caption.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        # Fields shrink to the viewport width; vertical overflow uses settings_scroll.
+        pass
 
     def _set_invites_dropdown_open(self, opened: bool):
         opened = bool(opened)
@@ -2331,6 +1977,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 self.settings_save_btn.setEnabled(can_manage)
                 self.settings_copy_code_btn.setEnabled(can_invite or can_manage)
                 self.settings_text_perm_combo.setEnabled(can_manage)
+                self.settings_access_save.setEnabled(can_manage)
+                for radio in self.settings_text_radios:
+                    radio.setEnabled(can_manage)
                 self.settings_voice_perm_combo.setEnabled(can_manage)
                 self.settings_invite_login_input.setEnabled(can_invite)
                 self.settings_invite_btn.setEnabled(can_invite and (not self._sending_channel_invite))
@@ -2481,6 +2130,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.start_request(payload, cb)
 
+    def ask_regenerate_channel_code(self):
+        if not self._settings_permissions.get("manage_channel", False):
+            return
+        from ui.design.dialogs import confirm
+        confirm(self, "Обновить код приглашения?",
+                "Прежний код перестанет работать.\nОтправьте новый код тем, кого хотите пригласить.",
+                "Обновить", self.regenerate_channel_code)
+
     def regenerate_channel_code(self):
         if not self._alive or not self.active_channel:
             return
@@ -2560,11 +2217,21 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             "payload": payload or {},
         }
         self.settings_confirm_text.setText(text or "Подтвердите действие")
-        self.settings_confirm.setVisible(True)
+        from ui.design.dialogs import confirm
+        titles = {"delete_channel": "Удалить канал?", "leave_channel": "Выйти из канала?", "remove_member": "Удалить участника?"}
+        labels = {"delete_channel": "Удалить", "leave_channel": "Выйти", "remove_member": "Удалить"}
+        confirm(self, titles.get(action_type, "Подтвердите действие"), text,
+                labels.get(action_type, "Подтвердить"), self.apply_settings_confirm, danger=True)
 
     def hide_settings_confirm(self):
         self._confirm_action = None
         self.settings_confirm.setVisible(False)
+        dialog = getattr(self, "_confirmation", None)
+        if dialog is not None:
+            try:
+                dialog.reject()
+            except RuntimeError:
+                pass
 
     def apply_settings_confirm(self):
         action = self._confirm_action or {}

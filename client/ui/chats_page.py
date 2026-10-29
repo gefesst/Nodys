@@ -22,6 +22,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.active_friend = None
         self._loading_friends = self._loading_unread = False
         self.unread_counts = {}
+        self.dialog_summaries = {}
         self.unread_total = 0
         self.on_unread_total_changed = None
         self.setObjectName('ChatsPage')
@@ -60,7 +61,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         left.addWidget(self.list_status)
         root.addWidget(sidebar)
         body = QVBoxLayout()
-        body.setContentsMargins(24, 24, 24, 14)
+        body.setContentsMargins(24, 26, 24, 24)
         body.setSpacing(16)
         header = QHBoxLayout()
         header.setSpacing(14)
@@ -78,10 +79,16 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         labels.addWidget(self.presence)
         header.addLayout(labels, 1)
         self.call_button = Button('Позвонить', 'phone')
-        self.call_button.setFixedSize(148, 46)
+        self.call_button.setFixedSize(140, 40)
         self.call_button.setToolTip('Позвонить')
         self.call_button.clicked.connect(self.call_friend)
         header.addWidget(self.call_button)
+        self.info_button = Button("", "info")
+        self.info_button.setProperty("flat", True)
+        self.info_button.setFixedSize(32,40)
+        self.info_button.setAccessibleName("Профиль собеседника")
+        self.info_button.clicked.connect(self.show_peer_profile)
+        header.addWidget(self.info_button)
         body.addLayout(header)
         line = QFrame()
         line.setObjectName('Divider')
@@ -128,6 +135,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.active_friend = None
         self._loading_friends = self._loading_unread = False
         self.unread_counts = {}
+        self.dialog_summaries = {}
         self.unread_total = 0
         self.dialog_model.replace([])
         self.chat_header.setText('Выберите диалог')
@@ -154,9 +162,11 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         rows = sorted(response.get('friends', []), key=lambda r: (not r.get('online'), r.get('nickname', '').casefold()))
         for row in rows:
             row['unread_count'] = self.unread_counts.get(row['login'], 0)
+            row['summary'] = self.dialog_summaries.get(row['login'], {})
         self.dialog_model.replace(rows)
         self.filter_friends(self.search.text())
-        self.list_status.setText('Добавьте друзей, чтобы начать общение' if not rows else '')
+        self.list_status.setText('Добавьте друзей, чтобы начать общение' if not rows else
+                                 f'{len(rows)} диалогов · {sum(bool(r.get("online")) for r in rows)} в сети')
         if self.active_friend:
             found = next((r for r in rows if r['login'] == self.active_friend['login']), None)
             if found:
@@ -181,6 +191,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.avatar.set_avatar(friend.get('avatar', ''), friend['login'], friend.get('nickname', ''))
         self.avatar.set_online(friend.get('online', False))
         self.presence.setText('В сети' if friend.get('online') else 'Не в сети')
+        self.presence.setStyleSheet("color:#67D5AD;" if friend.get("online") else "color:#ACB9CC;")
 
     def open_chat(self, friend):
         if not friend or not friend.get('login'):
@@ -212,6 +223,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             self._loading_unread = False
             if response.get('status') == 'ok':
                 self.unread_counts = response.get('counts', {})
+                self.dialog_summaries = response.get('summaries', {})
                 self.unread_total = int(response.get('total', 0))
                 if self.on_unread_total_changed:
                     self.on_unread_total_changed(self.unread_total)
@@ -222,6 +234,10 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         peer = friend_login or (self.active_friend or {}).get('login')
         if peer:
             self.start_request(dict(action='mark_chat_read', friend_login=peer), lambda _: None)
+
+    def show_peer_profile(self):
+        if self.active_friend and self.host:
+            self.host.friends_page.show_mini_profile(self.active_friend["login"])
 
     def call_friend(self):
         if self.active_friend and self.host:

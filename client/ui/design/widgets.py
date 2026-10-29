@@ -271,16 +271,33 @@ class DialogDelegate(QStyledItemDelegate):
                     self._avatars.popitem(last=False)
             p.drawPixmap(r.left() + 14, r.top() + 18, self._avatars[key])
         p.setFont(font(14, True))
-        title = p.fontMetrics().elidedText(n, Qt.ElideRight, r.width() - 87)
+        title = p.fontMetrics().elidedText(n, Qt.ElideRight, r.width() - 126)
         draw_text(p, r.left() + 66, r.top() + 29, title, 14, FG, True)
-        draw_text(
-            p,
-            r.left() + 66,
-            r.top() + 51,
-            "В сети" if d.get("online") else "Не в сети",
-            12,
-            GREEN if d.get("online") else SUB,
+        summary = d.get("summary") or {}
+        preview = summary.get("text", "").replace("\n", " ")
+        if preview and summary.get("outgoing"):
+            preview = "Вы: " + preview
+        if not preview:
+            preview = "Начните переписку"
+        p.setFont(font(12))
+        preview = p.fontMetrics().elidedText(
+            preview, Qt.ElideRight, max(20, r.width() - 110)
         )
+        draw_text(p, r.left() + 66, r.top() + 51, preview, 12, SUB)
+        timestamp = summary.get("timestamp", "")
+        if timestamp:
+            from datetime import datetime
+
+            try:
+                date = datetime.fromisoformat(timestamp)
+                stamp = (
+                    date.strftime("%H:%M")
+                    if date.date() == datetime.now().date()
+                    else date.strftime("%d.%m")
+                )
+                draw_text(p, r.right() - 45, r.top() + 27, stamp, 10, SUB)
+            except (ValueError, TypeError):
+                pass
         count = int(d.get("unread_count", 0) or 0)
         if count:
             badge = QRectF(r.right() - 38, r.top() + 42, 28, 22)
@@ -294,10 +311,11 @@ class DialogDelegate(QStyledItemDelegate):
 
 
 class MessageDelegate(QStyledItemDelegate):
-    def __init__(self, view, me):
+    def __init__(self, view, me, own_name=None):
         super().__init__(view)
         self.view = view
         self.me = me
+        self.own_name = own_name or (lambda: me)
         self.cache = OrderedDict()
         self.paint_count = 0
         self.paint_ns = []
@@ -354,13 +372,14 @@ class MessageDelegate(QStyledItemDelegate):
             line.setPosition(
                 __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(0, y)
             )
-            y += max(22, line.height())
+            y += max(23, line.height())
             natural = max(natural, line.naturalTextWidth())
         layout.endLayout()
         bw = min(maxw, max(125, natural + 32))
-        bh = y + 39
-        head = (27 if m.group else 0) + (28 if m.divider else 0)
-        height = head + bh + (24 if m.group else 8)
+        bh = y + 40
+        head = (27 if m.divider else 41) if m.group else 0
+        head += 28 if m.divider else 0
+        height = head + bh + 8
         value = (layout, bw, bh, head, height)
         self.cache[key] = value
         if len(self.cache) > 600:
@@ -406,23 +425,32 @@ class MessageDelegate(QStyledItemDelegate):
         p.setClipRect(o.rect)
         if index.row() == self.fade_row:
             p.setOpacity(min(1, (time.perf_counter() - self.fade_start) / 0.16))
-        x = o.rect.x() + 76
+        x = o.rect.x() + 58
         y = o.rect.y() + head
-        date_offset = 28 if m.divider else 0
+        date_offset = 28 if m.divider else (14 if m.group else 0)
         if m.divider:
-            draw_text(
-                p,
-                self.view.viewport().width() / 2 - 30,
-                o.rect.y() + 18,
-                m.date,
-                11,
-                MUT,
+            p.setFont(font(11))
+            label_width = p.fontMetrics().horizontalAdvance(m.date)
+            center = self.view.viewport().width() / 2
+            p.setPen(QPen(QColor(EDGE), 1))
+            line_y = o.rect.y() + 14
+            p.drawLine(10, line_y, int(center - label_width / 2 - 16), line_y)
+            p.drawLine(
+                int(center + label_width / 2 + 16),
+                line_y,
+                self.view.viewport().width() - 10,
+                line_y,
             )
+            draw_text(p, center - label_width / 2, o.rect.y() + 18, m.date, 11, MUT)
         if m.group:
-            initials = "АН" if own else "".join(s[0] for s in m.name.split()[:2])
+            display_name = self.own_name() if own else m.name
+            parts = display_name.split()
+            initials = (
+                "".join(s[0] for s in parts[:2]) if len(parts) > 1 else display_name[:2]
+            )
             avatar(
                 p,
-                o.rect.x() + 27,
+                o.rect.x() + 10,
                 o.rect.y() + 1 + date_offset,
                 initials,
                 32,
@@ -475,14 +503,14 @@ class Composer(QPlainTextEdit):
         super().__init__(parent)
         self.setFont(font(15))
         self.setPlaceholderText("Сообщение…")
-        self.setMinimumHeight(48)
+        self.setMinimumHeight(59)
         self.setMaximumHeight(130)
         self.setTabChangesFocus(True)
         self.textChanged.connect(self.adjust_height)
 
     def adjust_height(self):
         lines = max(1, int(self.document().documentLayout().documentSize().height()))
-        self.setFixedHeight(min(130, max(48, lines * 23 + 20)))
+        self.setFixedHeight(59 if lines == 1 else min(130, lines * 23 + 53))
 
     def keyPressEvent(self, e):
         if (
@@ -521,7 +549,10 @@ class Toast(QWidget):
     def show_message(self, text):
         self.message = text
         self.setGeometry(
-            max(12, self.parent().width() - 600), self.parent().height() - 66, min(560,self.parent().width()-24), 46
+            max(12, self.parent().width() - 600),
+            self.parent().height() - 66,
+            min(560, self.parent().width() - 24),
+            46,
         )
         self.show()
         self.raise_()

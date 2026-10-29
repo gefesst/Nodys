@@ -19,6 +19,19 @@ class HistoryStorageTests(unittest.TestCase):
         self.server.init_chat_db()
         self.repo = self.server._messages_service()
 
+    def test_dialog_summaries_are_scoped_and_include_latest_direction(self):
+        self.repo.save_message('alice', 'bob', 'old')
+        self.repo.save_message('bob', 'alice', 'new reply')
+        self.repo.save_message('alice', 'carol', 'x' * 500)
+        self.repo.save_message('dave', 'eve', 'foreign private message')
+        rows = self.repo.get_dialog_summaries('alice')
+        self.assertEqual(set(rows), {'bob', 'carol'})
+        self.assertEqual(rows['bob']['text'], 'new reply')
+        self.assertFalse(rows['bob']['outgoing'])
+        self.assertTrue(rows['carol']['outgoing'])
+        self.assertEqual(len(rows['carol']['text']), 160)
+        self.assertEqual(self.repo.get_dialog_summaries('nobody'), {})
+
     def test_equal_timestamps_all_pages_both_directions_and_foreign_cursor(self):
         from storage.database import connect
 

@@ -13,17 +13,17 @@ class RegisterWindow(QWidget):
         self.thread = None
         self.setObjectName("RegisterPage")
 
-        from ui.design.auth import build_auth_layout, field
+        from ui.design.auth import build_auth_layout, field, finish_auth_layout
         from ui.design.widgets import Button
-        layout=build_auth_layout(self,'Создать аккаунт','Присоединяйтесь к своим людям')
+        layout=build_auth_layout(self,'Создать аккаунт','Ваше место для общения')
         self.login=field(layout,'Логин')
-        self.nickname=field(layout,'Имя в Nodus')
         self.password=field(layout,'Пароль',True)
+        self.nickname=field(layout,'Никнейм')
         self.password.returnPressed.connect(self.register_user)
-        self.status_label=QLabel();self.status_label.setObjectName('ErrorLabel');self.status_label.setWordWrap(True);layout.addWidget(self.status_label)
-        layout.addStretch()
-        self.btn_register=Button('Создать аккаунт',primary=True);self.btn_register.clicked.connect(self.register_user);layout.addWidget(self.btn_register)
-        self.btn_back=Button('Уже есть аккаунт? Войти');self.btn_back.clicked.connect(self.back_to_auth);layout.addWidget(self.btn_back)
+        self.status_label=QLabel();self.status_label.setObjectName('ErrorLabel');self.status_label.setWordWrap(True)
+        self.btn_register=Button('Создать аккаунт',primary=True);self.btn_register.clicked.connect(self.register_user)
+        self.btn_back=Button('Уже есть аккаунт? Войти');self.btn_back.clicked.connect(self.back_to_auth)
+        finish_auth_layout(layout,self.status_label,self.btn_register,self.btn_back,registration=True)
 
     def register_user(self):
         if self.thread and self.thread.isRunning():
