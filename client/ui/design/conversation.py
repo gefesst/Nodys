@@ -512,8 +512,6 @@ class Conversation(QWidget):
             self.send_status.setText(
                 "У вас нет права отправлять сообщения в этом канале"
             )
-        elif self.identity in self.pending:
-            self.send_status.setText("Отправляем… Можно продолжать редактирование")
         else:
             self.send_status.clear()
         self.send_status.setVisible(bool(self.send_status.text()))
@@ -557,6 +555,10 @@ class Conversation(QWidget):
             success = response.get("status") == "ok"
             if success:
                 self.retries.pop(key, None)
+                if not self.channel:
+                    sent_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    update_summary=getattr(self.owner,"message_sent",None)
+                    if update_summary is not None:update_summary(identity,text,sent_at)
                 if (
                     self.draft_versions.get(identity, 0) == revision
                     and self.drafts.get(identity, "").strip() == text

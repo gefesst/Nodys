@@ -367,6 +367,23 @@ class ConversationTests(unittest.TestCase):
             self.chat.load('poll');self.requests[-1][1](self.response())
             self.assertTrue(other.hasFocus())
 
+    def test_pending_send_preserves_composer_geometry_and_updates_summary_on_ack(self):
+        from unittest.mock import Mock
+        self.select("bob")
+        self.chat.show();self.app.processEvents()
+        self.chat.owner.message_sent=Mock()
+        self.chat.editor.setPlainText("steady message")
+        self.app.processEvents()
+        before=self.chat.compose_frame.geometry()
+        self.chat.send();self.app.processEvents()
+        self.assertEqual(self.chat.compose_frame.geometry(),before)
+        self.assertTrue(self.chat.send_status.isHidden())
+        self.chat.owner.message_sent.assert_not_called()
+        self.requests[-1][1](dict(status="ok"))
+        self.app.processEvents()
+        self.assertEqual(self.chat.compose_frame.geometry(),before)
+        self.assertEqual(self.chat.owner.message_sent.call_args.args[:2],("bob","steady message"))
+
     def test_failed_send_retains_draft_and_reuses_identity(self):
         self.select("bob")
         self.chat.editor.setPlainText("first\nsecond")

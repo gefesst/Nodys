@@ -32,6 +32,23 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_confirmed_message_updates_preview_before_friend_refresh_and_fences_old_poll(self):
+        from ui.chats_page import ChatsPage
+        page=ChatsPage();self.addCleanup(page.close)
+        page.dialog_model.replace([dict(login='bob',nickname='Bob')])
+        pending=[]
+        page.start_request=lambda data,callback:pending.append(callback)
+        page.load_friends=lambda **kwargs:None
+        page._loading_unread=False
+        page.load_unread_counts(force=True)
+        stale=pending[-1]
+        page.message_sent('bob','new message','2026-10-29 21:00:00')
+        self.assertEqual(page.dialog_model.all_rows[0]['summary']['text'],'new message')
+        stale(dict(status='ok',counts={},summaries={'bob':dict(text='old',timestamp='2026-10-29 20:00:00')}))
+        self.assertEqual(page.dialog_model.all_rows[0]['summary']['text'],'new message')
+        pending[-1](dict(status='ok',counts={},summaries={'bob':dict(text='latest incoming',timestamp='2026-10-29 21:01:00')}))
+        self.assertEqual(page.dialog_model.all_rows[0]['summary']['text'],'latest incoming')
+
     def test_settings_and_profile_navigation_scroll_to_visible_controls(self):
         from ui.main_window import MainWindow
         from PySide6.QtCore import QPoint

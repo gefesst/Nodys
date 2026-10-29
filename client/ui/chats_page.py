@@ -261,6 +261,20 @@ class ChatsPage(QWidget, ThreadSafeMixin):
     def send_message(self):
         self.conversation.send()
 
+    def message_sent(self, peer, text, timestamp):
+        # Fence a summary poll that started before the confirmed write.
+        self._read_revision += 1
+        self.dialog_summaries[peer] = dict(text=text[:160],timestamp=timestamp,outgoing=True)
+        self.refresh_dialog_summaries()
+
+    def refresh_dialog_summaries(self):
+        rows=[dict(row,summary=self.dialog_summaries.get(row['login'],{}),
+                   unread_count=self.unread_counts.get(row['login'],0))
+              for row in self.dialog_model.all_rows]
+        rows.sort(key=lambda row:row['summary'].get('timestamp') or '',reverse=True)
+        self.dialog_model.replace(rows)
+        self.filter_friends(self.search.text())
+
     def load_unread_counts(self, force=False):
         if self._loading_unread or not self.ctx.login or not self._alive:
             return
@@ -284,6 +298,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                     if summary!=self.dialog_summaries.get(peer):
                         self.conversation.prefetched.pop(peer,None)
                 self.dialog_summaries = summaries
+                self.refresh_dialog_summaries()
                 self.unread_total = sum(self.unread_counts.values())
                 if self.on_unread_total_changed:
                     self.on_unread_total_changed(self.unread_total)
