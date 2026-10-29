@@ -52,3 +52,23 @@ class SoundTests(unittest.TestCase):
                 self.assertGreater(source.getnframes(),0)
                 self.assertLess(source.getnframes()/source.getframerate(),4)
             self.assertEqual(effect.loops,-2 if name in ('incoming','outgoing') else 1)
+
+class TransportTests(unittest.TestCase):
+    def test_slow_audio_process_does_not_block_caller(self):
+        import threading
+        import time
+        from unittest.mock import patch
+        from audio.sound_transport import SoundTransport
+        entered=threading.Event();release=threading.Event()
+        def slow_start(*args,**kwargs):
+            entered.set();release.wait(2)
+            raise OSError('audio unavailable')
+        with patch('audio.sound_transport.subprocess.Popen',side_effect=slow_start):
+            transport=SoundTransport()
+            try:
+                transport.send('play','mic_on')
+                self.assertTrue(entered.wait(1))
+                started=time.monotonic()
+                transport.send('stop','mic_on');transport.close()
+                self.assertLess(time.monotonic()-started,.1)
+            finally:release.set()

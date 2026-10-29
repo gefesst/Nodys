@@ -6,8 +6,9 @@ class UISounds(QObject):
     def __init__(self, parent=None, effect_factory=None):
         super().__init__(parent)
         if effect_factory is None:
-            from PySide6.QtMultimedia import QSoundEffect
-            effect_factory=QSoundEffect
+            from audio.sound_transport import SoundTransport, RemoteEffect
+            self.transport=SoundTransport()
+            effect_factory=lambda parent: RemoteEffect(self.transport)
         self.effects={}
         self.call_key=None
         self.active_call=None
@@ -53,3 +54,4 @@ class UISounds(QObject):
         self.call_key=None
         self.active_call=None
         for effect in self.effects.values():effect.stop()
+        if hasattr(self,"transport"):self.transport.close()
