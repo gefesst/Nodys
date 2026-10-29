@@ -367,6 +367,22 @@ class Button(QPushButton):
         p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, self.text())
 
 
+def set_voice_button_state(button, symbol, enabled, label=None):
+    """One visual state for channel, call and dock controls."""
+    off=not enabled
+    button.icon_name=symbol+"-off" if off else symbol
+    button.primary=False
+    button.setProperty("danger",off)
+    button.setProperty("off","true" if off else "false")
+    button.setCheckable(True)
+    button.setChecked(off)
+    noun="Микрофон" if symbol=="mic" else "Звук"
+    if label is not None:button.setText(label)
+    button.setAccessibleName(noun+(" выключен" if off else " включён"))
+    button.setToolTip(("Включить " if off else "Выключить ")+noun.lower())
+    button.update()
+
+
 class RoundCallButton(Button):
     def __init__(self, label, symbol, danger=False):
         super().__init__(label, symbol)
@@ -385,7 +401,7 @@ class RoundCallButton(Button):
         painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else '#3A4D67' if self._hover else '#303E53'))
         painter.drawEllipse(QRectF(0,0,52,52))
         icon(painter,self.icon_name,QRectF(15,15,22,22),RED if danger or off else FG)
-        if off:
+        if off and not self.icon_name.endswith("-off"):
             painter.setPen(QPen(QColor(RED),1.65));painter.drawLine(15,16,37,38)
         if self.hasFocus() and self._keyboard_focus:
             painter.setBrush(Qt.NoBrush);painter.setPen(QPen(QColor(ACC),2));painter.drawEllipse(QRectF(1,1,50,50))

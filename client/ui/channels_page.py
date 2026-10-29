@@ -2400,7 +2400,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.voice_mute_btn.setVisible(joined)
         self.voice_deafen_btn.setVisible(joined)
         self.voice_quality_lbl.setVisible(False)
-        self.voice_join_btn.setFixedWidth(200 if joined else 220)
+        self.voice_join_btn.setFixedWidth(168 if joined else 220)
         self.voice_before_join.changeSize(0,0,QSizePolicy.Expanding if joined else QSizePolicy.Fixed,QSizePolicy.Minimum)
         self.voice_after_join.changeSize(0,0,QSizePolicy.Fixed if joined else QSizePolicy.Expanding,QSizePolicy.Minimum)
         self.voice_controls.layout().invalidate()
@@ -2410,8 +2410,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.voice_mute_btn.setEnabled(joined)
         self.voice_deafen_btn.setEnabled(joined)
 
-        self.voice_mute_btn.setText("Микрофон выкл." if self._voice_muted else "Микрофон вкл.")
-        self.voice_deafen_btn.setText("Звук выкл." if self._voice_deafened else "Звук вкл.")
+        from ui.design.widgets import set_voice_button_state
+        set_voice_button_state(self.voice_mute_btn,"mic",not self._voice_muted,"Микрофон")
+        set_voice_button_state(self.voice_deafen_btn,"headphones",not self._voice_deafened,"Звук")
+        self.voice_join_btn.icon_name="end" if joined else "phone"
+        main=getattr(self,"_main_window",None)
+        if main is not None and hasattr(main,"voice_dock"):
+            main.voice_dock.sync_controls()
 
         if self._voice_client is not None:
             try:

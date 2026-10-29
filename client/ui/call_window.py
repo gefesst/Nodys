@@ -105,6 +105,9 @@ class ActiveCallWindow(CallPanel):
         self.btn_mic=RoundCallButton('Микрофон','mic')
         self.btn_sound=RoundCallButton('Звук','headphones')
         self.btn_end=RoundCallButton('Завершить','end',danger=True)
+        from ui.design.widgets import set_voice_button_state
+        set_voice_button_state(self.btn_mic,'mic',True)
+        set_voice_button_state(self.btn_sound,'headphones',True)
         for button,label,callback in [
             (self.btn_mic,'Микрофон',self._mic_clicked),
             (self.btn_sound,'Звук',self._sound_clicked),
@@ -228,25 +231,15 @@ class ActiveCallWindow(CallPanel):
 
     def _mic_clicked(self):
         self.mic_enabled = not self.mic_enabled
-        self.btn_mic.setToolTip(
-            "Выключить микрофон" if self.mic_enabled else "Включить микрофон"
-        )
-        self.btn_mic.setText("Микрофон" if self.mic_enabled else "Микр. выкл.")
-        self.btn_mic.primary = not self.mic_enabled
-        self.btn_mic.update()
-        self.btn_mic.setProperty("off", "false" if self.mic_enabled else "true")
+        from ui.design.widgets import set_voice_button_state
+        set_voice_button_state(self.btn_mic,"mic",self.mic_enabled)
         if self.on_mic_toggle:
             self.on_mic_toggle(self.mic_enabled)
 
     def _sound_clicked(self):
         self.sound_enabled = not self.sound_enabled
-        self.btn_sound.setToolTip(
-            "Выключить звук" if self.sound_enabled else "Включить звук"
-        )
-        self.btn_sound.setText("Звук" if self.sound_enabled else "Звук выкл.")
-        self.btn_sound.primary = not self.sound_enabled
-        self.btn_sound.update()
-        self.btn_sound.setProperty("off", "false" if self.sound_enabled else "true")
+        from ui.design.widgets import set_voice_button_state
+        set_voice_button_state(self.btn_sound,"headphones",self.sound_enabled)
         if self.on_sound_toggle:
             self.on_sound_toggle(self.sound_enabled)
 

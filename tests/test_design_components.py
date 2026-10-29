@@ -695,9 +695,13 @@ class DesignGeometryTests(unittest.TestCase):
         window._sound_clicked()
         self.assertEqual(mic,[False])
         self.assertEqual(sound,[False])
-        self.assertTrue(window.btn_mic.primary)
+        self.assertTrue(window.btn_mic.property("danger"))
+        self.assertEqual(window.btn_mic.icon_name,"mic-off")
+        self.assertEqual(window.btn_sound.icon_name,"headphones-off")
         window._mic_clicked()
         self.assertEqual(mic,[False,True])
+        self.assertFalse(window.btn_mic.property("danger"))
+        self.assertEqual(window.btn_mic.icon_name,"mic")
         window.close()
 
     def test_profile_sections_do_not_submit_hidden_password_or_profile_drafts(self):

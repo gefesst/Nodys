@@ -2,7 +2,7 @@
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpacityEffect
 from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve
 from .motion import reduced
-from .widgets import Button
+from .widgets import Button, set_voice_button_state
 
 class VoiceDock(QFrame):
     def __init__(self, main):
@@ -56,13 +56,7 @@ class VoiceDock(QFrame):
         deafened=not panel.sound_enabled if panel else bool(getattr(channel,"_voice_deafened",False))
         for symbol,off,label in (("mic",muted,"Микрофон"),("headphones",deafened,"Звук")):
             button=self.controls[symbol]
-            button.icon_name=symbol+"-off" if off else symbol
-            button.setProperty("danger",off)
-            button.setCheckable(True);button.setChecked(off)
-            state=label+(" выключен" if off else " включён")
-            button.setAccessibleName(state)
-            button.setToolTip(("Включить " if off else "Выключить ")+("микрофон" if symbol=="mic" else "звук"))
-            button.update()
+            set_voice_button_state(button,symbol,not off)
 
     def get_progress(self):
         return self._progress

@@ -827,10 +827,12 @@ class MainWindow(QWidget):
         def on_mic_toggle(enabled: bool):
             if self.voice_client:
                 self.voice_client.set_mic_enabled(enabled)
+            self.voice_dock.sync_controls()
 
         def on_sound_toggle(enabled: bool):
             if self.voice_client:
                 self.voice_client.set_sound_enabled(enabled)
+            self.voice_dock.sync_controls()
 
         self._close_call_window()
 

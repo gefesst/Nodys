@@ -165,6 +165,16 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual(self.chat.model.rows[0].avatar, "channel-avatar")
         self.assertEqual(self.chat.model.rows[0].name, "Channel Bob")
 
+    def test_first_open_keeps_composer_and_history_in_place_until_reply(self):
+        self.chat.select("bob")
+        self.assertTrue(self.chat.loading)
+        self.assertIs(self.chat.history_stack.currentWidget(),self.chat.view)
+        self.assertFalse(self.chat.editor.isReadOnly())
+        self.chat.editor.setPlainText("Draft while fetching")
+        self.requests[-1][1](self.response())
+        self.assertIs(self.chat.history_stack.currentWidget(),self.chat.view)
+        self.assertEqual(self.chat.editor.toPlainText(),"Draft while fetching")
+
     def test_revisited_chat_renders_cache_before_network_reply_and_reset_clears_it(self):
         self.select("bob")
         original=list(self.chat.model.rows)
@@ -250,7 +260,7 @@ class ConversationTests(unittest.TestCase):
 
     def test_failed_empty_history_can_retry_without_losing_draft(self):
         self.chat.select('bob')
-        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.loading_state)
+        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.view)
         self.chat.editor.setPlainText('Draft while offline')
         self.requests[-1][1]({'status':'error','message':'Offline'})
         self.assertIs(self.chat.history_stack.currentWidget(), self.chat.error_state)
