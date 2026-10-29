@@ -1,6 +1,6 @@
 """Approved channel-settings geometry; domain actions remain in ChannelsPage."""
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSignalBlocker
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
@@ -108,8 +108,10 @@ def build(page):
         button = QPushButton()
         button.setObjectName("ChannelSettingsTab")
         button.setCheckable(True)
-        button.clicked.connect(
-            lambda checked=False, key=key: page.show_settings_section(key)
+        button.toggled.connect(
+            lambda checked, key=key: (
+                page.show_settings_section(key) if checked else None
+            )
         )
         page.settings_sections[key] = button
     page.members_scroll = QScrollArea()
@@ -259,21 +261,22 @@ def build(page):
             "QRadioButton {font-size:15px;spacing:14px;} QRadioButton::indicator {width:16px;height:16px;border:1px solid #354458;border-radius:8px;background:#17212D;} QRadioButton::indicator:checked {border:4px solid #91ADFF;background:#17212D;}"
         )
         radio.setChecked(index == page.settings_text_perm_combo.currentIndex())
-        radio.clicked.connect(
-            lambda checked=False, i=index: (
+
+        def choose_role(checked, i=index):
+            if checked:
                 page.settings_text_perm_combo.setCurrentIndex(i)
-            )
-        )
-        radio.clicked.connect(page._mark_settings_edited)
+                page._mark_settings_edited()
+
+        radio.toggled.connect(choose_role)
         access.addWidget(radio)
         page.settings_text_radios.append(radio)
-    page.settings_text_perm_combo.currentIndexChanged.connect(
-        lambda index: (
-            page.settings_text_radios[index].setChecked(True)
-            if 0 <= index < 3
-            else None
-        )
-    )
+
+    def synchronize_role(index):
+        if 0 <= index < len(page.settings_text_radios):
+            with QSignalBlocker(page.settings_text_radios[index]):
+                page.settings_text_radios[index].setChecked(True)
+
+    page.settings_text_perm_combo.currentIndexChanged.connect(synchronize_role)
     access.addSpacing(42)
     caption(access, "Кто может входить в голосовой")
     field(page.settings_voice_perm_combo, access, 640)

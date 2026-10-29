@@ -144,6 +144,21 @@ class ConversationTests(unittest.TestCase):
         self.assertEqual({r["from_user"] for r in self.chat.rows}, {"dave"})
         self.assertFalse(self.chat.loading)
 
+    def test_failed_empty_history_can_retry_without_losing_draft(self):
+        self.chat.select('bob')
+        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.loading_state)
+        self.chat.editor.setPlainText('Draft while offline')
+        self.requests[-1][1]({'status':'error','message':'Offline'})
+        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.error_state)
+        from PySide6.QtWidgets import QPushButton
+        self.chat.error_state.findChild(QPushButton).click()
+        self.requests[-1][1](self.response(count=0))
+        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.empty_state)
+        self.assertEqual(self.chat.editor.toPlainText(),'Draft while offline')
+        self.chat.load()
+        self.requests[-1][1](self.response())
+        self.assertIs(self.chat.history_stack.currentWidget(), self.chat.view)
+
     def test_failed_send_retains_draft_and_reuses_identity(self):
         self.select("bob")
         self.chat.editor.setPlainText("first\nsecond")

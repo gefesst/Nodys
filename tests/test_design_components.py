@@ -179,7 +179,9 @@ class DesignGeometryTests(unittest.TestCase):
     def test_call_controls_toggle_real_callbacks_without_repolishing(self):
         from ui.call_window import ActiveCallWindow
         mic, sound = [], []
-        window = ActiveCallWindow('alice','bob',on_mic_toggle=mic.append,on_sound_toggle=sound.append)
+        from PySide6.QtWidgets import QWidget
+        host = QWidget(); host.resize(1440,900)
+        window = ActiveCallWindow('alice','bob',on_mic_toggle=mic.append,on_sound_toggle=sound.append,parent=host)
         window._mic_clicked()
         window._sound_clicked()
         self.assertEqual(mic,[False])
@@ -224,7 +226,7 @@ class DesignGeometryTests(unittest.TestCase):
             _channels_loaded_once=True,_channel_navigation_revision=1,
             start_request=lambda payload,callback:callbacks.append(callback),
             _active_channel_id=lambda:selected[0],_apply_channel_header=Mock(),
-            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),
+            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),_set_channel_list_state=Mock(),
             main_stack=SimpleNamespace(currentWidget=lambda:'settings'),
             placeholder_page='placeholder',open_channel=Mock(),show_toast=Mock())
         ChannelsPage.load_channels(page,force_refresh=True,preferred_channel_id=2)
@@ -242,7 +244,7 @@ class DesignGeometryTests(unittest.TestCase):
             _channels_loaded_once=True,
             start_request=lambda payload,callback:callbacks.append(callback),
             _active_channel_id=lambda:1,_apply_channel_header=Mock(),
-            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),
+            render_channels=Mock(),_apply_channel_permissions_ui=Mock(),_set_channel_list_state=Mock(),
             main_stack=SimpleNamespace(currentWidget=lambda:'settings'),
             placeholder_page='placeholder',open_channel=Mock(),show_toast=Mock())
         ChannelsPage.load_channels(page,force_refresh=True)

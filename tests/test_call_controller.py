@@ -64,6 +64,26 @@ class CallControllerTests(unittest.TestCase):
         self.controller.receive(dict(status='ok',call_state={'status':'active'},events=[]))
         self.assertEqual(self.states,[])
 
+    def test_terminal_card_is_emitted_once_and_matches_call_identity(self):
+        results=[]; self.controller.result_ready.connect(results.append)
+        self.controller.receive(self.response(dict(self.state,status='ringing')))
+        reply=dict(status='ok',call_state=None,events=[dict(event_id=6,type='call_declined',call_id='one',with_user='bob')])
+        self.controller.receive(reply);self.controller.receive(reply)
+        self.assertEqual(results,[dict(peer='bob',title='Вызов отклонён')])
+
+    def test_old_terminal_event_cannot_label_new_call(self):
+        results=[]; self.controller.result_ready.connect(results.append)
+        self.controller.receive(self.response(dict(self.state,call_id='two')))
+        self.controller.receive(dict(status='ok',call_state=None,events=[dict(event_id=6,type='call_declined',call_id='one',with_user='bob')]))
+        self.assertEqual(results,[dict(peer='bob',title='Звонок завершён')])
+
+    def test_busy_result_uses_server_response_without_starting_audio(self):
+        results=[]; self.controller.result_ready.connect(results.append)
+        self.controller.start_call('bob')
+        self.controller.requests['action'].complete(dict(status='error',message='Пользователь занят'))
+        self.assertEqual(results,[dict(peer='bob',title='Пользователь занят')])
+        self.assertEqual(self.states,[])
+
 class PollingTests(unittest.TestCase):
     def test_navigation_and_authentication_stop_background_pages(self):
         from unittest.mock import Mock

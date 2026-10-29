@@ -111,12 +111,16 @@ def avatar(p, x, y, initials="АМ", size=36, online=False, own=False):
     p.setPen(Qt.NoPen)
     p.setBrush(QColor("#4A485E" if own else "#40536B"))
     p.drawEllipse(QRectF(x, y, size, size))
-    p.setPen(QPen(QColor("#7388A8"), 1))
-    p.drawArc(
-        QRectF(x + size * 0.12, y + size * 0.1, size * 0.76, size * 0.76),
-        210 * 16,
-        105 * 16,
-    )
+    curve = QPainterPath()
+    curve.moveTo(x+size*.14, y+size*.75)
+    curve.quadTo(x+size*.45, y+size*.92, x+size*.88, y+size*.28)
+    p.setBrush(Qt.NoBrush)
+    p.setPen(QPen(QColor(177,197,239,36), size*.025))
+    p.drawPath(curve)
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor("#66799A"))
+    p.drawEllipse(QRectF(x+size*.16,y+size*.72,size*.1,size*.1))
+    p.drawEllipse(QRectF(x+size*.78,y+size*.32,size*.08,size*.08))
     p.setFont(font(int(size * 0.29), True))
     p.setPen(QColor(FG))
     p.drawText(QRectF(x, y, size, size), Qt.AlignCenter, initials)
@@ -214,13 +218,15 @@ class Button(QPushButton):
         p.setPen(Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
         p.setBrush(bg)
         p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 9, 9)
-        color = "#142039" if self.primary else FG
+        color = "#142039" if self.primary else SUB if self.property("flat") else FG
+        if self.property("danger"):
+            color = RED
         if not self.isEnabled():
             color = "#8190A5"
         p.setFont(self.font())
         width = p.fontMetrics().horizontalAdvance(self.text())
         total = width + (26 if self.icon_name else 0)
-        x = (self.width() - total) / 2
+        x = 12 if self.property("align_left") else (self.width() - total) / 2
         if self.icon_name:
             icon(p, self.icon_name, QRectF(x, (self.height() - 18) / 2, 18, 18), color)
             x += 26

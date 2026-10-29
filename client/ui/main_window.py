@@ -115,7 +115,7 @@ class MainWindow(QWidget):
         menu_layout.addSpacing(13)
         self.user_card=QFrame();self.user_card.setObjectName('UserMiniCard')
         user_layout=QVBoxLayout(self.user_card);user_layout.setContentsMargins(0,0,0,0);user_layout.setSpacing(2)
-        self.user_avatar=AvatarLabel(size=40);user_layout.addWidget(self.user_avatar,0,Qt.AlignHCenter)
+        self.user_avatar=AvatarLabel(size=40);self.user_avatar.setProperty("own_avatar",True);user_layout.addWidget(self.user_avatar,0,Qt.AlignHCenter)
         self.user_nick_lbl=QLabel('Вы');self.user_nick_lbl.setObjectName('UserMiniNick');self.user_nick_lbl.setAlignment(Qt.AlignCenter);self.user_nick_lbl.setFixedHeight(16)
         self.user_login_lbl=QLabel();self.user_login_lbl.hide()
         user_layout.addWidget(self.user_nick_lbl)
@@ -162,6 +162,7 @@ class MainWindow(QWidget):
         self.call_window = None
         self.calls = CallController(lambda: self.ctx, self)
         self.calls.state_changed.connect(self._reconcile_call_state)
+        self.calls.result_ready.connect(self._show_call_result)
         self.calls.notice.connect(lambda text, timeout: self._show_call_notice(text, timeout_ms=timeout))
         self.calls.response_finished.connect(self._incoming_response_finished)
         self.call_events_timer = QTimer(self)
@@ -291,129 +292,50 @@ class MainWindow(QWidget):
         self.call_notice_lbl.setWordWrap(True)
         notice_l.addWidget(self.call_notice_lbl)
 
-        self.incoming_shade=QFrame(self)
-        self.incoming_shade.setStyleSheet('background:rgba(8,14,24,170);')
-        self.incoming_shade.hide()
-        self.incoming_card = QFrame(self)
-        self.incoming_card.setObjectName("IncomingCallInlineCard")
-        self.incoming_card.setVisible(False)
+        from ui.call_window import CallPanel
+        self.incoming_card = CallPanel(self)
+        self.incoming_card.hide()
+        self.incoming_shade = self.incoming_card.shade
         incoming_l = QVBoxLayout(self.incoming_card)
-        incoming_l.setContentsMargins(32, 32, 32, 32)
-        incoming_l.setSpacing(10)
-
-        incoming_title = QLabel("Входящий вызов", self.incoming_card)
-        incoming_title.setObjectName("IncomingCallInlineTitle")
-        incoming_title.setAlignment(Qt.AlignCenter)
-        incoming_l.addWidget(incoming_title)
-        incoming_l.addSpacing(24)
-        self.incoming_avatar=AvatarLabel(96)
-        incoming_l.addWidget(self.incoming_avatar,0,Qt.AlignHCenter)
-
-        self.incoming_from_lbl = QLabel("", self.incoming_card)
-        self.incoming_from_lbl.setObjectName("IncomingCallInlineFrom")
-        self.incoming_from_lbl.setWordWrap(True)
-        self.incoming_from_lbl.setAlignment(Qt.AlignCenter)
-        incoming_l.addWidget(self.incoming_from_lbl)
-        incoming_l.addSpacing(32)
-
-        row = QHBoxLayout()
-        row.addStretch()
-
-        self.incoming_decline_btn = QPushButton("Отклонить", self.incoming_card)
-        self.incoming_decline_btn.setObjectName("IncomingCallInlineDeclineBtn")
+        incoming_l.setContentsMargins(36,32,36,32)
+        incoming_l.setSpacing(0)
+        title=QLabel("Входящий звонок")
+        title.setStyleSheet("font-size:23px;font-weight:600;")
+        title.setAlignment(Qt.AlignCenter);title.setFixedHeight(29)
+        incoming_l.addWidget(title);incoming_l.addSpacing(37)
+        self.incoming_avatar=AvatarLabel(116)
+        incoming_l.addWidget(self.incoming_avatar,0,Qt.AlignHCenter);incoming_l.addSpacing(31)
+        self.incoming_from_lbl=QLabel()
+        self.incoming_from_lbl.setStyleSheet("font-size:25px;font-weight:600;")
+        self.incoming_from_lbl.setAlignment(Qt.AlignCenter);self.incoming_from_lbl.setFixedHeight(30)
+        incoming_l.addWidget(self.incoming_from_lbl);incoming_l.addSpacing(12)
+        self.incoming_login_lbl=QLabel()
+        self.incoming_login_lbl.setAlignment(Qt.AlignCenter);self.incoming_login_lbl.setFixedHeight(18)
+        incoming_l.addWidget(self.incoming_login_lbl);incoming_l.addSpacing(31)
+        hint=QLabel("Аудиозвонок");hint.setAlignment(Qt.AlignCenter);hint.setFixedHeight(22)
+        incoming_l.addWidget(hint);incoming_l.addSpacing(99)
+        row=QHBoxLayout();row.setSpacing(16);row.setContentsMargins(14,0,14,0)
+        self.incoming_decline_btn=QPushButton("Отклонить")
+        self.incoming_decline_btn.setObjectName("ChannelDangerButton")
+        self.incoming_decline_btn.setFixedHeight(40)
         self.incoming_decline_btn.clicked.connect(self._decline_incoming_inline)
-        row.addWidget(self.incoming_decline_btn)
-
-        self.incoming_accept_btn = QPushButton("Принять", self.incoming_card)
-        self.incoming_accept_btn.setObjectName("IncomingCallInlineAcceptBtn")
+        row.addWidget(self.incoming_decline_btn,1)
+        self.incoming_accept_btn=QPushButton("Принять")
+        self.incoming_accept_btn.setObjectName("PrimaryButton")
+        self.incoming_accept_btn.setFixedHeight(40)
         self.incoming_accept_btn.clicked.connect(self._accept_incoming_inline)
-        row.addWidget(self.incoming_accept_btn)
-
-        incoming_l.addLayout(row)
+        row.addWidget(self.incoming_accept_btn,1)
+        incoming_l.addLayout(row);incoming_l.addStretch()
+        self.incoming_card.reject = self._decline_incoming_inline
 
     def _reposition_inline_call_ui(self):
-        """Position inline call overlays at bottom-center of current page.
-
-        Центрируем не по всему приложению, а по текущему открытому окну
-        (текущая страница в self.stack).
-        """
-        if hasattr(self,"incoming_shade"):
-            self.incoming_shade.setGeometry(self.rect())
-        side_margin = 12
-        bottom_margin = 16
-        gap = 10
-
-        # Целевая область: текущий виджет в stack (или сам stack как fallback)
-        target_rect = None
-        try:
-            current = self.stack.currentWidget() if hasattr(self, "stack") else None
-            if current is not None:
-                tl = current.mapTo(self, current.rect().topLeft())
-                target_rect = QRect(tl, current.size())
-        except Exception:
-            target_rect = None
-
-        if target_rect is None:
-            try:
-                tl = self.stack.mapTo(self, self.stack.rect().topLeft())
-                target_rect = QRect(tl, self.stack.size())
-            except Exception:
-                target_rect = self.rect()
-
-        ox, oy, ow, oh = target_rect.x(), target_rect.y(), max(1, target_rect.width()), max(1, target_rect.height())
-
-        has_incoming = bool(
-            getattr(self, "incoming_card", None)
-            and (self.incoming_card.isVisible() or bool(getattr(self, "_incoming_from_user", None)))
-        )
-        has_notice = bool(
-            getattr(self, "call_notice", None)
-            and (
-                self.call_notice.isVisible()
-                or bool(getattr(self, "call_notice_lbl", None) and self.call_notice_lbl.text().strip())
-            )
-        )
-
-        in_w = in_h = n_w = n_h = 0
-
         if getattr(self, "incoming_card", None):
-            self.incoming_card.adjustSize()
-            max_w = max(300, min(430, ow - 40))
-            self.incoming_card.setFixedWidth(max_w)
-            self.incoming_card.adjustSize()
-            in_w = self.incoming_card.width()
-            in_h = self.incoming_card.height()
-
+            self.incoming_card.position_panel()
         if getattr(self, "call_notice", None):
+            self.call_notice.setFixedWidth(max(280,min(420,self.width()-472)))
             self.call_notice.adjustSize()
-            # Toast width, but constrained by current page width
-            max_w = max(280, min(420, ow - 44))
-            self.call_notice.setFixedWidth(max_w)
-            self.call_notice.adjustSize()
-            n_w = self.call_notice.width()
-            n_h = self.call_notice.height()
-
-        def _center_x(item_w: int) -> int:
-            left = ox + side_margin
-            right = ox + ow - side_margin
-            x = ox + (ow - item_w) // 2
-            return max(left, min(x, right - item_w))
-
-        page_bottom = oy + oh
-
-        # Внизу: notice у самого низа, incoming — над ним (если оба видимы).
-        if has_notice and has_incoming:
-            total_h = in_h + gap + n_h
-            base_y = max(oy + side_margin, page_bottom - bottom_margin - total_h)
-
-            self.incoming_card.move(_center_x(in_w), base_y)
-            self.call_notice.move(_center_x(n_w), base_y + in_h + gap)
-        elif has_incoming:
-            in_y = max(oy + side_margin, page_bottom - bottom_margin - in_h)
-            self.incoming_card.move(_center_x(in_w), max(16,(self.height()-in_h)//2))
-        elif has_notice:
-            n_y = max(oy + side_margin, page_bottom - bottom_margin - n_h)
-            self.call_notice.move(_center_x(n_w), n_y)
+            self.call_notice.move(max(12,428+(self.width()-428-self.call_notice.width())//2),
+                                  max(12,self.height()-self.call_notice.height()-16))
 
     def _show_call_notice(self, text: str, timeout_ms: int = 2200):
         if not text:
@@ -440,10 +362,10 @@ class MainWindow(QWidget):
         peer=next((r for r in self.friends_page._friends_data if r.get('login')==from_user),{})
         name=peer.get('nickname') or from_user
         self.incoming_avatar.set_avatar(path=peer.get('avatar',''),login=from_user,nickname=name)
-        self.incoming_from_lbl.setText(f"{name}\n@{from_user}")
+        self.incoming_from_lbl.setText(name)
+        self.incoming_login_lbl.setText("@"+from_user)
         self._set_incoming_buttons_enabled(True)
         self._reposition_inline_call_ui()
-        self.incoming_shade.setGeometry(self.rect())
         self.incoming_shade.show()
         self.incoming_shade.raise_()
         self.incoming_card.show()
@@ -762,6 +684,19 @@ class MainWindow(QWidget):
     def handle_call_events(self, response):
         self.calls.receive(response)
 
+    def _close_call_result(self):
+        panel = getattr(self, "call_result_window", None)
+        if panel is not None:
+            panel.close()
+            panel.deleteLater()
+            self.call_result_window = None
+
+    def _show_call_result(self, result):
+        self._close_call_result()
+        from ui.call_window import CallResultWindow
+        self.call_result_window = CallResultWindow(result, self)
+        self.call_result_window.show()
+
     def _reconcile_call_state(self, state):
         """The snapshot heals missed/expired events and avoids duplicate audio starts."""
         key = (self.ctx.session_token, None if state is None else
@@ -783,6 +718,7 @@ class MainWindow(QWidget):
                     self.voice_client = None
                 self._close_call_window()
             return
+        self._close_call_result()
         peer = state.get("peer")
         if state.get("status") == "active":
             self._hide_incoming_inline()
@@ -872,7 +808,8 @@ class MainWindow(QWidget):
                 nick = resp.get("nickname") or peer_login
                 avatar = resp.get("avatar") or ""
                 self.call_window.name_lbl.setText(nick)
-                self.call_window.login_lbl.setText(peer_login)
+                self.call_window.peer_nickname = nick
+                self.call_window.login_lbl.setText("@"+peer_login)
                 self.call_window.avatar.set_avatar(path=avatar, login=peer_login, nickname=nick)
         info_t.finished.connect(_apply_info)
         info_t.start()
@@ -1105,6 +1042,7 @@ class MainWindow(QWidget):
         self._close_call_window()
         self._hide_incoming_inline()
         self._hide_call_notice()
+        self._close_call_result()
         for page in (self.friends_page, self.chats_page, self.channels_page, self.profile_page):
             page._alive = False
             page.shutdown_requests(wait_ms=0)

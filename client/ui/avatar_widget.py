@@ -153,6 +153,8 @@ class AvatarLabel(QLabel):
         hue = (sum(ord(c) for c in name) * 7) % 360
         bg = QColor()
         bg.setHsl(215 + hue % 30, 45, 80)
+        if self.property("own_avatar"):
+            bg = QColor("#4A485E")
 
         painter.setPen(Qt.NoPen)
         painter.setBrush(bg)
@@ -160,8 +162,16 @@ class AvatarLabel(QLabel):
 
         initials = self._initials(name)
         painter.setPen(QColor("white"))
-        painter.setPen(QPen(QColor('#66799A'), 1))
-        painter.drawArc(QRectF(size*.12,size*.12,size*.76,size*.76),210*16,105*16)
+        curve = QPainterPath()
+        curve.moveTo(size*.14, size*.75)
+        curve.quadTo(size*.45, size*.92, size*.88, size*.28)
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor(177,197,239,36), size*.025))
+        painter.drawPath(curve)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor('#66799A'))
+        painter.drawEllipse(QRectF(size*.16,size*.72,size*.1,size*.1))
+        painter.drawEllipse(QRectF(size*.78,size*.32,size*.08,size*.08))
         painter.setPen(QColor('#EDF2FA'))
         font = QFont("Arial")
         font.setPixelSize(max(10,round(size*.29)))

@@ -88,7 +88,7 @@ class CallService:
                 return False
             connection.execute('DELETE FROM active_call_pairs WHERE user_a=? AND user_b=?',row[:2])
             for recipient, counterpart in ((user,other),(other,user)):
-                event=dict(type='call_declined' if decline else 'call_ended',with_user=counterpart,by_user=user)
+                event=dict(type='call_declined' if decline else 'call_ended',with_user=counterpart,by_user=user,call_id=row[4])
                 self.emit(connection,notifications,recipient,event)
         return True
 
@@ -105,8 +105,8 @@ class CallService:
             if not connection.execute('SELECT 1 FROM active_call_pairs WHERE seen_a<? OR seen_b<? LIMIT 1',(threshold,threshold)).fetchone():
                 return
         with self.transaction() as (connection, notifications):
-            rows=connection.execute('SELECT user_a,user_b FROM active_call_pairs WHERE seen_a<? OR seen_b<?',(threshold,threshold)).fetchall()
-            for a,b in rows:
+            rows=connection.execute('SELECT user_a,user_b,created_at FROM active_call_pairs WHERE seen_a<? OR seen_b<?',(threshold,threshold)).fetchall()
+            for a,b,call_id in rows:
                 connection.execute('DELETE FROM active_call_pairs WHERE user_a=? AND user_b=?',(a,b))
                 for user,peer in ((a,b),(b,a)):
-                    self.emit(connection,notifications,user,dict(type='call_ended',with_user=peer,by_user='system'))
+                    self.emit(connection,notifications,user,dict(type='call_ended',with_user=peer,by_user='system',call_id=call_id))

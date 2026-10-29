@@ -47,6 +47,7 @@ class SettingsPage(QWidget):
         for text in ("Внешний вид", "Звук", "Подключение"):
             button = Button(text)
             button.setProperty("flat", True)
+            button.setProperty("align_left", True)
             button.setFixedHeight(46)
             side.addWidget(button)
             button.clicked.connect(lambda checked=False, t=text: self.select_section(t))

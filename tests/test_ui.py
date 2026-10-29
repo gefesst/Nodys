@@ -39,6 +39,20 @@ class UiTests(unittest.TestCase):
             open_form(); p.load_channels(force_refresh=True)
             self.assertIs(p.main_stack.currentWidget(),form)
 
+    def test_channel_initial_failure_has_retry_and_keeps_open_form(self):
+        from PySide6.QtWidgets import QPushButton
+        p = self.page
+        p.start_request = lambda data, callback, **kw: callback({'status':'error','message':'Offline'})
+        p.open_create_page()
+        p.load_channels(force_refresh=True)
+        self.assertFalse(p._channels_skeleton_visible)
+        self.assertIs(p.main_stack.currentWidget(),p.create_page)
+        retry=p.channel_state_stack.currentWidget().findChild(QPushButton)
+        self.assertEqual(retry.text(),'Повторить')
+        p.start_request = lambda data, callback, **kw: callback({'status':'ok','channels':[]})
+        retry.click()
+        self.assertEqual(p.channel_state_stack.currentWidget().findChild(QPushButton).text(),'Создать канал')
+
     def test_settings_are_scrollable(self):
         from PySide6.QtWidgets import QScrollArea
         node = self.page.settings_name_input
@@ -86,6 +100,7 @@ class UiTests(unittest.TestCase):
         from PySide6.QtGui import QImage, QColor
         from application.avatars import encode_avatar
         from ui.avatar_widget import AvatarLabel
+        sys.path.append(str(Path(__file__).resolve().parents[1] / "server"))
         from domain.avatars import normalize_avatar
         source = Path(self.folder.name)/'image.png'
         image = QImage(64,64,QImage.Format_RGBA8888)
@@ -104,7 +119,7 @@ class UiTests(unittest.TestCase):
         window = SimpleNamespace(ctx=SimpleNamespace(session_token='test'),current_call_user=None,
             voice_client=None,call_window=None,_hide_incoming_inline=Mock(),
             _show_incoming_inline=Mock(),_start_voice_for_peer=Mock(),_open_call_window=Mock(),
-            _close_call_window=Mock())
+            _close_call_window=Mock(),_close_call_result=Mock())
         state={'peer':'bob','status':'active','incoming':False,'call_id':'1'}
         MainWindow._reconcile_call_state(window,state)
         MainWindow._reconcile_call_state(window,state)
@@ -134,6 +149,34 @@ class UiTests(unittest.TestCase):
         voice.stop.assert_called_once()
         self.assertFalse(self.page._voice_joined)
         self.assertFalse(self.page._voice_transitioning)
+
+    def test_changed_friend_search_cannot_display_or_send_stale_result(self):
+        from ui.friends_page import FriendsPage
+        page = FriendsPage(); self.addCleanup(page.close)
+        callbacks=[]
+        page.start_request=lambda data,callback: callbacks.append(callback)
+        page.login_input.setText('bob');page.find_user_inline()
+        page.login_input.setText('carol')
+        callbacks.pop()(dict(status='ok',login='bob',nickname='Bob'))
+        self.assertIsNone(page._found_user)
+        self.assertFalse(page.send_request_btn.isEnabled())
+        self.assertTrue(page.found_card.isHidden())
+        page.find_user_inline()
+        callbacks.pop()(dict(status='ok',login='carol',nickname='Carol'))
+        self.assertEqual(page._found_user['login'],'carol')
+        self.assertTrue(page.send_request_btn.isEnabled())
+        page.login_input.setText('dave')
+        self.assertFalse(page.send_request_btn.isEnabled())
+
+    def test_accessible_channel_tab_and_radio_change_content_and_policy(self):
+        self.page.settings_sections['access'].setChecked(True)
+        self.assertEqual(self.page._settings_section,'access')
+        self.assertFalse(self.page.settings_access_card.isHidden())
+        self.page.settings_text_radios[2].setChecked(True)
+        self.assertEqual(self.page.settings_text_perm_combo.currentData(),'admin')
+        self.assertGreater(self.page._settings_revision,0)
+        self.page.settings_text_perm_combo.setCurrentIndex(0)
+        self.assertTrue(self.page.settings_text_radios[0].isChecked())
 
     def test_friends_navigation_keeps_active_call(self):
         from types import SimpleNamespace

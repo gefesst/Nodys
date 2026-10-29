@@ -4,14 +4,14 @@ import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QFrame, QHBoxLayout, QScrollArea
+    QPushButton, QFileDialog, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Qt
 
 from config import load_config, save_config, clear_config
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
-from ui.toast import InlineToast
+from ui.design.state_surfaces import InlineNote
 from user_context import UserContext
 
 
@@ -44,12 +44,15 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         outer=QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
         side=QVBoxLayout(sidebar);side.setContentsMargins(20,30,20,20);side.setSpacing(10)
-        eyebrow=QLabel('АККАУНТ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
-        title=QLabel('Мой профиль');title.setObjectName('PageTitle');side.addWidget(title);side.addSpacing(14)
+        eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
+        title=QLabel('Ваш профиль');title.setObjectName('PageTitle');side.addWidget(title);side.addSpacing(14)
         self.profile_tabs={}
-        for key,text in [('main','Профиль'),('edit','Редактирование'),('password','Пароль')]:
-            button=QPushButton(text);button.setObjectName('SectionTab');button.setCheckable(True);button.clicked.connect(lambda checked=False,k=key:self.show_section(k));side.addWidget(button);self.profile_tabs[key]=button
-        side.addStretch();logout=QPushButton('Выйти из аккаунта');logout.setObjectName('ProfileDangerButton');logout.clicked.connect(self.confirm_logout);side.addWidget(logout)
+        for key,text in [('main','Профиль'),('password','Безопасность')]:
+            button=Button(text);button.setProperty('flat',True);button.setProperty('align_left',True)
+            button.setFixedHeight(46);button.clicked.connect(lambda checked=False,k=key:self.show_section(k))
+            side.addWidget(button);self.profile_tabs[key]=button
+        logout=Button('Выйти из аккаунта');logout.setProperty('danger',True);logout.setProperty('flat',True);logout.setProperty('align_left',True)
+        logout.setFixedHeight(46);logout.clicked.connect(self.confirm_logout);side.addWidget(logout);side.addStretch()
         outer.addWidget(sidebar)
         scroll=QScrollArea();scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
         content=QWidget();scroll.setWidget(content)
@@ -63,9 +66,9 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         self.card=QFrame();self.card.setObjectName('ProfileForm');self.card.setMaximumWidth(892)
         card_l=QVBoxLayout(self.card);card_l.setContentsMargins(22,0,0,0);card_l.setSpacing(0)
         identity=QHBoxLayout();identity.setSpacing(30)
-        self.avatar_label=AvatarLabel(size=88);identity.addWidget(self.avatar_label)
+        self.avatar_label=AvatarLabel(size=88);self.avatar_label.setProperty("own_avatar",True);identity.addWidget(self.avatar_label)
         names=QVBoxLayout();names.setSpacing(6);names.setAlignment(Qt.AlignVCenter)
-        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('ProfileTitle');self.display_name.setFixedHeight(30);names.addWidget(self.display_name)
+        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('ProfileTitle');self.display_name.setFixedHeight(30);self.display_name.setMinimumWidth(0);self.display_name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed);names.addWidget(self.display_name)
         self.status_label=QLabel('Не в сети');self.status_label.setObjectName('ProfileStatusOffline');self.status_label.setFixedHeight(17);names.addWidget(self.status_label)
         identity.addLayout(names,1)
         avatar=Button('Изменить аватар');avatar.setFixedSize(228,40);avatar.clicked.connect(self.choose_avatar);identity.addWidget(avatar)
@@ -94,19 +97,11 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         area.addWidget(self.password_button_wrapper);area.addStretch();card_l.addWidget(password_area)
         card_l.addSpacing(26)
         self.save_button=Button('Сохранить изменения',primary=True);self.save_button.setFixedSize(240,40);self.save_button.clicked.connect(self.save_changes);card_l.addWidget(self.save_button,0,Qt.AlignLeft)
+        card_l.addSpacing(29)
+        self.feedback=InlineNote();self.feedback.setMaximumWidth(800);card_l.addWidget(self.feedback)
         self.layout.addWidget(self.card);self.layout.addStretch()
         self._saving=False
         self.show_section('main')
-
-        # toast-уведомления внутри страницы (единый компонент)
-        self._toast = InlineToast(
-            self,
-            object_name="InlineToast",
-            min_width=240,
-            max_width=520,
-            horizontal_margin=12,
-            bottom_margin=14,
-        )
 
     def show_section(self,key):
         self._profile_section = key
@@ -117,21 +112,11 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def confirm_logout(self):
         from ui.design.dialogs import confirm
-        confirm(self,'Выйти из аккаунта?','Текущий звонок будет завершён. Вы сможете войти снова.','Выйти',self.logout)
+        confirm(self,'Выйти из аккаунта?','Текущая сессия завершится на этом устройстве.','Выйти',self.logout,danger=True)
 
-    def _reposition_toast(self):
-        if getattr(self, "_toast", None):
-            self._toast.reposition()
-
-    def show_toast(self, text: str, msec: int = 2600):
-        if not text:
-            return
-        if getattr(self, "_toast", None):
-            self._toast.show(text, max(900, int(msec)))
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._reposition_toast()
+    def show_toast(self, text: str, msec: int = 2600, *, success=False):
+        self.feedback.set_tone("success" if success else "error")
+        self.feedback.setText(text)
 
     # ==================================================
     # ================== Avatar logic ==================
@@ -224,6 +209,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         """
         Обновляет страницу профиля после перелогина без пересоздания страницы.
         """
+        self.feedback.clear()
         self.login = login or ""
         self.nickname = nickname or ""
         self.display_name.setText(self.nickname)
@@ -325,6 +311,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
         self.edit_block.setEnabled(False)
         self.password_block.setEnabled(False)
+        self.feedback.clear()
         self._saving=True
         self.save_button.setEnabled(False)
         self.save_button.setText('Сохраняем…')
@@ -356,17 +343,17 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             # Важно: чтобы ник сразу обновился в мини-карточке слева (MainWindow)
             self._sync_context_and_parent()
 
-            self.show_toast("Профиль обновлён")
+            self.show_toast("Изменения сохранены", success=True)
         else:
             self.show_toast(resp.get("message", "Не удалось обновить профиль"), msec=3200)
 
     def update_status(self, online: bool):
         if online:
-            self.status_label.setText("В сети")
+            self.status_label.setText(f"@{self.login} · В сети")
             self.status_label.setObjectName("ProfileStatusOnline")
             self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
         else:
-            self.status_label.setText("Не в сети")
+            self.status_label.setText(f"@{self.login} · Не в сети")
             self.status_label.setObjectName("ProfileStatusOffline")
             self.status_label.style().unpolish(self.status_label); self.status_label.style().polish(self.status_label)
 

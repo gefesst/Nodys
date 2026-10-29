@@ -1,36 +1,33 @@
 from PySide6.QtCore import Qt, QTimer, QEvent
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFrame
+from PySide6.QtWidgets import (
+    QDialog,
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+    QHBoxLayout,
+    QFrame,
+)
 from ui.avatar_widget import AvatarLabel
 from ui.design.widgets import Button
 from ui.design.motion import reduced
 
 
-class CallPanel(QDialog):
-    """Call surface inside the workspace, with no extra desktop window."""
+from ui.design.overlay import OverlayDialog
+
+
+class CallPanel(OverlayDialog):
+    """The approved call card, contained by the application window."""
+
     def __init__(self, parent=None):
-        super().__init__(parent)
-        if parent is not None:
-            self.setWindowFlags(Qt.Widget)
-            parent.installEventFilter(self)
-        self.setObjectName('CallPanel')
+        super().__init__(parent, 550, 650, anchor="call")
+        self.setObjectName("CallPanel")
+        self.setStyleSheet(
+            "QDialog#CallPanel {background:#202C3B;border:1px solid #465772;border-radius:18px;}"
+        )
+        self.shade.mousePressEvent = lambda event: event.accept()
 
-    def position_panel(self):
-        parent=self.parentWidget()
-        if parent is not None:
-            left=min(428,max(0,parent.width()-560))
-            width=min(540,parent.width()-left-40)
-            height=min(640,parent.height()-40)
-            self.setGeometry(left+(parent.width()-left-width)//2,(parent.height()-height)//2,width,height)
-
-    def showEvent(self,event):
-        self.position_panel()
-        super().showEvent(event)
-        self.raise_()
-
-    def eventFilter(self, watched, event):
-        if event.type()==QEvent.Resize:
-            self.position_panel()
-        return super().eventFilter(watched,event)
+    def reject(self):
+        self.close()
 
 
 class ActiveCallWindow(CallPanel):
@@ -69,90 +66,57 @@ class ActiveCallWindow(CallPanel):
         self.setObjectName("CallPanel")
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-        root.setSpacing(16)
+        root.setContentsMargins(36, 32, 36, 32)
+        root.setSpacing(0)
 
-        card = QFrame()
-        card.setObjectName("CallContent")
-        card_l = QVBoxLayout(card)
-        card_l.setContentsMargins(18, 18, 18, 18)
-        card_l.setSpacing(10)
+        def centered(text, name, height):
+            label = QLabel(text)
+            label.setObjectName(name)
+            label.setAlignment(Qt.AlignCenter)
+            label.setFixedHeight(height)
+            root.addWidget(label)
+            return label
 
-        title = QLabel("Идёт звонок")
-        title.setObjectName("CallTitle")
-        title.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(title)
-
-        self.timer_lbl = QLabel("00:00")
-        self.timer_lbl.setObjectName("CallTimer")
-        self.timer_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.timer_lbl)
-
-        self.avatar = AvatarLabel(size=96)
-        self.avatar.set_avatar(path=self.peer_avatar, login=self.peer_login, nickname=self.peer_nickname)
-        self.avatar.set_online(True, ring_color="#2b2d31")
-        card_l.addWidget(self.avatar, alignment=Qt.AlignHCenter)
-
-        self.name_lbl = QLabel(self.peer_nickname)
-        self.name_lbl.setObjectName("CallPeerName")
-        self.name_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.name_lbl)
-
-        self.login_lbl = QLabel(self.peer_login)
-        self.login_lbl.setObjectName("CallPeerLogin")
-        self.login_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.login_lbl)
-
-        self.state_lbl = QLabel("Подключение...")
-        self.state_lbl.setObjectName("CallState")
-        self.state_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.state_lbl)
-
-        self.speaking_lbl = QLabel("Сейчас: тишина")
-        self.speaking_lbl.setObjectName("CallSpeaking")
-        self.speaking_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.speaking_lbl)
-
-        self.quality_lbl = QLabel("Качество: —")
-        self.quality_lbl.setObjectName("CallQuality")
-        self.quality_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.quality_lbl)
-
-        self.quality_bars_lbl = QLabel("▂▄▆█")
-        self.quality_bars_lbl.setObjectName("CallQualityBars")
-        self.quality_bars_lbl.setAlignment(Qt.AlignCenter)
-        card_l.addWidget(self.quality_bars_lbl)
-
-        root.addWidget(card, 1)
-
+        self.timer_lbl = centered("00:00", "CallTimer", 29)
+        self.timer_lbl.setStyleSheet("font-size:23px;font-weight:600;")
+        root.addSpacing(37)
+        self.avatar = AvatarLabel(size=116)
+        self.avatar.set_avatar(
+            path=self.peer_avatar, login=self.peer_login, nickname=self.peer_nickname
+        )
+        self.avatar.set_online(True)
+        root.addWidget(self.avatar, 0, Qt.AlignHCenter)
+        root.addSpacing(31)
+        self.name_lbl = centered(self.peer_nickname, "CallPeerName", 30)
+        self.name_lbl.setStyleSheet("font-size:25px;font-weight:600;")
+        root.addSpacing(12)
+        self.login_lbl = centered("@" + self.peer_login, "CallPeerLogin", 18)
+        root.addSpacing(31)
+        self.state_lbl = centered("Подключение…", "CallState", 22)
+        root.addSpacing(24)
+        self.quality_lbl = centered("Качество: —", "CallQuality", 17)
+        self.speaking_lbl = QLabel(self)
+        self.speaking_lbl.hide()
+        self.quality_bars_lbl = QLabel(self)
+        self.quality_bars_lbl.hide()
+        root.addSpacing(58)
         btns = QHBoxLayout()
-        btns.setSpacing(10)
-
-        self.btn_end = Button('', 'end')
-        self.btn_end.setObjectName("CallRoundEndButton")
-        self.btn_end.clicked.connect(self._end_clicked)
-
-        self.btn_mic = Button('', 'mic')
-        self.btn_mic.setObjectName("CallRoundControlButton")
-        self.btn_mic.clicked.connect(self._mic_clicked)
-
-        self.btn_sound = Button('', 'headphones')
-        self.btn_sound.setObjectName("CallRoundControlButton")
-        self.btn_sound.clicked.connect(self._sound_clicked)
-
-
-        for b in (self.btn_end, self.btn_mic, self.btn_sound):
-            b.setFixedSize(56, 56)
+        btns.setSpacing(15)
+        self.btn_mic = Button("Микрофон")
+        self.btn_sound = Button("Звук")
+        self.btn_end = Button("Завершить")
         self.btn_end.setProperty("danger", True)
-        self.btn_end.setToolTip("Завершить звонок")
-        self.btn_mic.setToolTip("Микрофон")
-        self.btn_sound.setToolTip("Звук")
-        btns.addStretch()
-        btns.addWidget(self.btn_mic)
-        btns.addWidget(self.btn_sound)
-        btns.addWidget(self.btn_end)
-        btns.addStretch()
+        for button, width, callback in [
+            (self.btn_mic, 145, self._mic_clicked),
+            (self.btn_sound, 145, self._sound_clicked),
+            (self.btn_end, 155, self._end_clicked),
+        ]:
+            button.setFixedHeight(40)
+            button.setMaximumWidth(width)
+            button.clicked.connect(callback)
+            btns.addWidget(button, 1)
         root.addLayout(btns)
+        root.addStretch()
 
         self._tick_timer = QTimer(self)
         self._tick_timer.timeout.connect(self._tick)
@@ -195,29 +159,39 @@ class ActiveCallWindow(CallPanel):
         if peer and me:
             self.speaking_lbl.setText("Сейчас: говорите оба")
             self.state_lbl.setText("Двусторонний разговор")
-            self.state_lbl.setStyleSheet("color:#67D5AD; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet(
+                "color:#67D5AD; font-size:15px; font-weight:400;"
+            )
         elif peer:
             self.speaking_lbl.setText(f"Сейчас говорит: {self.peer_nickname}")
             self.state_lbl.setText("Собеседник говорит")
-            self.state_lbl.setStyleSheet("color:#67D5AD; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet(
+                "color:#67D5AD; font-size:15px; font-weight:400;"
+            )
         elif me:
             self.speaking_lbl.setText("Сейчас говорите: вы")
             self.state_lbl.setText("Вы говорите")
-            self.state_lbl.setStyleSheet("color:#91ADFF; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet(
+                "color:#91ADFF; font-size:15px; font-weight:400;"
+            )
         else:
             self.speaking_lbl.setText("Сейчас: тишина")
             self.state_lbl.setText("Соединение активно")
-            self.state_lbl.setStyleSheet("color:#ACB9CC; font-size:12px; font-weight:700;")
+            self.state_lbl.setStyleSheet(
+                "color:#ACB9CC; font-size:15px; font-weight:400;"
+            )
 
         quality = a.get("quality")
         lat = a.get("latency_ms")
         jit = a.get("jitter_ms")
         score = float(a.get("quality_score", 0.0) or 0.0)
         if quality is not None:
-            self.quality_lbl.setText(f"Качество: {quality} • ping {lat} ms • jitter {jit} ms")
+            self.quality_lbl.setText(f"Качество: {quality} · {lat} мс")
             bars, color = self._bars_for_quality(score)
             self.quality_bars_lbl.setText(bars)
-            self.quality_bars_lbl.setStyleSheet(f"color:{color}; font-size:16px; font-weight:800; letter-spacing:2px;")
+            self.quality_bars_lbl.setStyleSheet(
+                f"color:{color}; font-size:16px; font-weight:800; letter-spacing:2px;"
+            )
 
         # style avatar state for pulse timer
         if peer:
@@ -228,10 +202,12 @@ class ActiveCallWindow(CallPanel):
             self._avatar_mode = "idle"
 
     def _pulse_avatar(self):
-        mode = getattr(self, '_avatar_mode', 'idle')
+        mode = getattr(self, "_avatar_mode", "idle")
         self._pulse = (self._pulse + 1) % 20
-        self.avatar.setProperty('speaking', mode != 'idle')
-        self.avatar.setProperty('pulse_alpha', 160 if reduced() else 100 + abs(10-self._pulse)*10)
+        self.avatar.setProperty("speaking", mode != "idle")
+        self.avatar.setProperty(
+            "pulse_alpha", 160 if reduced() else 100 + abs(10 - self._pulse) * 10
+        )
         self.avatar.update()
 
     def _end_clicked(self):
@@ -242,7 +218,10 @@ class ActiveCallWindow(CallPanel):
 
     def _mic_clicked(self):
         self.mic_enabled = not self.mic_enabled
-        self.btn_mic.setToolTip("Выключить микрофон" if self.mic_enabled else "Включить микрофон")
+        self.btn_mic.setToolTip(
+            "Выключить микрофон" if self.mic_enabled else "Включить микрофон"
+        )
+        self.btn_mic.setText("Микрофон" if self.mic_enabled else "Микр. выкл.")
         self.btn_mic.primary = not self.mic_enabled
         self.btn_mic.update()
         self.btn_mic.setProperty("off", "false" if self.mic_enabled else "true")
@@ -251,12 +230,16 @@ class ActiveCallWindow(CallPanel):
 
     def _sound_clicked(self):
         self.sound_enabled = not self.sound_enabled
-        self.btn_sound.setToolTip("Выключить звук" if self.sound_enabled else "Включить звук")
+        self.btn_sound.setToolTip(
+            "Выключить звук" if self.sound_enabled else "Включить звук"
+        )
+        self.btn_sound.setText("Звук" if self.sound_enabled else "Звук выкл.")
         self.btn_sound.primary = not self.sound_enabled
         self.btn_sound.update()
         self.btn_sound.setProperty("off", "false" if self.sound_enabled else "true")
         if self.on_sound_toggle:
             self.on_sound_toggle(self.sound_enabled)
+
     def set_visual_state(self, state: str):
         """
         state: idle | me | peer | both
@@ -267,7 +250,6 @@ class ActiveCallWindow(CallPanel):
         if hasattr(self, "avatar_wrap"):
             self.avatar_wrap.setProperty("talkState", state)
             self.avatar_wrap.update()
-
 
     def closeEvent(self, event):
         try:
@@ -283,28 +265,78 @@ class ActiveCallWindow(CallPanel):
             pass
         event.accept()
 
+
 class OutgoingCallWindow(CallPanel):
     """Ringing state tied to the server call identity; cancelling is a real action."""
+
     def __init__(self, peer, cancel, parent=None):
         super().__init__(parent)
         self.cancel = cancel
         self.finished_by_server = False
-        self.setWindowTitle('Исходящий звонок')
-        self.resize(440, 370)
+        self.setWindowTitle("Исходящий звонок")
         root = QVBoxLayout(self)
-        root.setContentsMargins(32,32,32,32)
-        title=QLabel('Звоним…');title.setAlignment(Qt.AlignCenter);title.setObjectName('FieldHeading');root.addWidget(title)
-        root.addStretch()
-        avatar = AvatarLabel(96)
-        avatar.set_avatar(login=peer, nickname=peer)
-        root.addWidget(avatar,0,Qt.AlignCenter)
-        name = QLabel(peer);name.setObjectName('CallPeerName');name.setAlignment(Qt.AlignCenter)
+        root.setContentsMargins(36, 32, 36, 32)
+        root.setSpacing(0)
+        title = QLabel("Звоним…")
+        self.heading = title
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size:23px;font-weight:600;")
+        title.setFixedHeight(29)
+        root.addWidget(title)
+        root.addSpacing(37)
+        contact = next(
+            (
+                p
+                for p in getattr(parent.friends_page, "_friends_data", [])
+                if p.get("login") == peer
+            ),
+            {},
+        )
+        nickname = contact.get("nickname") or peer
+        avatar = AvatarLabel(116)
+        avatar.set_avatar(path=contact.get("avatar", ""), login=peer, nickname=nickname)
+        root.addWidget(avatar, 0, Qt.AlignHCenter)
+        root.addSpacing(31)
+        name = QLabel(nickname)
+        name.setAlignment(Qt.AlignCenter)
+        name.setFixedHeight(30)
+        name.setStyleSheet("font-size:25px;font-weight:600;")
         root.addWidget(name)
-        hint = QLabel('Вызываем…');hint.setAlignment(Qt.AlignCenter);root.addWidget(hint)
+        root.addSpacing(12)
+        login = QLabel("@" + peer)
+        login.setAlignment(Qt.AlignCenter)
+        login.setFixedHeight(18)
+        root.addWidget(login)
+        root.addSpacing(31)
+        hint = QLabel("Ожидаем ответа")
+        self.status_label = hint
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setFixedHeight(22)
+        root.addWidget(hint)
+        root.addSpacing(99)
+        button = Button("Отменить")
+        self.action_button = button
+        button.setFixedSize(220, 40)
+        button.setProperty("danger", True)
+        button.clicked.connect(self.close)
+        root.addWidget(button, 0, Qt.AlignHCenter)
         root.addStretch()
-        button = Button('Отменить звонок','end');button.setProperty('danger',True);button.clicked.connect(self.close);root.addWidget(button,0,Qt.AlignHCenter)
-        root.addStretch()
-    def closeEvent(self,event):
+
+    def closeEvent(self, event):
         if not self.finished_by_server:
             self.cancel()
         event.accept()
+
+
+class CallResultWindow(OutgoingCallWindow):
+    """Terminal call state; closing this card never sends a signaling action."""
+    def __init__(self, result, parent):
+        super().__init__(result.get("peer", ""), lambda: None, parent)
+        self.finished_by_server = True
+        self.heading.setText(result.get("title", "Звонок завершён"))
+        self.heading.setWordWrap(True)
+        self.heading.setMinimumHeight(29)
+        self.heading.setMaximumHeight(60)
+        self.status_label.setText("Аудиозвонок")
+        self.action_button.setText("Закрыть")
+        self.action_button.setProperty("danger", False)

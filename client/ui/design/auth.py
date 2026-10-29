@@ -86,7 +86,8 @@ def finish_auth_layout(form, status, primary, secondary, registration=False):
     if not registration:
         form.addSpacing(92)
     form.addSpacing(11)
-    status.setFixedHeight(17)
+    status.setMinimumHeight(17)
+    status.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
     form.addWidget(status)
     form.addSpacing(31)
     primary.setFixedHeight(40)

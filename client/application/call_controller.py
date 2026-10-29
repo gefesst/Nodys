@@ -7,6 +7,7 @@ class CallController(QObject):
     state_changed = Signal(object)
     notice = Signal(str, int)
     response_finished = Signal(bool)
+    result_ready = Signal(object)
 
     def __init__(self, context, parent=None, request_factory=NetworkThread):
         super().__init__(parent)
@@ -64,6 +65,8 @@ class CallController(QObject):
         events = response.get('events', [])
         if not isinstance(events, list):
             return
+        previous_cursor = self.cursor
+        previous_state = self.state
         for event in events:
             if not isinstance(event, dict):
                 continue
@@ -81,6 +84,20 @@ class CallController(QObject):
             self._state_key = key
             self.state = None if state is None else dict(state)
             self.state_changed.emit(self.state)
+            if state is None and previous_state is not None:
+                terminal = next((event for event in reversed(events)
+                    if isinstance(event, dict)
+                    and type(event.get("event_id")) is int
+                    and event["event_id"] > previous_cursor
+                    and event.get("call_id") == previous_state["call_id"]
+                    and event.get("with_user") == previous_state["peer"]
+                    and event.get("type") in ("call_declined", "call_ended")), None)
+                title = "Звонок завершён"
+                if terminal and terminal["type"] == "call_declined":
+                    title = "Вызов отклонён"
+                elif terminal and terminal.get("by_user") == "system":
+                    title = "Нет ответа" if previous_state["status"] == "ringing" else "Связь прервана"
+                self.result_ready.emit(dict(peer=previous_state["peer"], title=title))
 
     def _refresh_after_action(self):
         # An in-flight read may predate this mutation. Cancel and fence it.
@@ -97,6 +114,9 @@ class CallController(QObject):
             ok = isinstance(response, dict) and response.get('status') == 'ok'
             self.notice.emit(f'Вызов отправлен пользователю {peer}' if ok else
                              response.get('message', 'Не удалось начать вызов'), 2600)
+            if not ok:
+                message = response.get("message", "Не удалось начать звонок")
+                self.result_ready.emit(dict(peer=peer, title=message))
             self._refresh_after_action()
         return self._request('action', dict(action='call_user', to_user=peer), done)
 

@@ -160,6 +160,24 @@ def main():
             self.wait()
             yield
             self.shot("06-friends-requests")
+            m.friends_page.set_view("all")
+            m.friends_page.filter_input.setText("no-such-friend")
+            self.wait();yield
+            self.shot("06b-friends-search-empty")
+            m.friends_page.filter_input.clear()
+            from config import save_config
+            save_config({'api_port':lab.free_port()})
+            m.friends_page.load_friends()
+            self.wait(predicate=lambda:not m.friends_page._loading_friends);yield
+            self.shot("06c-friends-network-error")
+            save_config(lab.config)
+            m.friends_page.load_friends()
+            self.wait(predicate=lambda:not m.friends_page._loading_friends);yield
+            m.friends_page.confirm_and_remove_friend(lab.people[0][0])
+            self.wait();yield
+            self.shot("06d-friend-remove-confirm")
+            m.friends_page._confirmation.reject()
+            m.friends_page.hide_inline_delete_confirm()
             m.friends_page.set_view("add")
             m.friends_page.login_input.setText(lab.people[0][0])
             m.friends_page.find_user_inline()
@@ -189,6 +207,9 @@ def main():
             self.wait(predicate=lambda: bool(m.channels_page.channels))
             yield
             ch = m.channels_page
+            ch._set_invites_dropdown_open(True)
+            self.wait();yield
+            self.shot('11b-channel-invites')
             ch.open_channel(ch.channels[0])
             ch.switch_to_text_tab()
             self.wait(0.6)
@@ -254,6 +275,11 @@ def main():
             self.wait()
             yield
             self.shot("20-profile-edit")
+            m.profile_page.save_changes()
+            self.shot('20b-profile-saving')
+            self.wait(predicate=lambda:not m.profile_page._saving);yield
+            assert m.profile_page.feedback.text() == 'Изменения сохранены'
+            self.shot('20c-profile-saved')
             m.profile_page.show_section("password")
             self.wait()
             yield
@@ -279,9 +305,11 @@ def main():
             w.resize(1440, 900)
             if args.synthetic_voice:
                 peer = lab.people[0][0]
+                assert lab.request(peer,"heartbeat")["status"] == "ok"
                 m.start_outgoing_call(peer)
-                self.wait(predicate=lambda: bool(m.calls.state))
+                self.wait(predicate=lambda: bool(m.calls.state) or bool(getattr(m,"call_result_window",None)))
                 yield
+                assert m.calls.state, "Outgoing call did not reach ringing"
                 self.shot("24-outgoing-call", m.outgoing_window)
                 state = lab.request(peer, "poll_events", after_event_id=0)["call_state"]
                 assert (
@@ -338,6 +366,9 @@ def main():
                 m.call_window._end_clicked()
                 self.wait(predicate=lambda: m.calls.state is None)
                 yield
+                if getattr(m,"call_result_window",None):
+                    self.shot("26b-call-result")
+                    m._close_call_result()
                 assert lab.request(peer, "call_user", to_user=lab.me)["status"] == "ok"
                 m.calls.poll()
                 self.wait(
@@ -350,6 +381,8 @@ def main():
                 m._decline_incoming_inline()
                 self.wait(predicate=lambda: m.calls.state is None)
                 yield
+                self.shot("27b-call-declined")
+                m._close_call_result()
                 # A repeated accepted incoming call exercises lifecycle reuse.
                 assert lab.request(peer, "call_user", to_user=lab.me)["status"] == "ok"
                 m.calls.poll()

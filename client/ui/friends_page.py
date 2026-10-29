@@ -48,15 +48,16 @@ class FriendItem(QFrame):
         name = QLabel(nickname)
         name.setObjectName("FriendItemName")
         name.setFixedHeight(20)
+        name.setMinimumWidth(0)
+        name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed)
         text_col.addWidget(name)
 
-        sub = QLabel(f"@{login} · {'В сети' if online else 'Не в сети'}" if request_from is None else f"Запрос от: {login}")
+        sub = QLabel(f"@{login} · {'В сети' if online else 'Не в сети'}" if request_from is None else "Заявка в друзья")
         sub.setObjectName("FriendItemSub")
         sub.setFixedHeight(20)
         text_col.addWidget(sub)
 
-        layout.addLayout(text_col)
-        layout.addStretch()
+        layout.addLayout(text_col,1)
 
         if request_from is None:
             # Монохромный символ лучше читается на зелёной кнопке.
@@ -89,7 +90,7 @@ class FriendItem(QFrame):
         if request_from is not None:
             btn_accept = QPushButton("Принять")
             btn_accept.setObjectName("AcceptButton")
-            btn_accept.setFixedHeight(34)
+            btn_accept.setFixedSize(130,40)
             if on_accept:
                 btn_accept.clicked.connect(lambda: on_accept(request_from))
             layout.addWidget(btn_accept)
@@ -97,7 +98,7 @@ class FriendItem(QFrame):
 
             btn_decline = QPushButton("Отклонить")
             btn_decline.setObjectName("DeclineButton")
-            btn_decline.setFixedHeight(34)
+            btn_decline.setFixedSize(136,40)
             if on_decline:
                 btn_decline.clicked.connect(lambda: on_decline(request_from))
             layout.addWidget(btn_decline)
@@ -140,7 +141,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         heading=QLabel('Друзья');heading.setObjectName('PageTitle');heading.setFixedHeight(31);heading.setContentsMargins(8,0,0,0);side.addWidget(heading);side.addSpacing(17)
         self.view_buttons={}
         for mode,text in [('all','Все друзья'),('online','В сети'),('requests','Заявки'),('add','Добавить друга')]:
-            button=QPushButton(text);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.clicked.connect(lambda checked=False,m=mode:self.set_view(m));side.addWidget(button);self.view_buttons[mode]=button
+            button=QPushButton(text);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.toggled.connect(lambda checked,m=mode:self.set_view(m) if checked else None);side.addWidget(button);self.view_buttons[mode]=button
         side.addStretch();outer.addWidget(sidebar)
         work=QWidget();outer.addWidget(work,1)
         root = QVBoxLayout(work)
@@ -192,48 +193,37 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.add_panel.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Maximum)
         self.add_panel.setVisible(False)
 
+        self.add_panel.setMaximumWidth(822)
         panel_lay = QVBoxLayout(self.add_panel)
-        panel_lay.setContentsMargins(12, 12, 12, 12)
-        panel_lay.setSpacing(8)
-
-        panel_title = QLabel("Добавить друга по логину")
-        panel_title.setObjectName("AddPanelTitle")
-        panel_lay.addWidget(panel_title)
-
-        row = QHBoxLayout()
-        self.login_input = QLineEdit()
-        self.login_input.setPlaceholderText("Введите логин пользователя")
-        row.addWidget(self.login_input)
-
-        self.find_btn = QPushButton("Найти")
-        self.find_btn.setObjectName("FindUserButton")
-        self.find_btn.clicked.connect(self.find_user_inline)
-        row.addWidget(self.find_btn)
-        install_opacity_feedback(self.find_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-        panel_lay.addLayout(row)
-
-        self.find_result = QLabel("")
-        self.find_result.setObjectName("AddPanelHint")
-        self.find_result.setWordWrap(True)
+        panel_lay.setContentsMargins(22,7,0,0);panel_lay.setSpacing(0)
+        panel_title=QLabel("Логин пользователя");panel_title.setObjectName("FieldTitle")
+        panel_title.setFixedHeight(17);panel_lay.addWidget(panel_title);panel_lay.addSpacing(10)
+        row=QHBoxLayout();row.setSpacing(20)
+        self.login_input=QLineEdit();self.login_input.setPlaceholderText("Введите логин пользователя")
+        self.login_input.setFixedHeight(46);self.login_input.returnPressed.connect(self.find_user_inline)
+        row.addWidget(self.login_input,1)
+        self.find_btn=QPushButton("Найти");self.find_btn.setObjectName("FindUserButton")
+        self.find_btn.setFixedSize(150,40);self.find_btn.clicked.connect(self.find_user_inline)
+        row.addWidget(self.find_btn,0,Qt.AlignTop);panel_lay.addLayout(row);panel_lay.addSpacing(52)
+        self.found_card=QFrame();self.found_card.setObjectName("FriendItem");self.found_card.setFixedHeight(120)
+        found=QHBoxLayout(self.found_card);found.setContentsMargins(24,26,26,26);found.setSpacing(18)
+        self.found_avatar=AvatarLabel(48);found.addWidget(self.found_avatar)
+        names=QVBoxLayout();names.setSpacing(5)
+        self.found_name=QLabel();self.found_name.setStyleSheet("font-size:18px;font-weight:600;")
+        self.found_name.setMinimumWidth(0);self.found_name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
+        self.found_login=QLabel();self.found_login.setStyleSheet("font-size:13px;color:#ACB9CC;")
+        names.addWidget(self.found_name);names.addWidget(self.found_login);found.addLayout(names,1)
+        self.send_request_btn=QPushButton("Отправить заявку");self.send_request_btn.setObjectName("SendRequestButton")
+        self.send_request_btn.setFixedSize(204,40);self.send_request_btn.setEnabled(False)
+        self.send_request_btn.clicked.connect(self.send_request_inline);found.addWidget(self.send_request_btn)
+        panel_lay.addWidget(self.found_card);self.found_card.hide();panel_lay.addSpacing(42)
+        from ui.design.state_surfaces import InlineNote
+        self.find_result=InlineNote();self.find_result.setObjectName("AddPanelHint")
+        self.find_result.setWordWrap(True);self.find_result.setMinimumHeight(46)
         panel_lay.addWidget(self.find_result)
-
-        panel_actions = QHBoxLayout()
-        panel_actions.addStretch()
-
-        self.send_request_btn = QPushButton("Отправить запрос")
-        self.send_request_btn.setObjectName("SendRequestButton")
-        self.send_request_btn.setEnabled(False)
-        self.send_request_btn.clicked.connect(self.send_request_inline)
-        panel_actions.addWidget(self.send_request_btn)
-        install_opacity_feedback(self.send_request_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        self.close_add_panel_btn = QPushButton("Скрыть")
-        self.close_add_panel_btn.setObjectName("HideAddPanelButton")
-        self.close_add_panel_btn.clicked.connect(self.hide_add_friend_panel)
-        panel_actions.addWidget(self.close_add_panel_btn)
-        install_opacity_feedback(self.close_add_panel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        panel_lay.addLayout(panel_actions)
+        self.close_add_panel_btn=QPushButton("Скрыть",self.add_panel)
+        self.close_add_panel_btn.clicked.connect(self.hide_add_friend_panel);self.close_add_panel_btn.hide()
+        self.login_input.textChanged.connect(self._clear_found_user)
         root.addWidget(self.add_panel)
 
         # ---------- Main content card ----------
@@ -376,13 +366,21 @@ class FriendsPage(QWidget, ThreadSafeMixin):
     # ==================================================
     def set_view(self, mode):
         self.view_mode=mode
-        self.subtitle.setText({"all":"Люди, с которыми хочется быть на связи","online":"Друзья, которые сейчас в сети","requests":"Новые знакомства начинаются здесь","add":"Найдите человека по его логину"}[mode])
-        for key,button in self.view_buttons.items():button.setChecked(key==mode)
-        self.heading.setText({'all':'Друзья','online':'Друзья в сети','requests':'Заявки','add':'Добавить друга'}[mode])
+        self.subtitle.setText("Люди, с которыми хочется быть на связи")
+        from PySide6.QtCore import QSignalBlocker
+        for key,button in self.view_buttons.items():
+            with QSignalBlocker(button):
+                button.setChecked(key==mode)
+        self._update_heading()
         self.add_panel.setVisible(mode=='add');self.body_card.setVisible(mode!='add')
         self.filter_input.setVisible(mode!='add')
         self._render_if_needed(force=True)
         if mode=='add':self.login_input.setFocus()
+
+    def _update_heading(self):
+        online=sum(bool(friend.get('online')) for friend in self._friends_data)
+        self.heading.setText({'all':'Друзья','online':f'В сети · {online}',
+            'requests':f'Заявки · {len(self._requests_data)}','add':'Добавить друга'}[self.view_mode])
 
     def toggle_add_friend_panel(self):self.set_view('add')
 
@@ -390,11 +388,15 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.set_view('all')
         self._reset_add_panel_state()
 
+    def _clear_found_user(self):
+        self._found_user = None
+        self.found_card.hide()
+        self.send_request_btn.setEnabled(False)
+        self.find_result.clear()
+
     def _reset_add_panel_state(self):
         self.login_input.clear()
-        self.find_result.setText("")
-        self.send_request_btn.setEnabled(False)
-        self._found_user = None
+        self._clear_found_user()
 
     def clear_list(self):
         for i in reversed(range(self.list_layout.count() - 1)):
@@ -408,39 +410,15 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.list_layout.insertWidget(self.list_layout.count() - 1, header)
 
 
-    def _make_empty_state(self, title: str, subtitle: str) -> QFrame:
-        card = QFrame()
-        card.setObjectName("FriendsEmptyStateCard")
-        lay = QVBoxLayout(card)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(5)
-
-        from PySide6.QtSvgWidgets import QSvgWidget
-        from ui.design.widgets import ASSETS
-        icon = QSvgWidget(str(ASSETS / "illustration-friends.svg"))
-        icon.setFixedSize(220,160)
-        icon.setObjectName("FriendsEmptyStateIcon")
-        lay.addWidget(icon,0,Qt.AlignHCenter)
-
-        t = QLabel(title)
-        t.setObjectName("FriendsEmptyStateTitle")
-        t.setAlignment(Qt.AlignCenter)
-        lay.addWidget(t)
-
-        s = QLabel(subtitle)
-        s.setObjectName("FriendsEmptyStateSub")
-        s.setWordWrap(True)
-        s.setAlignment(Qt.AlignCenter)
-        lay.addWidget(s)
-        return card
+    def _make_empty_state(self, title: str, subtitle: str, action=None, callback=None):
+        from ui.design.state_surfaces import EmptyState
+        return EmptyState(title,subtitle,action,callback)
 
     def _show_skeleton(self, count: int = 6):
+        from ui.design.state_surfaces import LoadingState
         self._skeleton_visible = True
         self.clear_list()
-        for _ in range(max(2, int(count))):
-            sk = QFrame()
-            sk.setObjectName("FriendsSkeletonCard")
-            self.list_layout.insertWidget(self.list_layout.count() - 1, sk)
+        self.list_layout.insertWidget(self.list_layout.count()-1,LoadingState())
 
     def _state_key(self):
         req_key = tuple(sorted(self._requests_data))
@@ -456,9 +434,11 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         return req_key, fr_key
 
     def _render_if_needed(self, force: bool = False):
+        self._update_heading()
         if not self._has_loaded_friends_once or not self._has_loaded_requests_once:
             return
-        key=(self._state_key(),self.view_mode,self.filter_input.text())
+        error=getattr(self,"_requests_error",False) if self.view_mode=="requests" else getattr(self,"_friends_error",False)
+        key=(self._state_key(),self.view_mode,self.filter_input.text(),error)
         if not force and key==self._render_key:return
         self._render_key=key;self._skeleton_visible=False
         self.scroll.setUpdatesEnabled(False)
@@ -476,8 +456,12 @@ class FriendsPage(QWidget, ThreadSafeMixin):
                 if query not in (friend.get('nickname','')+' '+friend['login']).casefold():continue
                 item=FriendItem(friend['login'],friend.get('nickname',friend['login']),friend.get('avatar',''),friend.get('online',False),on_call=self.call_friend,on_manage=self.show_friend_actions_menu)
                 self.list_layout.insertWidget(self.list_layout.count()-1,item);count+=1
-        if not count:
-            empty=self._make_empty_state('Ничего не найдено' if query else ('Нет заявок' if self.view_mode=='requests' else 'Пока здесь никого нет'),'Попробуйте другой поиск или добавьте друга по логину.')
+        if error:
+            empty=self._make_empty_state('Не удалось загрузить друзей' if self.view_mode!='requests' else 'Не удалось загрузить заявки',
+                'Список появится после восстановления соединения.','Повторить',self.refresh)
+            self.list_layout.insertWidget(0,empty)
+        elif not count:
+            empty=self._make_empty_state('Ничего не найдено' if query else ('Нет заявок' if self.view_mode=='requests' else 'Пока нет друзей'),'Попробуйте другой поиск.' if query else 'Добавьте человека по его логину.',None if query or self.view_mode=='requests' else 'Добавить друга',self.toggle_add_friend_panel)
             self.list_layout.insertWidget(self.list_layout.count()-1,empty)
         self.view_buttons['requests'].setText('Заявки'+(f' · {len(self._requests_data)}' if self._requests_data else ''))
         self.scroll.setUpdatesEnabled(True)
@@ -513,6 +497,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_requests(self, resp):
+        self._requests_error = resp.get("status") != "ok"
         if resp.get("status") == "ok":
             self._requests_data = list(resp.get("requests", []) or [])
         else:
@@ -564,6 +549,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def handle_friends(self, resp):
+        self._friends_error = resp.get("status") != "ok"
         if resp.get("status") == "ok":
             self._friends_data = list(resp.get("friends", []) or [])
         else:
@@ -592,6 +578,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             return
 
         self._finding_user = True
+        self.find_result.set_tone("info")
         self.find_result.setText("Ищу пользователя...")
         self.send_request_btn.setEnabled(False)
         self._found_user = None
@@ -600,18 +587,23 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         def cb(resp):
             try:
+                if self.login_input.text().strip() != login:
+                    return
                 if resp.get("status") == "ok":
                     self._found_user = {
                         "login": resp.get("login", ""),
                         "nickname": resp.get("nickname", resp.get("login", "")),
                         "avatar": resp.get("avatar", "")
                     }
-                    self.find_result.setText(
-                        f"Найден: {self._found_user['nickname']} ({self._found_user['login']})"
-                    )
+                    self.found_avatar.set_avatar(self._found_user['avatar'],self._found_user['login'],self._found_user['nickname'])
+                    self.found_name.setText(self._found_user['nickname'])
+                    self.found_login.setText('@'+self._found_user['login'])
+                    self.found_card.show()
+                    self.find_result.clear()
                     self.send_request_btn.setEnabled(True)
                 else:
                     self._found_user = None
+                    self.find_result.set_tone("error")
                     self.find_result.setText(resp.get("message", "Пользователь не найден"))
                     self.send_request_btn.setEnabled(False)
             finally:
@@ -640,10 +632,14 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
         def cb(resp):
             try:
+                if not self._found_user or self._found_user.get("login") != to_user:
+                    return
                 if resp.get("status") == "ok":
-                    self.find_result.setText("✅ Запрос дружбы отправлен")
+                    self.find_result.set_tone("success")
+                    self.find_result.setText("Заявка отправлена. Ответ появится в разделе «Заявки».")
                     self.refresh()
                 else:
+                    self.find_result.set_tone("error")
                     self.find_result.setText(resp.get("message", "Ошибка отправки запроса"))
                     self.send_request_btn.setEnabled(True)
             finally:
@@ -694,11 +690,11 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         if not friend_login:
             return
         self._pending_remove_login = friend_login
-        self.inline_confirm_text.setText(f"Удалить пользователя {friend_login} из друзей?")
-        self.inline_confirm.adjustSize()
-        self._reposition_inline_confirm()
-        self.inline_confirm.setVisible(True)
-        self.inline_confirm.raise_()
+        from ui.design.dialogs import confirm
+        friend=next((row for row in self._friends_data if row.get("login")==friend_login),{})
+        name=friend.get("nickname") or friend_login
+        confirm(self, f"Удалить {name} из друзей?", "Вы сможете снова отправить заявку по логину.",
+                "Удалить", self.confirm_remove_inline, danger=True)
 
     def hide_inline_delete_confirm(self):
         self._pending_remove_login = None

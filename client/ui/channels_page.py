@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSignalBlocker
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -43,13 +43,13 @@ class ChannelListItem(QFrame):
 
         self.setObjectName("ChannelListItem")
         self.setProperty("active", bool(active))
-        self.setFixedHeight(64)
+        self.setFixedHeight(70)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(10)
+        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setSpacing(12)
 
-        avatar = AvatarLabel(size=42)
+        avatar = AvatarLabel(size=40)
         avatar.set_avatar(
             path=self.channel.get("avatar", ""),
             login=f"channel_{self.channel.get('id', '')}",
@@ -64,6 +64,8 @@ class ChannelListItem(QFrame):
 
         name = QLabel(self.channel.get("name", "Без названия"))
         name.setObjectName("ChannelListItemName")
+        name.setMinimumWidth(0)
+        name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         text_col.addWidget(name)
 
         role = (self.channel.get("my_role") or "member").strip().lower()
@@ -81,11 +83,9 @@ class ChannelListItem(QFrame):
             or self.channel.get("members_count")
             or 0
         )
-        parts = [role_text]
-        if participants_count > 0:
-            parts.append(f"Участников: {participants_count}")
-
-        sub = QLabel(" · ".join(parts))
+        suffix = "участник" if participants_count % 10 == 1 and participants_count % 100 != 11 else "участника" if participants_count % 10 in (2,3,4) and participants_count % 100 not in (12,13,14) else "участников"
+        sub = QLabel(f"{participants_count} {suffix}")
+        self.setToolTip(role_text)
         sub.setObjectName("ChannelListItemSub")
         text_col.addWidget(sub)
 
@@ -265,13 +265,15 @@ class VoiceParticipantItem(QFrame):
         self.setProperty('speaking',speaking)
         self.setMinimumWidth(180)
         self.setFixedHeight(225)
-        layout=QVBoxLayout(self);layout.setContentsMargins(20,28,20,24);layout.setSpacing(14)
-        avatar=AvatarLabel(68);avatar.set_avatar(self.participant.get('avatar',''),login,name)
+        layout=QVBoxLayout(self);layout.setContentsMargins(20,28,20,24);layout.setSpacing(0)
+        avatar=AvatarLabel(72);avatar.set_avatar(self.participant.get('avatar',''),login,name)
         avatar.setProperty('speaking',speaking)
         layout.addWidget(avatar,0,Qt.AlignHCenter)
+        layout.addSpacing(19)
         title=QLabel('Вы' if login==current_login else name);title.setObjectName('ChannelVoiceMemberName')
         title.setAlignment(Qt.AlignCenter);title.setWordWrap(True);layout.addWidget(title)
-        state=QLabel('Говорит' if speaking else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
+        layout.addSpacing(12)
+        state=QLabel('Говорит' if speaking else 'Микрофон выключен' if self.participant.get('muted') else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
         state.setAlignment(Qt.AlignCenter);layout.addWidget(state)
         layout.addStretch()
 
@@ -282,39 +284,20 @@ class ChannelInviteItem(QFrame):
         self.invite = invite or {}
         self.setObjectName("ChannelInviteItem")
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(10, 8, 10, 8)
-        lay.setSpacing(6)
-
-        channel_name = self.invite.get("channel_name") or "Приглашение в канал"
-        title = QLabel(channel_name)
-        title.setObjectName("ChannelInviteTitle")
-        title.setWordWrap(True)
-        lay.addWidget(title)
-
-        from_user = self.invite.get("from_nickname") or self.invite.get("from_user") or "пользователь"
-        sub = QLabel(f"Пригласил: {from_user}")
-        sub.setObjectName("ChannelInviteSub")
-        lay.addWidget(sub)
-
-        actions = QHBoxLayout()
-        actions.setContentsMargins(0, 0, 0, 0)
-        actions.setSpacing(6)
-
-        btn_accept = QPushButton("Принять")
-        btn_accept.setObjectName("ChannelTinyActionButton")
-        btn_accept.clicked.connect(lambda: on_accept(int(self.invite.get("invite_id") or 0)))
-        install_opacity_feedback(btn_accept, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        btn_decline = QPushButton("Отклонить")
-        btn_decline.setObjectName("ChannelTinyDangerButton")
-        btn_decline.clicked.connect(lambda: on_decline(int(self.invite.get("invite_id") or 0)))
-        install_opacity_feedback(btn_decline, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        actions.addWidget(btn_accept)
-        actions.addWidget(btn_decline)
-        actions.addStretch(1)
-        lay.addLayout(actions)
+        from ui.design.widgets import Button
+        self.setFixedHeight(121)
+        lay=QHBoxLayout(self);lay.setContentsMargins(22,20,16,20);lay.setSpacing(24)
+        channel_name=self.invite.get('channel_name') or 'Приглашение в канал'
+        avatar=AvatarLabel(52);avatar.set_avatar(self.invite.get('avatar',''),nickname=channel_name);lay.addWidget(avatar)
+        names=QVBoxLayout();names.setSpacing(8)
+        title=QLabel(channel_name);title.setStyleSheet('font-size:19px;font-weight:600;');title.setWordWrap(True);names.addWidget(title)
+        sender=self.invite.get('from_nickname') or self.invite.get('from_user') or 'пользователь'
+        subtitle=QLabel(f'Пригласил: {sender}');subtitle.setObjectName('Muted');subtitle.setWordWrap(True);names.addWidget(subtitle)
+        lay.addLayout(names,1)
+        for label,width,callback,primary in [('Принять',130,on_accept,True),('Отклонить',136,on_decline,False)]:
+            button=Button(label,primary=primary);button.setFixedSize(width,40)
+            button.clicked.connect(lambda checked=False,cb=callback:cb(int(self.invite.get('invite_id') or 0)))
+            lay.addWidget(button)
 
 
 
@@ -388,18 +371,19 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         from ui.design.tokens import LIST_WIDTH
         sidebar.setFixedWidth(LIST_WIDTH)
         sb_l = QVBoxLayout(sidebar)
-        sb_l.setContentsMargins(20, 30, 20, 20)
+        sb_l.setContentsMargins(12, 30, 12, 20)
         sb_l.setSpacing(10)
 
-        eyebrow=QLabel('ПРОСТРАНСТВА');eyebrow.setObjectName('Eyebrow');sb_l.addWidget(eyebrow)
-        heading=QLabel('Каналы');heading.setObjectName('PageTitle');sb_l.addWidget(heading);sb_l.addSpacing(12)
+        eyebrow=QLabel('ПРОСТРАНСТВА');eyebrow.setObjectName('Eyebrow');eyebrow.setContentsMargins(10,0,0,0);sb_l.addWidget(eyebrow)
+        heading=QLabel('Каналы');heading.setObjectName('PageTitle');heading.setContentsMargins(10,0,0,0);sb_l.addWidget(heading);sb_l.addSpacing(12)
         actions_row = QHBoxLayout()
+        actions_row.setContentsMargins(10,0,10,0)
         actions_row.setSpacing(10)
 
         self.create_channel_btn = QPushButton("Создать")
         self.create_channel_btn.setObjectName("ChannelCircleButton")
         self.create_channel_btn.setProperty("variant", "create")
-        self.create_channel_btn.setFixedHeight(42)
+        self.create_channel_btn.setFixedHeight(40)
         self.create_channel_btn.setObjectName("ChannelPrimaryButton")
         self.create_channel_btn.clicked.connect(self.open_create_page)
         actions_row.addWidget(self.create_channel_btn)
@@ -408,7 +392,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.join_channel_btn = QPushButton("Подключиться")
         self.join_channel_btn.setObjectName("ChannelCircleButton")
         self.join_channel_btn.setProperty("variant", "join")
-        self.join_channel_btn.setFixedHeight(42)
+        self.join_channel_btn.setFixedHeight(40)
         self.join_channel_btn.clicked.connect(self.open_join_page)
         actions_row.addWidget(self.join_channel_btn)
         install_opacity_feedback(self.join_channel_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
@@ -423,14 +407,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         invites_header = QFrame()
         invites_header.setObjectName("ChannelsInvitesHeader")
         invites_header_l = QHBoxLayout(invites_header)
-        invites_header_l.setContentsMargins(0, 0, 0, 0)
+        invites_header_l.setContentsMargins(10, 0, 10, 0)
         invites_header_l.setSpacing(6)
 
-        self.invites_toggle_btn = QPushButton("ПРИГЛАШЕНИЯ ▸")
+        self.invites_toggle_btn = QPushButton("Приглашения")
         self.invites_toggle_btn.setObjectName("ChannelsInvitesToggle")
         self.invites_toggle_btn.setCheckable(True)
         self.invites_toggle_btn.setChecked(False)
-        self.invites_toggle_btn.clicked.connect(self._toggle_invites_dropdown)
+        self.invites_toggle_btn.toggled.connect(self._toggle_invites_dropdown)
         invites_header_l.addWidget(self.invites_toggle_btn, 1)
         install_opacity_feedback(self.invites_toggle_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
@@ -467,7 +451,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         sb_l.addWidget(self.invites_dropdown)
 
         list_head = QHBoxLayout()
-        list_head.setContentsMargins(0, 0, 0, 0)
+        list_head.setContentsMargins(10, 0, 10, 0)
         list_head.setSpacing(6)
 
         list_title = QLabel("МОИ КАНАЛЫ")
@@ -485,13 +469,17 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channels_container = QWidget()
         self.channels_layout = QVBoxLayout(self.channels_container)
         self.channels_layout.setContentsMargins(0, 0, 0, 0)
-        self.channels_layout.setSpacing(8)
+        self.channels_layout.setSpacing(12)
         self.channels_layout.addStretch()
 
         self.channels_scroll.setWidget(self.channels_container)
+        sb_l.addSpacing(13)
         sb_l.addWidget(self.channels_scroll, 1)
+        sb_l.removeWidget(self.sidebar_actions_separator)
+        sb_l.addWidget(self.sidebar_actions_separator)
         sb_l.removeWidget(invites_header);sb_l.addWidget(invites_header)
         sb_l.removeWidget(self.invites_dropdown);sb_l.addWidget(self.invites_dropdown)
+        sb_l.addStretch()
 
         root.addWidget(sidebar, 1)
 
@@ -509,19 +497,31 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.placeholder_page = QWidget()
         ph_l = QVBoxLayout(self.placeholder_page)
         ph_l.setContentsMargins(0, 0, 0, 0)
-        placeholder_title=QLabel('Ваши пространства');placeholder_title.setObjectName('PageTitle');ph_l.addWidget(placeholder_title)
-        ph_l.addStretch()
-        from PySide6.QtSvgWidgets import QSvgWidget
-        from ui.design.widgets import ASSETS
-        illustration=QSvgWidget(str(ASSETS/'illustration-channels.svg'));illustration.setFixedSize(240,160)
-        ph_l.addWidget(illustration,0,Qt.AlignHCenter)
-        empty_lbl = QLabel("Подключитесь или создайте свой первый канал")
-        empty_lbl.setObjectName("ChannelEmptyHint")
-        empty_lbl.setAlignment(Qt.AlignCenter)
-        ph_l.addWidget(empty_lbl)
-        ph_l.addStretch()
+        ph_l.setContentsMargins(16, 8, 24, 0)
+        ph_l.setSpacing(0)
+        placeholder_title=QLabel('Ваши пространства');placeholder_title.setObjectName('FriendsTitle');placeholder_title.setFixedHeight(34);ph_l.addWidget(placeholder_title)
+        ph_l.addSpacing(8)
+        subtitle=QLabel('Текст и голос — рядом');subtitle.setObjectName('FriendsSubtitle');subtitle.setFixedHeight(17);ph_l.addWidget(subtitle)
+        ph_l.addSpacing(18)
+        divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);ph_l.addWidget(divider)
+        ph_l.addSpacing(38)
+        self.channel_state_stack=QStackedWidget();ph_l.addWidget(self.channel_state_stack,1)
+        self._set_channel_list_state('empty')
         self.main_stack.addWidget(self.placeholder_page)
 
+        self.invites_page=QWidget()
+        ip=QVBoxLayout(self.invites_page);ip.setContentsMargins(16,8,24,0);ip.setSpacing(0)
+        title=QLabel('Приглашения');title.setObjectName('FriendsTitle');title.setFixedHeight(34);ip.addWidget(title)
+        ip.addSpacing(8)
+        subtitle=QLabel('Вас ждут в новых пространствах');subtitle.setObjectName('FriendsSubtitle');subtitle.setFixedHeight(17);ip.addWidget(subtitle)
+        ip.addSpacing(18)
+        divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);ip.addWidget(divider)
+        ip.addSpacing(52)
+        sb_l.removeWidget(self.invites_dropdown)
+        self.invites_scroll.setMaximumHeight(16777215)
+        self.invites_layout.setSpacing(24)
+        ip.addWidget(self.invites_dropdown,1)
+        self.main_stack.addWidget(self.invites_page)
         # Create channel page
         self.create_page = QWidget()
         cp_root = QVBoxLayout(self.create_page)
@@ -669,12 +669,15 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channel_page = QWidget()
         ch_root = QVBoxLayout(self.channel_page)
         ch_root.setContentsMargins(0, 0, 0, 0)
-        ch_root.setSpacing(10)
+        ch_root.setSpacing(0)
 
         top = QFrame()
         top.setObjectName("ChannelTopBar")
         top_l = QHBoxLayout(top)
-        top_l.setContentsMargins(12, 8, 12, 8)
+        top_l.setContentsMargins(8, 0, 16, 24)
+        top.setFixedHeight(66)
+        self.channel_header_avatar=AvatarLabel(40)
+        top_l.addWidget(self.channel_header_avatar)
         top_l.setSpacing(10)
 
         title_col = QVBoxLayout()
@@ -689,16 +692,19 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channel_code_lbl.setObjectName("ChannelOpenCode")
         title_col.addWidget(self.channel_code_lbl)
 
-        top_l.addLayout(title_col)
+        top_l.addLayout(title_col,1)
         top_l.addStretch()
 
         self.channel_settings_btn = QPushButton("Настройки")
         self.channel_settings_btn.setObjectName("ChannelSecondaryButton")
+        self.channel_settings_btn.setFixedSize(140,40)
         self.channel_settings_btn.clicked.connect(self.open_channel_settings)
         top_l.addWidget(self.channel_settings_btn)
         install_opacity_feedback(self.channel_settings_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         ch_root.addWidget(top)
+        divider=QFrame();divider.setObjectName("Divider");divider.setFixedHeight(1);ch_root.addWidget(divider)
+        ch_root.addSpacing(17)
 
         middle = QHBoxLayout()
         middle.setContentsMargins(0, 0, 0, 0)
@@ -707,21 +713,24 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         nav = QFrame()
         nav.setObjectName("ChannelInnerNav")
         nav_l = QHBoxLayout(nav)
-        nav_l.setContentsMargins(8, 8, 8, 8)
-        nav_l.setSpacing(6)
+        nav_l.setContentsMargins(16, 0, 24, 0)
+        nav_l.setSpacing(12)
+        nav.setFixedHeight(40)
 
         self.voice_tab_btn = QPushButton("Голосовой")
         self.voice_tab_btn.setObjectName("ChannelInnerNavButton")
         self.voice_tab_btn.setCheckable(True)
-        self.voice_tab_btn.clicked.connect(self.switch_to_voice_tab)
+        self.voice_tab_btn.toggled.connect(lambda checked: self.switch_to_voice_tab() if checked else None)
         nav_l.addWidget(self.voice_tab_btn)
 
         self.text_tab_btn = QPushButton("# Текстовый")
         self.text_tab_btn.setObjectName("ChannelInnerNavButton")
         self.text_tab_btn.setCheckable(True)
-        self.text_tab_btn.clicked.connect(self.switch_to_text_tab)
+        self.text_tab_btn.toggled.connect(lambda checked: self.switch_to_text_tab() if checked else None)
         nav_l.addWidget(self.text_tab_btn)
 
+        nav_l.removeWidget(self.text_tab_btn);nav_l.insertWidget(0,self.text_tab_btn)
+        self.text_tab_btn.setFixedSize(158,40);self.voice_tab_btn.setFixedSize(158,40)
         nav_l.addStretch()
         ch_root.addWidget(nav)
 
@@ -744,77 +753,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.channel_inner_stack.addWidget(text_tab)
 
-        # voice tab
-        voice_tab = QWidget()
-        v_l = QVBoxLayout(voice_tab)
-        v_l.setContentsMargins(6, 6, 6, 6)
-        v_l.setSpacing(10)
-
-        self.voice_status_lbl = QLabel("Вы не в голосовом канале")
-        self.voice_status_lbl.setObjectName("ChannelVoiceStatus")
-        self.voice_status_lbl.setAlignment(Qt.AlignCenter)
-        v_l.addWidget(self.voice_status_lbl)
-
-        self.voice_quality_lbl = QLabel("Качество: —")
-        self.voice_quality_lbl.setObjectName("ChannelVoiceQuality")
-        self.voice_quality_lbl.setAlignment(Qt.AlignCenter)
-        v_l.addWidget(self.voice_quality_lbl)
-
-        self.voice_join_btn = QPushButton("Войти в голосовой")
-        self.voice_join_btn.setObjectName("ChannelPrimaryButton")
-        self.voice_join_btn.clicked.connect(self.toggle_voice_join)
-        v_l.addWidget(self.voice_join_btn, alignment=Qt.AlignCenter)
-        install_opacity_feedback(self.voice_join_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        voice_ctrl_row = QHBoxLayout()
-        voice_ctrl_row.setContentsMargins(0, 0, 0, 0)
-        voice_ctrl_row.setSpacing(8)
-
-        self.voice_mute_btn = QPushButton("Микрофон: ВКЛ")
-        self.voice_mute_btn.setObjectName("ChannelSecondaryButton")
-        self.voice_mute_btn.clicked.connect(self.toggle_voice_mute)
-        voice_ctrl_row.addWidget(self.voice_mute_btn)
-        install_opacity_feedback(self.voice_mute_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        self.voice_deafen_btn = QPushButton("Наушники: ВКЛ")
-        self.voice_deafen_btn.setObjectName("ChannelSecondaryButton")
-        self.voice_deafen_btn.clicked.connect(self.toggle_voice_deafen)
-        voice_ctrl_row.addWidget(self.voice_deafen_btn)
-        install_opacity_feedback(self.voice_deafen_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
-
-        v_l.addLayout(voice_ctrl_row)
-
-        self.voice_access_hint_lbl = QLabel("В голосовом канале могут одновременно находиться несколько участников")
-        self.voice_access_hint_lbl.setObjectName("ChannelAccessHint")
-        self.voice_access_hint_lbl.setWordWrap(True)
-        self.voice_access_hint_lbl.setAlignment(Qt.AlignCenter)
-        v_l.addWidget(self.voice_access_hint_lbl)
-
-        voice_members_card = QFrame()
-        voice_members_card.setObjectName("ChannelVoiceMembersCard")
-        vm_l = QVBoxLayout(voice_members_card)
-        vm_l.setContentsMargins(10, 10, 10, 10)
-        vm_l.setSpacing(8)
-
-        vm_title = QLabel("Участники голосового")
-        vm_title.setObjectName("ChannelVoiceMembersTitle")
-        vm_l.addWidget(vm_title)
-
-        self.voice_members_scroll = QScrollArea()
-        self.voice_members_scroll.setObjectName("ChannelVoiceMembersScroll")
-        self.voice_members_scroll.setWidgetResizable(True)
-
-        self.voice_members_container = QWidget()
-        self.voice_members_layout = QGridLayout(self.voice_members_container)
-        self.voice_members_layout.setContentsMargins(0, 0, 0, 0)
-        self.voice_members_layout.setSpacing(20)
-        self.voice_members_layout.setAlignment(Qt.AlignTop)
-
-        self.voice_members_scroll.setWidget(self.voice_members_container)
-        vm_l.addWidget(self.voice_members_scroll, 1)
-
-        v_l.insertWidget(0, voice_members_card, 1)
-
+        from ui.design.channel_voice import build as build_voice
+        voice_tab = build_voice(self)
         self.channel_inner_stack.addWidget(voice_tab)
 
         middle.addWidget(self.channel_inner_stack, 1)
@@ -1029,7 +969,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._reposition_overlays()
         self._apply_settings_responsive_layout()
         if hasattr(self,'voice_members_scroll'):
-            columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//210))
+            columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//310))
             if columns!=getattr(self,'_voice_columns',None):
                 self._voice_columns=columns
                 self._render_voice_participants()
@@ -1074,10 +1014,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         pass
 
     def _set_invites_dropdown_open(self, opened: bool):
-        opened = bool(opened)
-        self.invites_toggle_btn.setChecked(opened)
-        self.invites_dropdown.setVisible(opened)
-        self.invites_toggle_btn.setText("ПРИГЛАШЕНИЯ ▾" if opened else "ПРИГЛАШЕНИЯ ▸")
+        with QSignalBlocker(self.invites_toggle_btn):
+            self.invites_toggle_btn.setChecked(bool(opened))
+        self.invites_dropdown.setVisible(True)
+        if opened:
+            self.main_stack.setCurrentWidget(self.invites_page)
+        elif self.main_stack.currentWidget() == self.invites_page:
+            self.main_stack.setCurrentWidget(self.placeholder_page)
 
     def _toggle_invites_dropdown(self, checked: bool):
         self._set_invites_dropdown_open(bool(checked))
@@ -1106,38 +1049,37 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 w.deleteLater()
 
 
+    def _set_channel_list_state(self, state):
+        from ui.design.state_surfaces import EmptyState, LoadingState
+        stack = self.channel_state_stack
+        while stack.count():
+            old = stack.widget(0)
+            stack.removeWidget(old)
+            old.deleteLater()
+        if state == 'loading':
+            surface = LoadingState()
+        else:
+            title = {'empty':'Создайте своё пространство', 'error':'Не удалось загрузить каналы', 'list':'Выберите канал'}[state]
+            action = {'empty':'Создать канал','error':'Повторить','list':None}[state]
+            callback = self.open_create_page if state == 'empty' else lambda: self.load_channels(force_refresh=True)
+            surface = EmptyState(title,'Общайтесь в тексте и собирайтесь в голосовом канале.',action,callback)
+        stack.addWidget(surface)
+
     def _show_channels_skeleton(self, count: int = 6):
         self._channels_skeleton_visible = True
         self._clear_channels_list()
-        for _ in range(max(2, int(count))):
-            sk = QFrame()
-            sk.setObjectName("ChannelsSkeletonCard")
-            self.channels_layout.insertWidget(self.channels_layout.count() - 1, sk)
+        self.channels_layout.insertWidget(0,self._make_channels_empty_state('Загрузка…',''))
+        self._set_channel_list_state('loading')
 
     def _make_channels_empty_state(self, title: str, subtitle: str) -> QFrame:
         card = QFrame()
-        card.setObjectName("ChannelsEmptyStateCard")
+        card.setMinimumWidth(0)
         lay = QVBoxLayout(card)
-        lay.setContentsMargins(14, 14, 14, 14)
-        lay.setSpacing(5)
-
-        from PySide6.QtSvgWidgets import QSvgWidget
-        from ui.design.widgets import ASSETS
-        icon = QSvgWidget(str(ASSETS / "illustration-channels.svg"))
-        icon.setFixedSize(180,120)
-        icon.setObjectName("ChannelsEmptyStateIcon")
-        lay.addWidget(icon,0,Qt.AlignHCenter)
-
-        t = QLabel(title)
-        t.setObjectName("ChannelsEmptyStateTitle")
-        t.setAlignment(Qt.AlignCenter)
-        lay.addWidget(t)
-
-        s = QLabel(subtitle)
-        s.setObjectName("ChannelsEmptyStateSub")
-        s.setAlignment(Qt.AlignCenter)
-        s.setWordWrap(True)
-        lay.addWidget(s)
+        lay.setContentsMargins(15, 20, 15, 20)
+        text = QLabel(title)
+        text.setWordWrap(True)
+        text.setObjectName('Muted')
+        lay.addWidget(text)
         return card
 
     def _clear_invites_list(self):
@@ -1159,15 +1101,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         invites = list(self._invites or [])
         self._update_invites_indicator(len(invites))
 
-        # Если приглашений нет — держим список свернутым.
-        if not invites and self.invites_toggle_btn.isChecked():
-            self._set_invites_dropdown_open(False)
-
         if not invites:
-            empty = QLabel("📭 Нет входящих приглашений")
-            empty.setObjectName("ChannelsListEmpty")
-            empty.setAlignment(Qt.AlignCenter)
-            self.invites_layout.insertWidget(0, empty)
+            from ui.design.state_surfaces import EmptyState
+            empty=EmptyState('Приглашений пока нет','Когда вас пригласят в канал, приглашение появится здесь.')
+            self.invites_layout.insertWidget(0,empty)
             return
 
         for inv in invites:
@@ -1277,7 +1214,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         name = (self.active_channel or {}).get("name", "Канал")
         code = (self.active_channel or {}).get("code", "")
         self.channel_name_lbl.setText(name)
-        self.channel_code_lbl.setText(f"Код приглашения: {code}" if code else "")
+        self.channel_header_avatar.set_avatar((self.active_channel or {}).get('avatar',''), nickname=name)
+        count=(self.active_channel or {}).get('members_count')
+        prefix=f'{count} участников · ' if count is not None else ''
+        self.channel_code_lbl.setText(prefix + (f'Код {code}' if code else ''))
 
     def _apply_channel_permissions_ui(self):
         perms = self._settings_permissions or {}
@@ -1305,10 +1245,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         # voice controls
         if self._voice_joined:
             self.voice_join_btn.setEnabled(not self._voice_transitioning)
-            self.voice_join_btn.setText("Отключение..." if self._voice_transitioning else "Выйти из голосового")
+            self.voice_join_btn.setText("Отключение..." if self._voice_transitioning else "Отключиться")
             self.voice_access_hint_lbl.setText("Вы подключены к голосовому каналу")
         else:
-            self.voice_join_btn.setText("Подключение..." if self._voice_transitioning else "Войти в голосовой")
+            self.voice_join_btn.setText("Подключение..." if self._voice_transitioning else "Войти в голосовой" if can_join_voice else "Нет доступа")
             self.voice_join_btn.setEnabled(can_join_voice and (not self._voice_transitioning))
             if can_join_voice:
                 self.voice_access_hint_lbl.setText("В голосовом канале могут одновременно находиться несколько участников")
@@ -1324,6 +1264,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.voice_status_lbl.setText("Нет прав для входа в голосовой канал")
             self.voice_quality_lbl.setText("Качество: —")
 
+        self.voice_access_hint_lbl.setVisible(not can_join_voice and not self._voice_joined)
         can_manage = bool(perms.get("manage_channel", False))
         can_invite = bool(perms.get("can_invite", False))
         can_delete = bool(perms.get("delete_channel", False))
@@ -1365,6 +1306,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
         self._channels_signature = digest
 
+        self.channels_scroll.setMaximumHeight(max(180, len(self.channels)*82))
         self.channels_scroll.setUpdatesEnabled(False)
         try:
             self._clear_channels_list()
@@ -1372,7 +1314,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
             if not self.channels:
                 empty = self._make_channels_empty_state(
-                    title="Пока нет подключённых каналов",
+                    title="Пока нет каналов",
                     subtitle="Создайте новый канал или подключитесь по коду.",
                 )
                 self.channels_layout.insertWidget(self.channels_layout.count() - 1, empty)
@@ -1462,6 +1404,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._apply_channel_permissions_ui()
 
     def open_create_page(self):
+        self._set_invites_dropdown_open(False)
         self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
         self.hide_settings_confirm()
         self.create_name_input.clear()
@@ -1472,6 +1415,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.stop()
 
     def open_join_page(self):
+        self._set_invites_dropdown_open(False)
         self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
         self.hide_settings_confirm()
         self.join_code_input.clear()
@@ -1480,6 +1424,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.stop()
 
     def open_channel(self, channel: dict):
+        self._set_invites_dropdown_open(False)
         if not channel:
             return
         self._channel_navigation_revision = getattr(self, "_channel_navigation_revision", 0) + 1
@@ -1624,9 +1569,15 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 self._channels_loaded_once = True
                 if resp.get("status") != "ok":
                     self.show_toast(resp.get("message", "Не удалось обновить список каналов"))
+                    if not self.channels:
+                        self._clear_channels_list()
+                        self._channels_skeleton_visible = False
+                        self.channels_layout.insertWidget(0,self._make_channels_empty_state('Список недоступен',''))
+                        self._set_channel_list_state('error')
                     return
 
                 self.channels = resp.get("channels", []) or []
+                self._set_channel_list_state("list" if self.channels else "empty")
 
                 # keep active channel if still exists
                 cur_id = self._active_channel_id()
@@ -1659,7 +1610,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self._voice_participants_signature = ""
                     self._clear_voice_members_list()
                     self.hide_settings_confirm()
-                    if self.main_stack.currentWidget() not in (self.create_page, self.join_page):
+                    if self.main_stack.currentWidget() not in (self.create_page, self.join_page, self.invites_page):
                         self.main_stack.setCurrentWidget(self.placeholder_page)
                     if self.messages_timer.isActive():
                         self.messages_timer.stop()
@@ -1685,12 +1636,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._settings_section = key
         for name, card in [('general',self.settings_general_card),('access',self.settings_access_card),('members',self.settings_members_card)]:
             card.setVisible(name == key)
-            self.settings_sections[name].setChecked(name == key)
+            with QSignalBlocker(self.settings_sections[name]):
+                self.settings_sections[name].setChecked(name == key)
         self.settings_scroll.verticalScrollBar().setValue(0)
 
     def switch_to_text_tab(self):
-        self.text_tab_btn.setChecked(True)
-        self.voice_tab_btn.setChecked(False)
+        with QSignalBlocker(self.text_tab_btn), QSignalBlocker(self.voice_tab_btn):
+            self.text_tab_btn.setChecked(True)
+            self.voice_tab_btn.setChecked(False)
         self.channel_inner_stack.setCurrentIndex(0)
         self._apply_channel_permissions_ui()
 
@@ -1698,8 +1651,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.messages_timer.start()
 
     def switch_to_voice_tab(self):
-        self.text_tab_btn.setChecked(False)
-        self.voice_tab_btn.setChecked(True)
+        with QSignalBlocker(self.text_tab_btn), QSignalBlocker(self.voice_tab_btn):
+            self.text_tab_btn.setChecked(False)
+            self.voice_tab_btn.setChecked(True)
         self.channel_inner_stack.setCurrentIndex(1)
         self._apply_channel_permissions_ui()
         self._apply_voice_local_controls()
@@ -1734,14 +1688,16 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._clear_voice_members_list()
 
         participants = self._voice_participants or []
+        count=len(participants)
+        self.voice_members_count.setText('Нет участников' if not count else f'{count} участников')
         if not participants:
-            empty = QLabel("Пока никто не подключён к голосовому каналу")
-            empty.setObjectName("ChannelsEmptyList")
-            empty.setWordWrap(True)
+            from ui.design.state_surfaces import EmptyState
+            empty=EmptyState('Пока тихо','Подключитесь к голосовому первым.')
+            empty.layout().setContentsMargins(0,0,20,0)
             self.voice_members_layout.addWidget(empty,0,0,1,3)
             return
 
-        columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//210))
+        columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//310))
         self._voice_columns=columns
         for i,part in enumerate(participants):
             row = VoiceParticipantItem(participant=part, current_login=self.ctx.login)
@@ -2358,11 +2314,21 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def _apply_voice_local_controls(self):
         joined = bool(self._voice_joined)
 
+        self.voice_mute_btn.setVisible(joined)
+        self.voice_deafen_btn.setVisible(joined)
+        self.voice_quality_lbl.setVisible(False)
+        self.voice_join_btn.setFixedWidth(200 if joined else 220)
+        self.voice_before_join.changeSize(0,0,QSizePolicy.Expanding if joined else QSizePolicy.Fixed,QSizePolicy.Minimum)
+        self.voice_after_join.changeSize(0,0,QSizePolicy.Fixed if joined else QSizePolicy.Expanding,QSizePolicy.Minimum)
+        self.voice_controls.layout().invalidate()
+        self.voice_join_btn.primary=not joined
+        self.voice_join_btn.setProperty("danger",joined)
+        self.voice_join_btn.update()
         self.voice_mute_btn.setEnabled(joined)
         self.voice_deafen_btn.setEnabled(joined)
 
-        self.voice_mute_btn.setText("Микрофон: ВЫКЛ" if self._voice_muted else "Микрофон: ВКЛ")
-        self.voice_deafen_btn.setText("Наушники: ВЫКЛ" if self._voice_deafened else "Наушники: ВКЛ")
+        self.voice_mute_btn.setText("Микрофон выкл." if self._voice_muted else "Микрофон вкл.")
+        self.voice_deafen_btn.setText("Звук выкл." if self._voice_deafened else "Звук вкл.")
 
         if self._voice_client is not None:
             try:
@@ -2490,7 +2456,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._voice_participants_signature = ""
         self._voice_participants = []
         self._render_voice_participants()
-        self.voice_join_btn.setText("Войти в голосовой")
+        self.voice_join_btn.setText("Подключиться")
         self.voice_status_lbl.setText("Вы не в голосовом канале")
         self.voice_quality_lbl.setText("Качество: —")
 
@@ -2537,6 +2503,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 state = "Голосовой канал подключен"
 
             self.voice_status_lbl.setText(state)
+            self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)
             self.voice_quality_lbl.setText(
                 f"Качество: {quality} · Пинг {latency} ms · Джиттер {jitter} ms · Буфер {buffer_frames}"
             )

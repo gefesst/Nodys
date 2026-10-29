@@ -109,3 +109,16 @@ QLabel#FieldTitle {font-size:13px;}
 
 QFrame#ChannelMemberItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
 QPushButton#ChannelSettingsTab:checked {background:@ACC@;color:#142039;border-color:@ACC@;}
+
+QPushButton#ChannelsInvitesToggle {background:transparent;border:0;text-align:left;padding:0;min-height:40px;}
+QLabel#ChannelListItemSub {font-size:12px;color:@SUB@;}
+
+QFrame#ProfileForm QLabel#ReadOnlyField {background:#18222E;color:#EDF2FA;}
+
+QFrame#VoiceControls {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
+QLabel#ChannelOpenTitle {font-size:21px;}
+QLabel#ChannelVoiceMemberName {font-size:17px;}
+
+QPushButton#ChannelInnerNavButton:checked {background:@ACC@;color:#142039;border-color:@ACC@;}
+
+QFrame#ChannelInviteItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}

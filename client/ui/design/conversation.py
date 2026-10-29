@@ -12,9 +12,11 @@ from PySide6.QtWidgets import (
     QMenu,
     QApplication,
     QAbstractItemView,
+    QStackedWidget,
 )
 from application.request_scope import RequestScope
 from .models import Message, MessageModel
+from .state_surfaces import EmptyState, LoadingState
 from .widgets import MessageList, MessageDelegate, Composer, Button
 
 
@@ -33,6 +35,7 @@ class Conversation(QWidget):
         self.scope = RequestScope()
         self.rows = []
         self.loading = False
+        self.history_error = False
         self.older = self.newer = False
         self.at_latest = True
         self.drafts = {}
@@ -70,7 +73,17 @@ class Conversation(QWidget):
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self.context_menu)
         self.view.verticalScrollBar().valueChanged.connect(self.scrolled)
-        root.addWidget(self.view, 1)
+        self.history_stack = QStackedWidget()
+        self.history_stack.addWidget(self.view)
+        self.empty_state = EmptyState('Здесь начинается разговор',
+            'Напишите первое сообщение в канале.' if channel else 'Напишите первое сообщение.')
+        self.loading_state = LoadingState()
+        self.error_state = EmptyState('История пока недоступна',
+            'Не удалось загрузить сообщения канала.' if channel else 'Не удалось загрузить сообщения.',
+            'Повторить', lambda: self.load('latest'))
+        for surface in (self.empty_state, self.loading_state, self.error_state):
+            self.history_stack.addWidget(surface)
+        root.addWidget(self.history_stack, 1)
         compose_frame = QFrame()
         compose_frame.setObjectName("ComposerFrame")
         compose = QHBoxLayout(compose_frame)
@@ -113,6 +126,7 @@ class Conversation(QWidget):
         self.remember_draft()
         self.scope.invalidate()
         self.loading = False
+        self.history_error = False
         self.identity, self.name = identity, name
         self.rows = []
         self.older = self.newer = False
@@ -167,9 +181,11 @@ class Conversation(QWidget):
                 return
             self.loading = False
             if response.get("status") != "ok":
+                self.history_error = True
                 self.hint.setText(response.get("message", "История недоступна"))
                 self.update_controls(keep_hint=True)
                 return
+            self.history_error = False
             incoming = response.get("messages", [])
             if direction == "poll" and not self.at_latest:
                 if incoming and (
@@ -306,6 +322,11 @@ class Conversation(QWidget):
             QTimer.singleShot(0, lambda: self.load("newer"))
 
     def update_controls(self, keep_hint=False):
+        surface = self.view if self.rows else (
+            self.loading_state if self.loading else
+            self.error_state if self.history_error else self.empty_state)
+        self.history_stack.setCurrentWidget(surface)
+        self.hint.setVisible(bool(self.rows) and (self.loading or self.history_error))
         self.previous.setEnabled(self.older and not self.loading)
         self.previous.setVisible(self.older)
         self.latest.setVisible(self.newer)
