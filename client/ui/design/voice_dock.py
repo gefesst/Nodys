@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpa
 from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve,Qt,QTimer
 from .motion import reduced
 from .tokens import LIST_WIDTH, RAIL_WIDTH
-from .widgets import Button, set_voice_button_state
+from .widgets import Button, ElidedLabel, set_voice_button_state
 
 class VoiceDock(QFrame):
     def __init__(self, main):
@@ -18,15 +18,17 @@ class VoiceDock(QFrame):
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
         self.title.setMinimumHeight(0);self.title.setFixedHeight(24);self.title.clicked.connect(main.open_voice_surface)
         layout.addWidget(self.title)
-        self.status=QLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;')
+        self.status=ElidedLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;')
         from .microphone_check import MicrophoneMeter
         self.meter=MicrophoneMeter(82,18)
         self._meter_source=None
         self.status.setFixedHeight(16)
-        layout.addWidget(self.status)
+        status_row=QHBoxLayout();status_row.setSpacing(8)
+        status_row.addWidget(self.status,1)
+        layout.addLayout(status_row)
         self.meter_timer=QTimer(self);self.meter_timer.setInterval(125);self.meter_timer.timeout.connect(self.update_meter)
         row=QHBoxLayout();row.setSpacing(12)
-        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');self.participants.setFixedHeight(16);layout.addWidget(self.participants)
+        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');self.participants.setFixedHeight(16);status_row.addWidget(self.participants)
         self.controls={}
         for name,symbol,callback in [('Микрофон','mic',self.toggle_mic),('Звук','headphones',self.toggle_sound),('Отключиться','end',main.end_voice_surface)]:
             button=Button('',symbol);button.setMinimumHeight(0);button.setFixedSize(32,28);button.setAccessibleName(name)

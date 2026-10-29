@@ -43,7 +43,7 @@ class RoomNavigationMixin:
         self._occupied_rooms=set()
         panel=QWidget();panel.setFixedWidth(180)
         panel.setObjectName('RoomNavigation')
-        panel.setStyleSheet('QWidget#RoomNavigation {background:#1B2936;border:1px solid #354152;border-radius:12px;}')
+        panel.setStyleSheet('QWidget#RoomNavigation {background:#1B2936;border:1px solid #354152;border-radius:14px;}')
         outer=QVBoxLayout(panel);outer.setContentsMargins(8,12,8,8);outer.setSpacing(10)
         self.rooms_scroll=QScrollArea();self.rooms_scroll.setWidgetResizable(True)
         self.rooms_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)

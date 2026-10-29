@@ -121,7 +121,7 @@ QLabel#ChannelListItemSub {font-size:12px;color:@SUB@;}
 
 QFrame#ProfileForm QLabel#ReadOnlyField {background:#18222E;color:#EDF2FA;}
 
-QFrame#VoiceControls {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
+QFrame#VoiceControls {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
 QLabel#ChannelOpenTitle {font-size:21px;}
 QLabel#ChannelVoiceMemberName {font-size:17px;}
 
