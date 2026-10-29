@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 def build(page):
     from PySide6.QtWidgets import QScrollArea, QPushButton, QLineEdit
-    from .widgets import ScrollSafeComboBox
+    from .widgets import ScrollSafeComboBox, ASSETS, COMBO_ARROW_STYLE
     from ui.avatar_widget import AvatarLabel
 
     page._settings_revision = 0
@@ -268,7 +268,11 @@ def build(page):
         radio = QRadioButton(text)
         radio.setFixedHeight(52)
         radio.setStyleSheet(
-            "QRadioButton {font-size:15px;spacing:14px;} QRadioButton::indicator {width:16px;height:16px;border:1px solid #354458;border-radius:8px;background:#17212D;} QRadioButton::indicator:checked {border:4px solid #91ADFF;background:#17212D;}"
+            "QRadioButton {font-size:15px;spacing:14px;} "
+            "QRadioButton::indicator {width:18px;height:18px;border:0;"
+            f'image:url("{(ASSETS / "radio-unchecked.svg").as_posix()}");}} '
+            "QRadioButton::indicator:checked {"
+            f'image:url("{(ASSETS / "radio-checked.svg").as_posix()}");}}'
         )
         radio.setChecked(index == page.settings_text_perm_combo.currentIndex())
 
@@ -291,7 +295,7 @@ def build(page):
     caption(access, "Кто может входить в голосовой")
     field(page.settings_voice_perm_combo, access, 640)
     page.settings_voice_perm_combo.setStyleSheet(
-        "QComboBox {min-height:22px;max-height:22px;padding:11px 14px;background:#17212D;border:1px solid #354458;border-radius:10px;font-size:15px;} QComboBox::drop-down {border:0;width:28px;}"
+        "QComboBox {min-height:22px;max-height:22px;padding:11px 14px;background:#17212D;border:1px solid #354458;border-radius:10px;font-size:15px;} QComboBox::drop-down {border:0;width:28px;}" + COMBO_ARROW_STYLE
     )
     access.addSpacing(38)
     note = QLabel("Владелец сохраняет полный доступ к своему каналу.")

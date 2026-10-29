@@ -9,8 +9,10 @@ def prepare_platform_plugins():
     if sys.platform != 'darwin':
         return
     from PySide6.QtCore import QLibraryInfo
-    directory = Path(QLibraryInfo.path(QLibraryInfo.PluginsPath))/'platforms'
-    for path in directory.glob('*.dylib'):
+    directory = Path(QLibraryInfo.path(QLibraryInfo.PluginsPath))
+    # Hidden plugin binaries are skipped by Qt on macOS. Image-format plugins
+    # are needed for SVG controls and uploaded JPEG/WebP avatars as well.
+    for path in directory.rglob('*.dylib'):
         flags = path.stat().st_flags
         if flags & stat.UF_HIDDEN:
             os.chflags(path, flags & ~stat.UF_HIDDEN)

@@ -34,6 +34,7 @@ class ActionMenu(QFrame):
         button=MenuButton(text,self);button.setFixedHeight(40)
         button.setAttribute(Qt.WA_MacShowFocusRect,False)
         button.setProperty('no_focus_ring',True)
+        button.setProperty('keyboardFocus',False)
         color='#FFA7AE' if self.danger else '#EDF2FA'
         button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"] {background:#3A4D67;}')
         def activate():
@@ -65,8 +66,16 @@ class ActionMenu(QFrame):
         if not isValid(self):
             return False
         if event.type()==QEvent.FocusIn and watched in self.buttons:
-            watched.setProperty('keyboardFocus',event.reason() in (Qt.TabFocusReason,Qt.BacktabFocusReason,Qt.ShortcutFocusReason))
+            if event.reason() in (Qt.TabFocusReason,Qt.BacktabFocusReason,Qt.ShortcutFocusReason):
+                watched.setProperty('keyboardFocus',True)
+            elif event.reason()==Qt.MouseFocusReason:
+                watched.setProperty('keyboardFocus',False)
             watched.style().unpolish(watched);watched.style().polish(watched)
+            watched.update()
+        if event.type()==QEvent.FocusOut and watched in self.buttons:
+            watched.setProperty('keyboardFocus',False)
+            watched.style().unpolish(watched);watched.style().polish(watched)
+            watched.update()
         if event.type()==QEvent.KeyPress and self.isVisible():
             if event.key() in (Qt.Key_Return,Qt.Key_Enter,Qt.Key_Space):
                 focused=watched if watched in self.buttons else QApplication.focusWidget()
@@ -78,8 +87,10 @@ class ActionMenu(QFrame):
                 current=QApplication.focusWidget()
                 index=self.buttons.index(current) if current in self.buttons else 0
                 button=self.buttons[(index+(1 if event.key()==Qt.Key_Down else -1))%len(self.buttons)]
-                button.setProperty('keyboardFocus',True)
-                button.style().unpolish(button);button.style().polish(button)
+                for item in self.buttons:
+                    item.setProperty('keyboardFocus',item is button)
+                    item.style().unpolish(item);item.style().polish(item)
+                    item.update()
                 button.setFocus(Qt.TabFocusReason)
                 return True
         if event.type()==QEvent.MouseButtonPress and self.isVisible():

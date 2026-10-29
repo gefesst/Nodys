@@ -41,6 +41,18 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_image_plugins_load_svg_controls_and_avatar_formats(self):
+        from PySide6.QtGui import QImageReader, QImage
+        from ui.design.widgets import ASSETS
+
+        formats = {bytes(value).decode() for value in QImageReader.supportedImageFormats()}
+        self.assertTrue({"svg", "jpeg", "webp"}.issubset(formats), formats)
+        for name in ("radio-checked.svg", "radio-unchecked.svg", "chevron-down.svg"):
+            image = QImage(str(ASSETS / name))
+            self.assertFalse(image.isNull(), name)
+        checked = QImage(str(ASSETS / "radio-checked.svg"))
+        self.assertEqual(checked.pixelColor(9, 9).name(), "#91adff")
+
     def test_long_header_elides_and_restores_full_name_on_resize(self):
         from ui.design.widgets import ElidedLabel
         label=ElidedLabel('Александра Константинопольская-Рождественская')
@@ -87,6 +99,31 @@ class DesignGeometryTests(unittest.TestCase):
         QTest.keyClick(combo, Qt.Key_Down)
         self.assertEqual(combo.currentIndex(), 1)
 
+    def test_member_menu_keyboard_selects_role_without_removal(self):
+        from PySide6.QtWidgets import QWidget, QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        from ui.channels_page import ChannelMemberItem
+        from unittest.mock import Mock
+        host = QWidget(); host.resize(1120, 620)
+        self.addCleanup(host.close)
+        role_changed, removed = Mock(), Mock()
+        item = ChannelMemberItem({"login": "bob", "role": "member"}, "alice",
+            {"assign_roles": True, "manage_members": True, "my_role": "owner"},
+            role_changed, removed)
+        item.setParent(host); item.setGeometry(450, 450, 650, 90)
+        host.show(); self.app.processEvents()
+        button = item.findChild(QPushButton, "ChannelTinyActionButton")
+        button.click(); self.app.processEvents()
+        menu = item._actions_menu
+        self.assertLessEqual(menu.geometry().bottom(), host.height()-12)
+        QTest.keyClick(menu.buttons[0], Qt.Key_Down)
+        self.assertFalse(menu.buttons[0].property("keyboardFocus"))
+        self.assertTrue(menu.buttons[1].property("keyboardFocus"))
+        QTest.keyClick(menu.buttons[1], Qt.Key_Return)
+        role_changed.assert_called_once_with("bob", "admin")
+        removed.assert_not_called()
+
     def test_inline_menu_stays_inside_window_and_escape_does_not_activate(self):
         from PySide6.QtWidgets import QWidget, QPushButton
         from PySide6.QtCore import QPoint, Qt
@@ -101,6 +138,7 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertLessEqual(menu.geometry().bottom(),host.height()-12)
         QTest.keyClick(menu.buttons[0], Qt.Key_Down)
         self.assertTrue(menu.buttons[0].property('keyboardFocus'))
+        self.assertEqual(menu.buttons[0].grab().toImage().pixelColor(5,20).name(), '#3a4d67')
         QTest.keyClick(menu.buttons[0],Qt.Key_Escape)
         self.assertFalse(fired)
         self.assertFalse(menu.isVisible())

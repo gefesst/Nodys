@@ -41,6 +41,11 @@ from .motion import reduced
 from .tokens import ACC, FG, SUB, MUT, EDGE, GREEN, RED
 
 ASSETS = Path(__file__).parent / "assets"
+COMBO_ARROW_STYLE = (
+    ' QComboBox::down-arrow {image:url("'
+    + (ASSETS / "chevron-down.svg").as_posix()
+    + '");width:14px;height:14px;}'
+)
 ICONS = {}
 
 

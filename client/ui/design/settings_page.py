@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 from config import load_config, save_config
-from .widgets import Button, ScrollSafeComboBox
+from .widgets import Button, ScrollSafeComboBox, COMBO_ARROW_STYLE
 
 
 class SettingsPage(QWidget):
@@ -92,7 +92,7 @@ class SettingsPage(QWidget):
             widget = ScrollSafeComboBox()
             widget.setMaximumWidth(720)
             widget.setStyleSheet(
-                "QComboBox {min-height:26px;max-height:26px;padding:9px 14px;background:#17212D;} QComboBox::drop-down {border:0;width:28px;}"
+                "QComboBox {min-height:26px;max-height:26px;padding:9px 14px;background:#17212D;} QComboBox::drop-down {border:0;width:28px;}" + COMBO_ARROW_STYLE
             )
             fields.addWidget(widget)
             return widget

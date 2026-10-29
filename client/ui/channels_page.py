@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QFileDialog,
     QComboBox,
-    QMenu,
     QSizePolicy,
     QApplication,
 )
@@ -242,10 +241,10 @@ class ChannelMemberItem(QFrame):
                 btn = QPushButton('Сменить роль')
                 btn.setFixedSize(168,40)
                 btn.setObjectName('ChannelTinyActionButton')
-                menu = QMenu(btn)
-                for txt, new_role in role_actions:
-                    menu.addAction(txt, partial(on_toggle_role, login, new_role))
-                btn.setMenu(menu)
+                actions = [(text, partial(on_toggle_role, login, new_role))
+                           for text, new_role in role_actions]
+                btn.clicked.connect(lambda checked=False, b=btn, a=actions:
+                                    self._show_member_menu(b, a))
                 lay.addWidget(btn)
 
         if can_manage and role != "owner" and login and login != current_login:
@@ -255,10 +254,21 @@ class ChannelMemberItem(QFrame):
             remove_btn.setFixedSize(40,40)
             remove_btn.setAccessibleName("Действия с участником")
             remove_btn.setObjectName("ChannelTinyDangerButton")
-            remove_menu = QMenu(remove_btn)
-            remove_menu.addAction("Удалить из канала", partial(on_remove, login))
-            remove_btn.setMenu(remove_menu)
+            remove_btn.clicked.connect(lambda checked=False, b=remove_btn:
+                self._show_member_menu(b, [("Удалить из канала", partial(on_remove, login))], danger=True))
             lay.addWidget(remove_btn)
+
+
+    def _show_member_menu(self, anchor, actions, danger=False):
+        from ui.design.action_menu import ActionMenu
+        menu = ActionMenu(self, danger=danger, anchor_right=True)
+        for text, callback in actions:
+            menu.addAction(text, callback)
+        point = anchor.mapToGlobal(anchor.rect().bottomRight())
+        point.setX(point.x() - menu.width())
+        point.setY(point.y() + 8)
+        menu.popup(point)
+        self._actions_menu = menu
 
 
 class VoiceParticipantItem(QFrame):
