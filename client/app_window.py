@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton, QSizeGrip
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QSizeGrip
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from network import NetworkThread
 from PySide6.QtGui import QIcon, QPainter, QColor
@@ -90,12 +90,8 @@ class AppWindow(QWidget):
             self.show_auth()
             return
 
-        self.resume_page = QWidget()
-        resume_layout = QVBoxLayout(self.resume_page)
-        resume_layout.addWidget(QLabel("Восстанавливаем вход…"))
-        cancel = QPushButton("Войти вручную")
-        cancel.clicked.connect(self._cancel_resume)
-        resume_layout.addWidget(cancel)
+        from ui.design.startup import StartupPage
+        self.resume_page = StartupPage(self._cancel_resume)
         self.stack.addWidget(self.resume_page)
         self.stack.setCurrentWidget(self.resume_page)
         self._resume_token = token

@@ -98,7 +98,7 @@ class MainWindow(QWidget):
             if button is not self.btn_channels:
                 menu_layout.addSpacing(18)
         menu_layout.addStretch()
-        self.quick_button = Button('', 'keyboard');self.quick_button.setToolTip('Быстрый переход\nCtrl + K · ⌘ + K на Mac')
+        self.quick_button = Button('', 'keyboard');self.quick_button.setToolTip('Быстрый переход')
         self.quick_button.setAccessibleName('Быстрый переход')
         self.quick_button.setProperty('flat', True)
         self.quick_button.setFixedHeight(44)

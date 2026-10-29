@@ -101,8 +101,6 @@ class QuickSwitch(OverlayDialog):
         subtitle=QLabel('Попробуйте имя, логин или название канала.');subtitle.setAlignment(Qt.AlignCenter);subtitle.setWordWrap(True);subtitle.setStyleSheet('font-size:14px;color:#ACB9CC;');empty_layout.addWidget(subtitle)
         empty_layout.addStretch();self.results.addWidget(self.empty)
         root.addWidget(self.results,1)
-        self.hint = QLabel("Enter — открыть · Esc — закрыть")
-        root.addWidget(self.hint)
         self.query.textChanged.connect(self.filter)
         self.query.returnPressed.connect(self.open_selected)
         self.list.activated.connect(self.open_selected)
@@ -142,10 +140,6 @@ class QuickSwitch(OverlayDialog):
             self.model.appendRow(item)
         self.list.setCurrentIndex(self.model.index(0, 0))
         self.results.setCurrentWidget(self.list if self.targets else self.empty)
-        self.hint.setVisible(bool(self.targets))
-        self.hint.setText(
-            "Enter — открыть · Esc — закрыть" if self.targets else "Совпадений нет"
-        )
 
     def eventFilter(self,watched,event):
         from PySide6.QtCore import QEvent

@@ -131,7 +131,7 @@ class Conversation(QWidget):
         compose.addWidget(self.editor, 1)
         compose.addWidget(self.send_button, 0, Qt.AlignVCenter)
         root.addWidget(compose_frame)
-        self.send_status = QLabel("Enter — отправить · Shift + Enter — новая строка")
+        self.send_status = QLabel()
         self.send_status.setObjectName("Muted")
         self.send_status.setStyleSheet("QLabel {font-size:11px;}")
         self.send_status.setWordWrap(True)
@@ -444,7 +444,8 @@ class Conversation(QWidget):
         elif self.identity in self.pending:
             self.send_status.setText("Отправляем… Можно продолжать редактирование")
         else:
-            self.send_status.setText("Enter — отправить · Shift + Enter — новая строка")
+            self.send_status.clear()
+        self.send_status.setVisible(bool(self.send_status.text()))
 
     def mark_connected(self):
         if self.offline_note.text():

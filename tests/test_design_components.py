@@ -63,6 +63,43 @@ class DesignGeometryTests(unittest.TestCase):
         label.resize(900,30);self.app.processEvents()
         self.assertEqual(label.text(),label.full_text)
 
+    def test_scrollbars_reserve_the_same_content_gutter_in_both_directions(self):
+        from PySide6.QtWidgets import QScrollBar,QStyleOptionSlider,QStyle
+        from PySide6.QtCore import Qt
+        from ui.design import tokens
+        style=(Path(__file__).resolve().parents[1]/'client/styles/nodus.qss').read_text()
+        for key,value in vars(tokens).items():
+            if isinstance(value,str):style=style.replace('@'+key+'@',value)
+        for direction in (Qt.Vertical,Qt.Horizontal):
+            bar=QScrollBar(direction);bar.setStyleSheet(style)
+            bar.setRange(0,100);bar.setPageStep(20);bar.setValue(40)
+            bar.resize(18,180) if direction==Qt.Vertical else bar.resize(180,18)
+            bar.show();self.app.processEvents()
+            option=QStyleOptionSlider();bar.initStyleOption(option)
+            rect=bar.style().subControlRect(QStyle.CC_ScrollBar,option,QStyle.SC_ScrollBarSlider,bar)
+            self.assertEqual(rect.left() if direction==Qt.Vertical else rect.top(),12)
+            self.assertEqual(rect.width() if direction==Qt.Vertical else rect.height(),3)
+            bar.close()
+
+    def test_startup_screen_centers_content_and_stops_hidden_animation(self):
+        from unittest.mock import Mock
+        from PySide6.QtCore import QAbstractAnimation
+        from ui.design.startup import StartupPage
+        previous=self.app.property('reduce_motion')
+        self.addCleanup(lambda:self.app.setProperty('reduce_motion',previous))
+        self.app.setProperty('reduce_motion',False)
+        cancel=Mock();page=StartupPage(cancel);self.addCleanup(page.close)
+        for width,height in ((1120,578),(1280,738),(1440,858)):
+            page.resize(width,height);page.show();self.app.processEvents()
+            self.assertAlmostEqual(page.progress.geometry().center().x(),width/2,delta=1)
+            self.assertLess(page.cancel_button.geometry().bottom(),height)
+        self.assertEqual(page.progress.animation.state(),QAbstractAnimation.Running)
+        page.hide();self.assertEqual(page.progress.animation.state(),QAbstractAnimation.Stopped)
+        self.app.setProperty('reduce_motion',True)
+        page.show();self.app.processEvents()
+        self.assertEqual(page.progress.animation.state(),QAbstractAnimation.Stopped)
+        page.cancel_button.click();cancel.assert_called_once()
+
     def test_icon_only_buttons_paint_at_their_actual_center(self):
         from unittest.mock import patch
         from PySide6.QtCore import QRectF

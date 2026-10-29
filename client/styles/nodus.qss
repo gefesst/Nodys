@@ -29,11 +29,11 @@ QLabel#ChannelListItemName {font-weight:600;}
 QLabel#InlineToast {background:#2B3B51;border:1px solid #536D92;border-radius:10px;padding:13px 18px;}
 QScrollArea,QListView,QStackedWidget {border:0;background:transparent;outline:0;}
 QScrollArea > QWidget > QWidget {background:transparent;}
-QScrollBar:vertical {background:transparent;width:7px;margin:2px;}
+QScrollBar:vertical {background:transparent;width:18px;margin:2px 3px 2px 12px;}
 QScrollBar::handle:vertical {background:#53627A;border-radius:3px;min-height:30px;}
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical {background:transparent;}
-QScrollBar:horizontal {height:7px;background:transparent;}
+QScrollBar:horizontal {height:18px;background:transparent;margin:12px 2px 3px 2px;}
 QScrollBar::handle:horizontal {background:#53627A;border-radius:3px;min-width:30px;}
 QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal {width:0;}
 QMenu {background:@SURFACE@;border:1px solid #485B76;border-radius:10px;padding:7px;}
