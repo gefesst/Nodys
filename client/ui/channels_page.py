@@ -279,11 +279,11 @@ class VoiceParticipantItem(QFrame):
         name=self.participant.get('nickname') or login or 'Участник'
         speaking=bool(self.participant.get('speaking'))
         self.setObjectName('ChannelVoiceMemberItem')
-        self.setProperty('speaking',speaking)
+        self.setProperty('speaking',False)
         self.setFixedWidth(290)
         self.setFixedHeight(225)
         layout=QVBoxLayout(self);layout.setContentsMargins(20,28,20,24);layout.setSpacing(0)
-        avatar=AvatarLabel(72);avatar.setProperty('own_avatar',login==current_login);avatar.set_avatar(self.participant.get('avatar',''),login,name)
+        avatar=AvatarLabel(72);avatar.setProperty('voice_ring',True);avatar.setProperty('own_avatar',login==current_login);avatar.set_avatar(self.participant.get('avatar',''),login,name)
         avatar.setProperty('speaking',speaking)
         layout.addWidget(avatar,0,Qt.AlignHCenter)
         layout.addSpacing(19)
@@ -292,6 +292,7 @@ class VoiceParticipantItem(QFrame):
         layout.addSpacing(12)
         state=QLabel('Говорит' if speaking else 'Микрофон выключен' if self.participant.get('muted') else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
         state.setAlignment(Qt.AlignCenter);layout.addWidget(state)
+        self.avatar=avatar;self.state=state
         layout.addStretch()
 
 
@@ -1210,6 +1211,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                 item.widget().deleteLater()
 
     def _clear_voice_members_list(self):
+        self._voice_tiles_key=None
         for i in reversed(range(self.voice_members_layout.count())):
             item = self.voice_members_layout.takeAt(i)
             if item and item.widget():
@@ -1789,9 +1791,20 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
 
     def _render_voice_participants(self):
         if hasattr(self,"rooms_panel"):self.render_rooms()
-        self._clear_voice_members_list()
 
         participants = sorted(self._voice_participants or [],key=lambda p:(p.get("login")==self.ctx.login,(p.get("nickname") or p.get("login","")).casefold()))
+        columns=max(1,min(3,(max(0,self.voice_members_scroll.width()-12)+20)//310))
+        geometry_key=(columns,[(p.get('login'),p.get('nickname'),p.get('avatar')) for p in participants])
+        if participants and getattr(self,'_voice_tiles_key',None)==geometry_key:
+            for i,part in enumerate(participants):
+                row=self.voice_members_layout.itemAt(i).widget()
+                speaking=bool(part.get('speaking')) and not (part.get('login')==self.ctx.login and self._voice_muted)
+                muted=part.get('login')==self.ctx.login and self._voice_muted
+                row.avatar.setProperty('speaking',speaking);row.avatar.update()
+                row.state.setText('Говорит' if speaking else 'Микрофон выключен' if muted else 'Слушает')
+            return
+        self._clear_voice_members_list()
+        self._voice_tiles_key=geometry_key
         self.voice_members_layout.setAlignment((Qt.AlignTop | Qt.AlignLeft) if participants else Qt.AlignmentFlag(0))
         count=len(participants)
         self.voice_members_count.setText('Нет участников' if not count else participants_text(count))

@@ -96,11 +96,13 @@ class RoomNavigationMixin:
                     people=[dict(p,speaking=speaking) if p.get('login')==self.ctx.login else p for p in people]
                 room['participants']=people
         for room in rooms:
+            room['participants']=sorted(room.get('participants',[]),key=lambda p:p.get('login',''))
+        for room in rooms:
             for person in room.get('participants',[]):
                 avatar=self._room_avatars.get((room['id'],person['login']))
                 if avatar:
                     avatar.setProperty('speaking',bool(person.get('speaking')));avatar.update()
-        signature=repr(([dict(r,participants=[{k:v for k,v in p.items() if k!='speaking'} for p in r.get('participants',[])]) for r in rooms],self._rooms_manage,selected,self._voice_joined,self.voice_room_id))
+        signature=repr(([(r['id'],r['kind'],r['name'],[(p.get('login'),p.get('nickname'),p.get('avatar')) for p in r.get('participants',[])]) for r in rooms],self._rooms_manage,selected,self._voice_joined,self.voice_room_id))
         if signature==self._rooms_signature:return
         self._rooms_signature=signature
         self._room_avatars={}
@@ -136,7 +138,7 @@ class RoomNavigationMixin:
                 for person in room.get('participants',[]):
                     from ui.avatar_widget import AvatarLabel
                     member=QWidget();member_row=QHBoxLayout(member);member_row.setContentsMargins(20,2,0,2);member_row.setSpacing(6)
-                    avatar=AvatarLabel(20);avatar.set_avatar(person.get('avatar',''),login=person['login'],nickname=person.get('nickname',person['login']))
+                    avatar=AvatarLabel(24);avatar.setProperty("voice_ring",True);avatar.set_avatar(person.get('avatar',''),login=person['login'],nickname=person.get('nickname',person['login']))
                     avatar.setProperty('speaking',bool(person.get('speaking')))
                     self._room_avatars[(room['id'],person['login'])]=avatar
                     member_row.addWidget(avatar)

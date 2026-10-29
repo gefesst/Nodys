@@ -69,15 +69,25 @@ class AvatarLabel(QLabel):
             self.set_online(self._online, self._ring_color)
 
     def paintEvent(self, event):
-        super().paintEvent(event)
-        if self.property('speaking'):
-            painter = QPainter(self)
+        if self.property('voice_ring'):
+            painter=QPainter(self)
+            painter.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
+            # Reserve a constant gap: speaking never crops the image or changes its size.
+            inset=3.0 if self.width()<40 else 4.0
+            target=QRectF(self.rect()).adjusted(inset,inset,-inset,-inset)
+            pixmap=self.pixmap()
+            if pixmap and not pixmap.isNull():
+                painter.drawPixmap(target,pixmap,QRectF(pixmap.rect()))
+        else:
+            super().paintEvent(event)
+            painter=QPainter(self)
             painter.setRenderHint(QPainter.Antialiasing)
-            color = QColor('#67D5AD')
-            color.setAlpha(int(self.property('pulse_alpha') or 160))
-            painter.setPen(QPen(color, 3))
+        if self.property('speaking'):
+            width=1.5 if self.width()<40 else 2.0
+            painter.setPen(QPen(QColor('#67D5AD'),width))
             painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(self.rect().adjusted(2,2,-2,-2))
+            inset=width/2+0.75
+            painter.drawEllipse(QRectF(self.rect()).adjusted(inset,inset,-inset,-inset))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

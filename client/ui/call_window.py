@@ -82,6 +82,7 @@ class ActiveCallWindow(CallPanel):
         self.timer_lbl.setStyleSheet("font-size:23px;font-weight:600;")
         root.addSpacing(37)
         self.avatar = AvatarLabel(size=116)
+        self.avatar.setProperty("voice_ring",True)
         self.avatar.set_avatar(
             path=self.peer_avatar, login=self.peer_login, nickname=self.peer_nickname
         )

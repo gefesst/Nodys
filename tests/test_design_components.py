@@ -843,6 +843,16 @@ class DesignGeometryTests(unittest.TestCase):
             page._rooms[0]['participants']=[dict(login='speaker',speaking=not speaking)]
             page.render_rooms()
             self.assertEqual(bool(avatar.property('speaking')),speaking)
+        page._voice_participants.append(dict(login='other',nickname='Other',speaking=False))
+        page._render_voice_participants()
+        stable_avatar=page._room_avatars[(1,'speaker')]
+        stable_tile=page.voice_members_layout.itemAt(0).widget()
+        page._voice_participants.reverse()
+        for person in page._voice_participants:
+            person['speaking']=True;person['online']=True;person['role']='member'
+        page._render_voice_participants()
+        self.assertIs(page._room_avatars[(1,'speaker')],stable_avatar)
+        self.assertIs(page.voice_members_layout.itemAt(0).widget(),stable_tile)
         page._voice_participants=[];page._render_voice_participants()
         self.assertNotIn((1,'speaker'),page._room_avatars)
 
