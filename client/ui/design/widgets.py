@@ -157,6 +157,13 @@ class MessageList(QListView):
         self.reflow.setSingleShot(True)
         self.reflow.setInterval(100)
         self.reflow.timeout.connect(self.restore_anchor)
+        self.verticalScrollBar().actionTriggered.connect(lambda _:self.reflow.stop())
+        self.verticalScrollBar().sliderPressed.connect(self.reflow.stop)
+        self.verticalScrollBar().setSingleStep(24)
+
+    def wheelEvent(self,event):
+        self.reflow.stop()
+        super().wheelEvent(event)
 
     def resizeEvent(self, event):
         from PySide6.QtCore import QPoint
@@ -168,7 +175,8 @@ class MessageList(QListView):
         bar = self.verticalScrollBar()
         self.anchor_bottom = bar.maximum() - bar.value() < 20
         super().resizeEvent(event)
-        self.reflow.start()
+        if event.size().width()!=event.oldSize().width():
+            self.reflow.start()
 
     def restore_anchor(self):
         if not self.model() or not self.model().rowCount():
@@ -184,7 +192,7 @@ class MessageList(QListView):
             )
             bar = self.verticalScrollBar()
             bar.setValue(bar.value() - getattr(self, "anchor_offset", 0))
-        self.setLayoutMode(QListView.Batched)
+        self.setLayoutMode(QListView.SinglePass)
 
 
 def font(px=15, bold=False):

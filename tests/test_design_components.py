@@ -104,8 +104,27 @@ class DesignGeometryTests(unittest.TestCase):
             painter=QPainter(image)
             window.render(painter,QPoint(),renderFlags=QWidget.DrawChildren)
             painter.end()
+            self.assertEqual(image.pixelColor(599,399).alpha(),0)
+            self.assertTrue(any(0<image.pixelColor(x,y).alpha()<expected
+                                for x in range(586,600) for y in range(386,400)))
             for x,y in [(500,20),(10,300),(100,300),(500,300)]:
                 self.assertEqual(image.pixelColor(x,y).alpha(),expected)
+
+    def test_tabs_have_no_transition_overlay(self):
+        from ui.design.motion import TransitionStack,PageOverlay
+        from PySide6.QtWidgets import QWidget
+        stack=TransitionStack();stack.addWidget(QWidget());stack.addWidget(QWidget())
+        stack.show();self.addCleanup(stack.close)
+        stack.setCurrentIndex(1);self.app.processEvents()
+        self.assertFalse(stack.findChildren(PageOverlay))
+
+    def test_manual_scroll_cancels_delayed_resize_anchor(self):
+        from ui.design.widgets import MessageList
+        from PySide6.QtWidgets import QAbstractSlider
+        view=MessageList();self.addCleanup(view.close)
+        view.reflow.start()
+        view.verticalScrollBar().triggerAction(QAbstractSlider.SliderSingleStepAdd)
+        self.assertFalse(view.reflow.isActive())
 
     def test_page_transition_fades_without_translating_snapshot(self):
         from ui.design.motion import PageOverlay

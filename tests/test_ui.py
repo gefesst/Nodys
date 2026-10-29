@@ -243,6 +243,46 @@ class UiTests(unittest.TestCase):
         MainWindow._reconcile_call_state(window,dict(state,call_id='2'))
         self.assertEqual(window._start_voice_for_peer.call_count,2)
 
+    def test_join_and_leave_channel_keep_focus_off_unrelated_navigation(self):
+        from PySide6.QtCore import QObject, Signal, Qt
+        from ui.main_window import MainWindow
+        from unittest.mock import Mock
+        class Voice(QObject):
+            ready=Signal();failed=Signal(str)
+            start=Mock();stop=Mock();set_mic_enabled=Mock();set_sound_enabled=Mock()
+            def get_activity(self):return {}
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow();self.addCleanup(window.prepare_to_close_app);self.addCleanup(window.deleteLater)
+            window.show();window.show_channels()
+            channel=window.channels_page
+            channel.open_channel({'id':1,'name':'Room'});channel.switch_to_voice_tab()
+            self.app.processEvents()
+            for destination in ('channel','chats','friends'):
+                window.show_channels();channel.switch_to_voice_tab()
+                channel.voice_join_btn.setFocus(Qt.OtherFocusReason)
+                voice=Voice()
+                with patch('ui.channels_page.VoiceSession',return_value=voice):
+                    channel.toggle_voice_join()
+                self.assertIs(window.stack.currentWidget(),channel)
+                self.assertFalse(window.btn_friends.hasFocus())
+                voice.ready.emit();self.app.processEvents()
+                self.assertFalse(window.btn_friends.hasFocus())
+                if destination=='channel':
+                    channel.voice_join_btn.setFocus(Qt.OtherFocusReason)
+                    channel.toggle_voice_join()
+                    target=channel
+                else:
+                    getattr(window,'show_'+destination)();window.refresh_voice_dock()
+                    window.voice_dock.animation.setCurrentTime(180)
+                    window.voice_dock.controls['end'].setFocus(Qt.OtherFocusReason)
+                    target=window.stack.currentWidget()
+                    window.end_voice_surface()
+                    window.voice_dock.animation.setCurrentTime(180)
+                self.app.processEvents()
+                self.assertIs(window.stack.currentWidget(),target)
+                self.assertTrue(target.hasFocus())
+                self.assertFalse(window.btn_friends.hasFocus())
+
     def test_channel_switch_cancels_pending_voice_start(self):
         from PySide6.QtCore import QObject, Signal
         from unittest.mock import Mock

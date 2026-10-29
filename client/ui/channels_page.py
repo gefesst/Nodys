@@ -2446,7 +2446,17 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._voice_deafened = not self._voice_deafened
         self._apply_voice_local_controls()
 
+    def _preserve_voice_focus(self):
+        focused=QApplication.focusWidget()
+        main=self._main_window
+        dock=getattr(main,"voice_dock",None)
+        if focused is not None and (self.voice_controls.isAncestorOf(focused) or
+                (dock is not None and dock.isAncestorOf(focused))):
+            target=main.stack.currentWidget() if main is not None else self
+            target.setFocus(Qt.OtherFocusReason)
+
     def toggle_voice_join(self):
+        self._preserve_voice_focus()
         if self._voice_transitioning:
             return
 
@@ -2538,6 +2548,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         voice.start(room_id=room_id)
 
     def stop_voice_session(self, show_toast: bool = False):
+        self._preserve_voice_focus()
         self._voice_transitioning = False
         self._voice_epoch = getattr(self, "_voice_epoch", 0) + 1
         self._voice_participants_loading = False

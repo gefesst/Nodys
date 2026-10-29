@@ -59,6 +59,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         left.addSpacing(5)
         self.dialog_model = DialogModel(self)
         self.dialogs = QListView()
+        self.dialogs.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.dialogs.verticalScrollBar().setSingleStep(24)
         self.dialogs.setModel(self.dialog_model)
         self.dialogs.setItemDelegate(DialogDelegate(self.dialogs))
         self.dialogs.setUniformItemSizes(True)

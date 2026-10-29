@@ -130,17 +130,7 @@ class TransitionStack(QStackedWidget):
             overlay.animation.stop()
             overlay.hide()
             overlay.deleteLater()
-        snapshot = (
-            old.grab()
-            if old is not None
-            and old is not widget
-            and self.isVisible()
-            and not reduced()
-            else None
-        )
         super().setCurrentWidget(widget)
-        if snapshot is not None:
-            PageOverlay(self, snapshot)
 
     def setCurrentIndex(self, index):
         widget = self.widget(index)

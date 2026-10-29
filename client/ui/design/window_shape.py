@@ -17,7 +17,19 @@ def window_region(width, height, maximized=False):
 
 def apply(window):
     square = window.isMaximized() or window.isFullScreen()
-    window.setMask(window_region(window.width(), window.height(), square))
+    # A binary QRegion produces staircase edges on scaled/Retina displays.
+    window.clearMask()
+    if __import__('sys').platform == 'darwin':
+        from PySide6.QtWidgets import QApplication
+        if QApplication.platformName() not in ('offscreen','minimal'):
+            try:
+                import objc
+                view=objc.objc_object(c_void_p=int(window.winId()))
+                view.setWantsLayer_(True)
+                view.layer().setCornerRadius_(0 if square else RADIUS)
+                view.layer().setMasksToBounds_(True)
+            except (ImportError,AttributeError,RuntimeError,ValueError):
+                pass
     effect = getattr(window, '_native_backdrop', None)
     if effect is not None:
         effect.setWantsLayer_(True)

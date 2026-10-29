@@ -87,6 +87,8 @@ class QuickSwitch(OverlayDialog):
         heading.setFixedHeight(30)
         root.addWidget(heading)
         self.list = QListView()
+        self.list.setVerticalScrollMode(QListView.ScrollPerPixel)
+        self.list.verticalScrollBar().setSingleStep(24)
         self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.model = QStandardItemModel(self)
         self.list.setModel(self.model)

@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QSizeGrip
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent, QPoint, QRect
 from network import NetworkThread
-from PySide6.QtGui import QIcon, QPainter, QColor
+from PySide6.QtGui import QIcon, QPainter, QColor, QPainterPath
 from ui.design.shell import TitleBar, create_resize_handles, position_resize_handles
 from ui.design.tokens import BACKGROUND_ALPHA, BACKGROUND
 import os
@@ -117,7 +117,15 @@ class AppWindow(QWidget):
         painter = QPainter(self)
         color = QColor(BACKGROUND)
         color.setAlpha(BACKGROUND_ALPHA if self.property('translucent_background') is not False else 255)
-        painter.fillRect(self.rect(), color)
+        from ui.design.window_shape import RADIUS
+        from PySide6.QtCore import QRectF
+        outline=QPainterPath()
+        if self.isMaximized() or self.isFullScreen():outline.addRect(QRectF(self.rect()))
+        else:outline.addRoundedRect(QRectF(self.rect()),RADIUS,RADIUS)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawPath(outline)
         # Each structural surface replaces the base, rather than stacking alpha
         # over it (96% over 96% is effectively opaque).
         painter.setCompositionMode(QPainter.CompositionMode_Source)
@@ -130,7 +138,10 @@ class AppWindow(QWidget):
             if shade and child.isVisibleTo(self):
                 panel = QColor(shade)
                 panel.setAlpha(color.alpha())
-                painter.fillRect(QRect(child.mapTo(self, QPoint()), child.size()), panel)
+                region=QPainterPath()
+                region.addRect(QRectF(QRect(child.mapTo(self, QPoint()), child.size())))
+                painter.setBrush(panel)
+                painter.drawPath(outline.intersected(region))
 
     def resizeEvent(self, event):
         if hasattr(self, 'grip'):
