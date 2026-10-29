@@ -346,6 +346,7 @@ class CallResultWindow(OutgoingCallWindow):
         super().__init__(result.get("peer", ""), lambda: None, parent)
         self.finished_by_server = True
         self.heading.setText(result.get("title", "Звонок завершён"))
+        self.heading.setToolTip(result.get("detail", ""))
         self.heading.setWordWrap(True)
         self.heading.setMinimumHeight(29)
         self.heading.setMaximumHeight(60)

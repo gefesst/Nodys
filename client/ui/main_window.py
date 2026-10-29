@@ -163,6 +163,7 @@ class MainWindow(QWidget):
         self.calls = CallController(lambda: self.ctx, self)
         self.calls.state_changed.connect(self._reconcile_call_state)
         self.calls.result_ready.connect(self._show_call_result)
+        self.calls.pending_changed.connect(self._show_pending_call)
         self.calls.notice.connect(lambda text, timeout: self._show_call_notice(text, timeout_ms=timeout))
         self.calls.response_finished.connect(self._incoming_response_finished)
         self.call_events_timer = QTimer(self)
@@ -399,6 +400,21 @@ class MainWindow(QWidget):
 
     def _decline_incoming_inline(self):
         self._respond_incoming_inline(False)
+
+    def _show_pending_call(self, peer):
+        previous=getattr(self,'pending_call_window',None)
+        if previous is not None:
+            previous.finished_by_server=True
+            previous.close();previous.deleteLater()
+            self.pending_call_window=None
+        if peer:
+            from ui.call_window import OutgoingCallWindow
+            self._close_call_result()
+            panel=OutgoingCallWindow(peer,lambda:self.calls.cancel_start(peer),self)
+            panel.heading.setText('Подключение…')
+            panel.status_label.setText('Аудиозвонок')
+            self.pending_call_window=panel
+            panel.show()
 
     def start_outgoing_call(self, friend_login: str):
         if not self.calls.start_call(friend_login):

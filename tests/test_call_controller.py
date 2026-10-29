@@ -84,6 +84,47 @@ class CallControllerTests(unittest.TestCase):
         self.assertEqual(results,[dict(peer='bob',title='Пользователь занят')])
         self.assertEqual(self.states,[])
 
+    def test_cancel_pending_waits_for_identity_and_never_opens_call(self):
+        pending=[];self.controller.pending_changed.connect(pending.append)
+        self.assertTrue(self.controller.start_call('bob'))
+        self.controller.cancel_start('bob')
+        self.assertFalse(self.controller.start_call('carol'))
+        self.controller.receive(self.response())
+        self.assertEqual(self.states,[])
+        self.controller.requests['action'].complete(dict(status='ok'))
+        self.controller.requests['poll'].complete(self.response())
+        self.assertEqual(self.states,[])
+        self.assertEqual(self.controller.requests['action'].data['action'],'end_call')
+        self.assertEqual(self.controller.requests['action'].data['call_id'],'one')
+        self.controller.requests['action'].complete(dict(status='ok'))
+        self.controller.requests['poll'].complete(dict(status='ok',call_state=None,events=[]))
+        self.assertIsNone(self.controller.cancelled_start)
+        self.assertEqual(pending[-3:],['bob',None,None])
+
+    def test_cancel_rejected_request_suppresses_result(self):
+        results=[];self.controller.result_ready.connect(results.append)
+        self.controller.start_call('bob');self.controller.cancel_start('bob')
+        self.controller.requests['action'].complete(dict(status='error',message='Пользователь занят'))
+        self.assertEqual(results,[])
+        self.assertIsNone(self.controller.cancelled_start)
+        self.assertTrue(self.controller.start_call('carol'))
+
+    def test_cancel_does_not_end_unrelated_incoming_call(self):
+        self.controller.start_call('bob');self.controller.cancel_start('bob')
+        self.controller.requests['action'].complete(dict(status='ok'))
+        self.controller.requests['poll'].complete(self.response(dict(self.state,peer='carol',incoming=True)))
+        self.assertNotIn('action',self.controller.requests)
+        self.assertEqual(self.states[-1]['peer'],'carol')
+
+    def test_reset_clears_pending_cancel_and_fences_callback(self):
+        self.controller.start_call('bob');old=self.controller.requests['action']
+        self.controller.cancel_start('bob');self.controller.reset()
+        old.complete(dict(status='ok'))
+        self.assertIsNone(self.controller.pending_peer)
+        self.assertIsNone(self.controller.cancelled_start)
+        self.assertEqual(self.controller.requests,{})
+
+
 class PollingTests(unittest.TestCase):
     def test_navigation_and_authentication_stop_background_pages(self):
         from unittest.mock import Mock

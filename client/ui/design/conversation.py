@@ -46,6 +46,8 @@ class Conversation(QWidget):
         self.epoch = 0
         self._applying = False
         self.can_send = True
+        self.is_channel = channel
+        self.permission_text = "Писать в этом канале могут модераторы и администраторы."
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
@@ -87,6 +89,8 @@ class Conversation(QWidget):
         for surface in (self.empty_state, self.loading_state, self.error_state):
             self.history_stack.addWidget(surface)
         root.addWidget(self.history_stack, 1)
+        self.permission_note = InlineNote()
+        root.addWidget(self.permission_note)
         self.send_error = InlineNote()
         self.send_error.set_tone("error")
         root.addWidget(self.send_error)
@@ -358,6 +362,9 @@ class Conversation(QWidget):
                     )
                 )
             )
+        self.permission_note.setText(
+            self.permission_text
+            if self.is_channel and not self.can_send else "")
         if not self.can_send:
             self.send_status.setText(
                 "У вас нет права отправлять сообщения в этом канале"

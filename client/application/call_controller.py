@@ -8,6 +8,7 @@ class CallController(QObject):
     notice = Signal(str, int)
     response_finished = Signal(bool)
     result_ready = Signal(object)
+    pending_changed = Signal(object)
 
     def __init__(self, context, parent=None, request_factory=NetworkThread):
         super().__init__(parent)
@@ -19,6 +20,8 @@ class CallController(QObject):
         self.cursor = 0
         self.state = None
         self._state_key = None
+        self.pending_peer = None
+        self.cancelled_start = None
 
     def reset(self):
         self.generation += 1
@@ -29,6 +32,9 @@ class CallController(QObject):
         self.state = None
         self._state_key = None
         self.token = getattr(self.context(), 'session_token', '')
+        self.pending_peer = None
+        self.cancelled_start = None
+        self.pending_changed.emit(None)
 
     def _identity(self):
         context = self.context()
@@ -79,6 +85,18 @@ class CallController(QObject):
                 return
             if not isinstance(state.get('call_id'), str) or not isinstance(state.get('peer'), str):
                 return
+        if self.pending_peer is not None and state and state['peer'] == self.pending_peer and not state.get('incoming'):
+            # A concurrent poll can observe the mutation before its response.
+            # Wait for the action callback and its fresh snapshot, including cancel.
+            return
+        if self.cancelled_start is not None and self.pending_peer is None:
+            cancelled = self.cancelled_start
+            self.cancelled_start = None
+            if state and state['peer'] == cancelled and not state.get('incoming'):
+                # The request reached the server before the user cancelled it.
+                # End only this returned call identity, without starting audio/UI.
+                self.end_call(state['call_id'], cancelled)
+                return
         key = None if state is None else (state['call_id'], state['peer'], state['status'], state.get('incoming'))
         if key != self._state_key:
             self._state_key = key
@@ -108,17 +126,30 @@ class CallController(QObject):
         self.poll()
 
     def start_call(self, peer):
-        if not peer:
+        if not peer or self.pending_peer is not None or self.cancelled_start is not None:
             return False
         def done(response):
+            self.pending_peer = None
+            self.pending_changed.emit(None)
             ok = isinstance(response, dict) and response.get('status') == 'ok'
-            self.notice.emit(f'Вызов отправлен пользователю {peer}' if ok else
-                             response.get('message', 'Не удалось начать вызов'), 2600)
             if not ok:
-                message = response.get("message", "Не удалось начать звонок")
-                self.result_ready.emit(dict(peer=peer, title=message))
+                cancelled = self.cancelled_start == peer
+                self.cancelled_start = None
+                if not cancelled:
+                    message = response.get("message", "Не удалось начать звонок")
+                    title = message if message in ("Пользователь занят", "Пользователь не в сети", "Пользователь не найден", "Можно звонить только друзьям") else "Не удалось начать звонок"
+                    self.result_ready.emit(dict(peer=peer, title=title, **({"detail":message} if title!=message else {})))
             self._refresh_after_action()
-        return self._request('action', dict(action='call_user', to_user=peer), done)
+        started = self._request('action', dict(action='call_user', to_user=peer), done)
+        if started:
+            self.pending_peer = peer
+            self.pending_changed.emit(peer)
+        return started
+
+    def cancel_start(self, peer):
+        if self.pending_peer == peer:
+            self.cancelled_start = peer
+            self.pending_changed.emit(None)
 
     def respond(self, accept):
         state = self.state

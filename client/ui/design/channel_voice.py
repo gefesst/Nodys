@@ -2,6 +2,24 @@
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget,QFrame,QVBoxLayout,QHBoxLayout,QLabel,QScrollArea,QGridLayout,QSizePolicy,QSpacerItem
 from .widgets import Button
+from .state_surfaces import InlineNote
+
+
+class VoiceNotice(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout=QVBoxLayout(self)
+        layout.setContentsMargins(0,0,0,39)
+        self.note=InlineNote()
+        self.note.setFixedHeight(46)
+        layout.addWidget(self.note)
+        self.hide()
+
+    def setText(self,text):
+        self.note.setText(text)
+
+    def text(self):
+        return self.note.text()
 
 
 def build(page):
@@ -28,6 +46,7 @@ def build(page):
     layout.addSpacing(33)
     page.voice_members_scroll=QScrollArea()
     page.voice_members_scroll.setWidgetResizable(True)
+    page.voice_members_scroll.setMinimumHeight(225)
     page.voice_members_container=QWidget()
     page.voice_members_layout=QGridLayout(page.voice_members_container)
     page.voice_members_layout.setContentsMargins(0,0,0,0)
@@ -67,13 +86,9 @@ def build(page):
     row.addItem(page.voice_after_join)
     box.addLayout(row)
     box.addStretch()
-    page.voice_quality_lbl=QLabel('Качество: —')
-    page.voice_quality_lbl.setObjectName('Muted')
-    page.voice_quality_lbl.setWordWrap(True)
+    page.voice_quality_lbl=VoiceNotice()
     layout.addWidget(page.voice_quality_lbl)
-    page.voice_access_hint_lbl=QLabel()
-    page.voice_access_hint_lbl.setWordWrap(True)
-    page.voice_access_hint_lbl.setObjectName('Muted')
+    page.voice_access_hint_lbl=VoiceNotice()
     layout.addWidget(page.voice_access_hint_lbl)
     page.voice_controls=controls
     page.voice_microphone_host=QWidget()

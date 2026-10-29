@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--relogin-cycles", type=int, default=1)
     parser.add_argument("--resize-all", action="store_true")
     parser.add_argument("--visual-only", action="store_true")
-    parser.add_argument("--section",choices=("all","profile","voice","channels"),default="all")
+    parser.add_argument("--section",choices=("all","profile","voice","channels","calls"),default="all")
     args = parser.parse_args()
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
@@ -87,24 +87,68 @@ def main():
                 self.finish()
 
         def shot(self, name, widget=None):
+            from PySide6.QtTest import QTest
             target = widget or self.w
-            target.grab().save(str(self.path / (name + ".png")))
-            if args.resize_all:
-                self.capturing=True
-                original_size=self.w.size()
-                try:
+            self.capturing=True
+            original_size=self.w.size()
+            try:
+                # Transitions last at most 160 ms. A snapshot must contain the
+                # settled page, not the outgoing page's temporary fade overlay.
+                QTest.qWait(220)
+                target.grab().save(str(self.path / (name + ".png")))
+                if args.resize_all:
                     folder=self.path/'sizes';folder.mkdir(exist_ok=True)
                     for width,height in ((1120,620),(1280,780),(1440,900)):
                         self.w.resize(width,height)
-                        QApplication.processEvents()
+                        QTest.qWait(220)
                         assert self.w.width()==width and self.w.height()==height, (name,self.w.size(),width,height)
                         self.w.grab().save(str(folder/f'{name}-{width}.png'))
-                finally:
-                    self.w.resize(original_size)
-                    QApplication.processEvents()
-                    self.capturing=False
+            finally:
+                self.w.resize(original_size)
+                QApplication.processEvents()
+                self.capturing=False
             self.log.append(name)
             print("Captured", name, flush=True)
+
+        def calls_review(self,m):
+            from server import server
+            from config import save_config
+            peer=lab.people[0][0];other=lab.people[1][0]
+            m.show_friends()
+            self.wait(1);yield
+            # Hold only the presentation for a stable resize capture; cancellation
+            # and response races are exercised by CallController regression tests.
+            m._show_pending_call(peer)
+            self.shot('41-call-connecting')
+            m._show_pending_call(None)
+            self.visual_fixtures.append('41-call-connecting: pending presentation held without a network request')
+            server.send_friend_request(peer,other);server.accept_friend_request(peer,other)
+            assert lab.request(peer,'heartbeat')['status']=='ok'
+            assert lab.request(other,'heartbeat')['status']=='ok'
+            assert lab.request(peer,'call_user',to_user=other)['status']=='ok'
+            m.start_outgoing_call(peer)
+            self.wait(predicate=lambda:bool(getattr(m,'call_result_window',None)));yield
+            assert m.call_result_window.heading.text()=='Пользователь занят'
+            self.shot('41b-call-busy');m._close_call_result()
+            busy_state=lab.request(peer,'poll_events',after_event_id=0)['call_state']
+            assert lab.request(peer,'end_call',with_user=other,call_id=busy_state['call_id'])['status']=='ok'
+            self.wait(predicate=lambda:'action' not in m.calls.requests);yield
+            assert lab.request(peer,'heartbeat')['status']=='ok'
+            m.start_outgoing_call(peer)
+            self.wait(predicate=lambda:bool(m.calls.state) or bool(getattr(m,'call_result_window',None)));yield
+            assert m.calls.state, 'Call did not start: '+m.call_result_window.heading.text()
+            print('Awaiting actual ringing expiry',flush=True)
+            # Stop peer heartbeats; the real server expires its ringing call.
+            self.wait(predicate=lambda:m.calls.state is None and bool(getattr(m,'call_result_window',None)));yield
+            assert m.call_result_window.heading.text()=='Нет ответа'
+            self.shot('41c-call-timeout');m._close_call_result()
+            self.wait(predicate=lambda:'action' not in m.calls.requests);yield
+            save_config({'api_port':lab.free_port()})
+            m.start_outgoing_call(peer)
+            self.wait(predicate=lambda:bool(getattr(m,'call_result_window',None)));yield
+            assert m.call_result_window.heading.text()=='Не удалось начать звонок'
+            self.shot('41d-call-error')
+            save_config(lab.config);m._close_call_result()
 
         def channel_states_review(self,m):
             from unittest.mock import patch
@@ -126,11 +170,32 @@ def main():
             ch.join_channel();self.wait(predicate=lambda:not ch._joining_channel);yield
             assert ch.main_stack.currentWidget() is ch.join_page and ch.join_feedback.text()
             self.shot('40e-channel-join-error')
+            ch.open_channel(saved_channels[0])
+            self.wait(predicate=lambda:not ch._loading_channel_details and not ch.conversation.loading);yield
+            ch.stop_auto_update()
+            c=ch.conversation
+            with patch.object(ch,'load_channel_messages'),patch.object(c,'load'):
+                c.scope.invalidate();c.rows=[];c.model.replace([]);c.loading=False;c.history_error=False;c.update_controls()
+                self.shot('42-channel-text-empty')
+                c.history_error=True;c.update_controls();self.shot('42b-channel-text-error')
+                c.history_error=False;c.update_controls()
+                original_permissions=dict(ch._settings_permissions)
+                ch._settings_permissions=dict(original_permissions,can_send_text=False,text_min_role='moderator')
+                ch._apply_channel_permissions_ui();self.shot('42c-channel-text-denied')
+                ch._settings_permissions=dict(original_permissions,can_join_voice=False,voice_min_role='moderator')
+                ch.switch_to_voice_tab();ch._apply_channel_permissions_ui()
+                self.shot('42d-channel-voice-denied')
+                ch._settings_permissions=original_permissions;ch._apply_channel_permissions_ui()
+                ch.voice_quality_lbl.setText('Связь нестабильна · задержка 180 мс · возможны перерывы звука')
+                ch.voice_quality_lbl.show();self.shot('42e-channel-voice-quality');ch.voice_quality_lbl.hide()
+            self.visual_fixtures.extend(['42-channel-text-empty: empty history cache','42b-channel-text-error: failed history renderer','42c-channel-text-denied: permission renderer; server ACL tested separately','42d-channel-voice-denied: permission renderer; server ACL tested separately','42e-channel-voice-quality: simulated quality warning'])
 
         def microphone_review(self,m):
             m.settings_page.check_microphone()
             mic=m.settings_page.microphone_check
-            mic.listening();mic.level=40;mic.update_meter()
+            mic.listening()
+            for level in (10,25,45,70,95,65,40,25,15,10):
+                mic.level=level;mic.update_meter()
             self.shot('29f-microphone-level')
             mic.level=0;mic.last_signal=time.monotonic()-4;mic.update_meter()
             self.shot('29g-microphone-silent')
@@ -227,6 +292,10 @@ def main():
             yield
             m = w.main_page
             lab.tokens[lab.me] = m.ctx.session_token
+            if args.section=="calls":
+                w.resize(1440,900)
+                yield from self.calls_review(m)
+                return
             if args.section=="profile":
                 w.resize(1440,900)
                 yield from self.profile_review(m)

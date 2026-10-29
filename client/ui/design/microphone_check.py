@@ -2,10 +2,34 @@
 
 import threading
 import time
-from PySide6.QtCore import QObject, Signal, QTimer, Qt
-from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QRectF
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget
 from .widgets import Button, ASSETS
 from PySide6.QtSvgWidgets import QSvgWidget
+from PySide6.QtGui import QPainter, QColor
+
+
+class MicrophoneMeter(QWidget):
+    """Ten sample bars, matching the approved microphone-check indicator."""
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(160,52)
+        self.samples=[0]*10
+        self.setAccessibleName('Уровень микрофона')
+
+    def setValue(self,value):
+        level=max(0,min(100,int(value)))
+        self.samples=self.samples[1:]+[level]
+        self.setAccessibleDescription(str(level)+'%')
+        self.update()
+
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        for index,level in enumerate(self.samples):
+            height=max(4,26*level/100)
+            painter.setBrush(QColor('#67D5AD' if level>1 else '#3C4E66'))
+            painter.drawRoundedRect(QRectF(index*17,29-height,6,height),3,3)
 
 
 class MeterSignals(QObject):
@@ -33,32 +57,36 @@ class MicrophoneCheck(QFrame):
         self.signals.finished.connect(self.completed)
         self.signals.ready.connect(self.listening)
         root = QHBoxLayout(self)
-        root.setContentsMargins(22,16,18,16)
+        root.setContentsMargins(22,16,112,16)
         root.setSpacing(16)
         symbol=QSvgWidget(str(ASSETS/"mic.svg"));symbol.setFixedSize(22,22)
-        root.addWidget(symbol,0,Qt.AlignVCenter)
-        column=QVBoxLayout();column.setSpacing(8)
-        self.title=QLabel('Проверка микрофона')
+        symbol_column=QVBoxLayout();symbol_column.setContentsMargins(0,7,0,0)
+        symbol_column.addWidget(symbol);symbol_column.addStretch()
+        root.addLayout(symbol_column)
+        column=QVBoxLayout();column.setSpacing(8);column.setContentsMargins(0,7,0,0)
+        self.title=QLabel('Проверка микрофона');self.title.setFixedHeight(20)
         self.title.setStyleSheet('font-size:16px;font-weight:600;')
         column.addWidget(self.title)
         self.status=QLabel('Проверка начинается по кнопке. Звук не сохраняется и не передаётся.')
-        self.status.setWordWrap(True)
+        self.status.setWordWrap(True);self.status.setAlignment(Qt.AlignLeft|Qt.AlignTop)
         self.status.setStyleSheet('font-size:13px;color:#ACB9CC;')
         column.addWidget(self.status)
         root.addLayout(column,1)
-        self.meter=QProgressBar();self.meter.setRange(0,100);self.meter.setValue(0);self.meter.setTextVisible(False)
-        self.meter.setFixedSize(140,12)
-        self.meter.setStyleSheet('QProgressBar {background:#354152;border:0;border-radius:6px;} QProgressBar::chunk {background:#67D5AD;border-radius:6px;}')
+        self.meter=MicrophoneMeter()
         root.addWidget(self.meter)
         self.start_button=Button('Проверить',primary=True)
         self.start_button.setFixedSize(120,40)
         self.start_button.clicked.connect(self.start)
         root.addWidget(self.start_button)
         stop=Button('', 'close');stop.setFixedSize(28,28);stop.setAccessibleName('Остановить проверку микрофона')
-        stop.clicked.connect(self.close);root.addWidget(stop)
+        stop.clicked.connect(self.close);stop.setParent(self);self.stop_button=stop
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_meter)
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        self.stop_button.move(self.width()-46,(self.height()-28)//2)
 
     def listening(self):
         self.failed_state = False

@@ -1255,6 +1255,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         can_join_voice = bool(perms.get("can_join_voice", True))
         voice_req = (perms.get("voice_min_role") or "member").strip().lower()
 
+        self.conversation.permission_text = ("Писать в этом канале могут только владелец и администраторы."
+            if perms.get("text_min_role") == "admin" else "Писать в этом канале могут модераторы и администраторы.")
         self.conversation.can_send = can_send_text
         self.conversation.update_controls()
         # text controls
@@ -1268,7 +1270,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             if text_req == "admin":
                 self.channel_msg_input.setPlaceholderText("Только владельцы и админы могут писать в этот канал")
             elif text_req == "moderator":
-                self.channel_msg_input.setPlaceholderText("Только модераторы и выше могут писать в этот канал")
+                self.channel_msg_input.setPlaceholderText("Недостаточно прав для отправки")
             else:
                 self.channel_msg_input.setPlaceholderText("У вас нет прав на отправку сообщений")
 
@@ -1284,14 +1286,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 self.voice_access_hint_lbl.setText("В голосовом канале могут одновременно находиться несколько участников")
             else:
                 if voice_req == "admin":
-                    self.voice_access_hint_lbl.setText("Вход в голосовой разрешён только владельцу и админам")
+                    self.voice_access_hint_lbl.setText("Голосовой доступен только владельцу и администраторам.")
                 elif voice_req == "moderator":
-                    self.voice_access_hint_lbl.setText("Вход в голосовой разрешён только модераторам и выше")
+                    self.voice_access_hint_lbl.setText("Голосовой доступен только модераторам и администраторам.")
                 else:
                     self.voice_access_hint_lbl.setText("У вас нет доступа к голосовому каналу")
 
         if self.active_channel and self.channel_inner_stack.currentIndex() == 1 and (not can_join_voice) and (not self._voice_joined):
-            self.voice_status_lbl.setText("Нет прав для входа в голосовой канал")
+            self.voice_status_lbl.setText("Вы не в голосовом канале")
             self.voice_quality_lbl.setText("Качество: —")
 
         self.voice_access_hint_lbl.setVisible(not can_join_voice and not self._voice_joined)
@@ -2577,7 +2579,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.voice_status_lbl.setText(state)
             self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)
             self.voice_quality_lbl.setText(
-                f"Качество: {quality} · Пинг {latency} ms · Джиттер {jitter} ms · Буфер {buffer_frames}"
+                f"Связь нестабильна · задержка {latency} мс · возможны перерывы звука"
             )
             # keep local speaking indicator fresh between server syncs
             if self._voice_participants:

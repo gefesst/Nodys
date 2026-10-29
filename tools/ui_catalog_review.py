@@ -6,6 +6,11 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 MAPPING = {
+    "channels-text-empty":"42-channel-text-empty","channels-text-error":"42b-channel-text-error",
+    "channels-text-denied":"42c-channel-text-denied","channels-voice-denied":"42d-channel-voice-denied",
+    "channels-voice-quality":"42e-channel-voice-quality",
+    "call-connecting":"41-call-connecting","call-busy":"41b-call-busy",
+    "call-timeout":"41c-call-timeout","call-error":"41d-call-error",
     'auth-login':'01-auth-login', 'auth-login-error':'03c-auth-login-error',
     'auth-login-loading':'03d-auth-login-loading', 'auth-register':'02-auth-register',
     'auth-register-error':'03-auth-register-error', 'auth-register-loading':'02b-auth-register-loading',
