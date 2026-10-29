@@ -782,6 +782,32 @@ class DesignGeometryTests(unittest.TestCase):
             page.close()
             self.app.setStyleSheet(previous)
 
+    def test_room_speaking_ring_uses_same_snapshot_without_rebuilding_sidebar(self):
+        from ui.channels_page import ChannelsPage
+        from ui.avatar_widget import AvatarLabel
+        from ui.design.channel_rooms import OccupiedRoom
+        page=ChannelsPage();self.addCleanup(page.close)
+        page._rooms=[dict(id=1,kind='voice',name='Общий',participants=[])]
+        page._voice_participants=[dict(login='speaker',nickname='Участник',speaking=False)]
+        page._render_voice_participants()
+        avatar=page._room_avatars[(1,'speaker')]
+        group=page.rooms_panel.findChild(OccupiedRoom)
+        self.assertIsNotNone(group)
+        self.assertTrue(page.room_title.isHidden())
+        for speaking in (True,False,True):
+            page._voice_participants[0]['speaking']=speaking
+            page._render_voice_participants()
+            self.assertIs(page._room_avatars[(1,'speaker')],avatar)
+            self.assertEqual(bool(avatar.property('speaking')),speaking)
+            tile=page.voice_members_layout.itemAt(0).widget()
+            self.assertEqual(bool(tile.findChild(AvatarLabel).property('speaking')),speaking)
+            # An older room-list poll must not overwrite the shared active-room state.
+            page._rooms[0]['participants']=[dict(login='speaker',speaking=not speaking)]
+            page.render_rooms()
+            self.assertEqual(bool(avatar.property('speaking')),speaking)
+        page._voice_participants=[];page._render_voice_participants()
+        self.assertNotIn((1,'speaker'),page._room_avatars)
+
     def test_voice_tiles_reflow_and_clear_all_participants(self):
         from ui.channels_page import ChannelsPage
         page=ChannelsPage()

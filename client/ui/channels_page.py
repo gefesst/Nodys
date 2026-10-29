@@ -703,9 +703,9 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         top = QFrame()
         top.setObjectName("ChannelTopBar")
         top_l = QHBoxLayout(top)
-        top_l.setContentsMargins(8, 0, 0, 24)
-        top.setFixedHeight(66)
-        self.channel_header_avatar=AvatarLabel(40)
+        top_l.setContentsMargins(8, 0, 0, 12)
+        top.setFixedHeight(50)
+        self.channel_header_avatar=AvatarLabel(32)
         top_l.addWidget(self.channel_header_avatar)
         top_l.setSpacing(14)
 
@@ -729,7 +729,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
 
         self.channel_settings_btn = QPushButton("Настройки")
         self.channel_settings_btn.setObjectName("ChannelSecondaryButton")
-        self.channel_settings_btn.setFixedSize(140,40)
+        self.channel_settings_btn.setFixedSize(120,34)
         self.channel_settings_btn.clicked.connect(self.open_channel_settings)
         top_l.addWidget(self.channel_settings_btn)
         from ui.design.widgets import Button
@@ -775,7 +775,8 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         nav.hide()
         self.room_title=QLabel("# основной")
         self.room_title.setStyleSheet("font-size:15px;font-weight:600;padding:0 12px 12px 12px;")
-        ch_root.addWidget(self.room_title)
+        self.room_title.setParent(self.channel_page)
+        self.room_title.hide()
         middle.addWidget(self.build_room_navigation())
 
         self.channel_inner_stack = QStackedWidget()
@@ -838,7 +839,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self.messages_timer.timeout.connect(self.load_channel_messages)
 
         self.voice_stats_timer = QTimer(self)
-        self.voice_stats_timer.setInterval(800)
+        self.voice_stats_timer.setInterval(100)
         self.voice_stats_timer.timeout.connect(self.update_voice_status)
 
         self.voice_presence_timer = QTimer(self)
@@ -1786,6 +1787,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self.conversation.send()
 
     def _render_voice_participants(self):
+        if hasattr(self,"rooms_panel"):self.render_rooms()
         self._clear_voice_members_list()
 
         participants = sorted(self._voice_participants or [],key=lambda p:(p.get("login")==self.ctx.login,(p.get("nickname") or p.get("login","")).casefold()))
@@ -1857,6 +1859,10 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                         "speaking": False,
                     })
 
+                if self._voice_joined and self._voice_client is not None:
+                    local_speaking=bool(self._voice_client.get_activity().get("me_speaking",False)) and not self._voice_muted
+                    for person in participants:
+                        if person.get("login")==self.ctx.login:person["speaking"]=local_speaking
                 digest = self._voice_participants_digest(participants)
                 self._voice_participants = participants
                 if digest != self._voice_participants_signature:
@@ -1938,8 +1944,8 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                     speaking = False
                 self._push_voice_presence(speaking=speaking, joined=True)
 
-        # Refresh participant list only while voice tab is visible in foreground.
-        if (force_pull or self.channel_inner_stack.currentIndex() == 1) and foreground:
+        # The room sidebar is visible on both text and voice screens.
+        if foreground:
             self.load_voice_participants(force=force_pull)
 
     # ------------------------------------------------------------------
