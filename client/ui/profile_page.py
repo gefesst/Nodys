@@ -39,19 +39,19 @@ class ProfilePage(QWidget, ThreadSafeMixin):
 
     def _build_ui(self):
         from ui.design.tokens import LIST_WIDTH
-        from ui.design.widgets import Button
+        from ui.design.widgets import Button, font
         self.setObjectName('ProfilePage')
         outer=QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
-        side=QVBoxLayout(sidebar);side.setContentsMargins(20,30,20,20);side.setSpacing(10)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(22,32,20,20);side.setSpacing(10)
         eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
         title=QLabel('Ваш профиль');title.setObjectName('PageTitle');side.addWidget(title);side.addSpacing(14)
         self.profile_tabs={}
         for key,text in [('main','Профиль'),('password','Безопасность')]:
-            button=Button(text);button.setProperty('flat',True);button.setProperty('align_left',True)
+            button=Button(text);button.setFont(font(14));button.setProperty('flat',True);button.setProperty('align_left',True)
             button.setFixedHeight(46);button.clicked.connect(lambda checked=False,k=key:self.show_section(k))
             side.addWidget(button);self.profile_tabs[key]=button
-        logout=Button('Выйти из аккаунта');logout.setProperty('danger',True);logout.setProperty('flat',True);logout.setProperty('align_left',True)
+        logout=Button('Выйти из аккаунта');logout.setFont(font(14));logout.setProperty('danger',True);logout.setProperty('flat',True);logout.setProperty('align_left',True)
         logout.setFixedHeight(46);logout.clicked.connect(self.confirm_logout);side.addWidget(logout);side.addStretch()
         outer.addWidget(sidebar)
         scroll=QScrollArea();scroll.setWidgetResizable(True);outer.addWidget(scroll,1)
@@ -98,7 +98,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         card_l.addSpacing(26)
         self.save_button=Button('Сохранить изменения',primary=True);self.save_button.setFixedSize(240,40);self.save_button.clicked.connect(self.save_changes);card_l.addWidget(self.save_button,0,Qt.AlignLeft)
         card_l.addSpacing(29)
-        self.feedback=InlineNote();self.feedback.setMaximumWidth(800);card_l.addWidget(self.feedback)
+        self.feedback=InlineNote();self.feedback.setMaximumWidth(860);card_l.addWidget(self.feedback)
         self.layout.addWidget(self.card);self.layout.addStretch()
         self._saving=False
         self.show_section('main')
@@ -275,11 +275,21 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             return
 
         try:
-            self.avatar_path = encode_avatar(path)
+            pending_avatar = encode_avatar(path)
         except ValueError as error:
             self.show_toast(str(error))
             return
-        self._apply_avatar(self.avatar_path)
+        from ui.design.dialogs import confirm
+        def apply_avatar():
+            self.avatar_path=pending_avatar
+            self._apply_avatar(self.avatar_path)
+        dialog=confirm(self,'Новый аватар',
+            'Новый аватар будет виден друзьям\nи участникам ваших каналов.',
+            'Применить',apply_avatar)
+        preview=AvatarLabel(64,dialog)
+        preview.set_avatar(pending_avatar,self.login,self.nickname)
+        preview.move(503,58)
+        preview.show()
 
     def save_changes(self):
         if self._saving:return
@@ -343,11 +353,12 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             # Важно: чтобы ник сразу обновился в мини-карточке слева (MainWindow)
             self._sync_context_and_parent()
 
-            self.show_toast("Изменения сохранены", success=True)
+            self.show_toast("Профиль обновлён.", success=True)
         else:
             self.show_toast(resp.get("message", "Не удалось обновить профиль"), msec=3200)
 
     def update_status(self, online: bool):
+        self.avatar_label.set_online(online,ring_color="#19222D")
         if online:
             self.status_label.setText(f"@{self.login} · В сети")
             self.status_label.setObjectName("ProfileStatusOnline")

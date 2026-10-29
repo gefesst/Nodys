@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 from application.request_scope import RequestScope
 from .models import Message, MessageModel
-from .state_surfaces import EmptyState, LoadingState
+from .state_surfaces import EmptyState, LoadingState, InlineNote
 from .widgets import MessageList, MessageDelegate, Composer, Button
 
 
@@ -75,16 +75,20 @@ class Conversation(QWidget):
         self.view.verticalScrollBar().valueChanged.connect(self.scrolled)
         self.history_stack = QStackedWidget()
         self.history_stack.addWidget(self.view)
-        self.empty_state = EmptyState('Здесь начинается разговор',
-            'Напишите первое сообщение в канале.' if channel else 'Напишите первое сообщение.')
+        self.empty_state = EmptyState('Здесь начинается разговор' if channel else 'Начните разговор',
+            'Напишите первое сообщение в канале.' if channel else 'Напишите собеседнику — он увидит сообщение здесь.')
         self.loading_state = LoadingState()
-        self.error_state = EmptyState('История пока недоступна',
+        self.error_state = EmptyState('История пока недоступна' if channel else 'Не удалось загрузить сообщения',
             'Не удалось загрузить сообщения канала.' if channel else 'Не удалось загрузить сообщения.',
             'Повторить', lambda: self.load('latest'))
         for surface in (self.empty_state, self.loading_state, self.error_state):
             self.history_stack.addWidget(surface)
         root.addWidget(self.history_stack, 1)
+        self.send_error = InlineNote()
+        self.send_error.set_tone("error")
+        root.addWidget(self.send_error)
         compose_frame = QFrame()
+        self.compose_frame = compose_frame
         compose_frame.setObjectName("ComposerFrame")
         compose = QHBoxLayout(compose_frame)
         compose.setContentsMargins(4, 4, 12, 4)
@@ -125,6 +129,7 @@ class Conversation(QWidget):
     def select(self, identity, name="", can_send=True):
         self.remember_draft()
         self.scope.invalidate()
+        self.send_error.clear()
         self.loading = False
         self.history_error = False
         self.identity, self.name = identity, name
@@ -375,6 +380,7 @@ class Conversation(QWidget):
         revision = self.draft_versions.get(identity, 0)
         key = (identity, text)
         message_id = self.retries.setdefault(key, str(uuid.uuid4()))
+        self.send_error.clear()
         self.pending[identity] = message_id
         data = self.payload("send_channel_message" if self.channel else "send_message")
         data.update(text=text, client_message_id=message_id, request_id=message_id)
@@ -410,7 +416,7 @@ class Conversation(QWidget):
             self.notice.emit(message)
             self.update_controls()
             if not success and self.identity == identity:
-                self.send_status.setText(message + " · Повторите отправку")
+                self.send_error.setText(message + " · Повторите отправку")
 
         self.request(data, done)
 

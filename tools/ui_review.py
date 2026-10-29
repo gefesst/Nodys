@@ -46,6 +46,7 @@ def main():
             self.path = Path(args.output)
             self.path.mkdir(parents=True, exist_ok=True)
             self.log = []
+            self.visual_fixtures = []
             self.error = None
             self.deadline = time.monotonic() + 300
             self.until = 0
@@ -111,6 +112,7 @@ def main():
             w.register_page.password.setText("duplicate-test")
             w.register_page.nickname.setText("Duplicate")
             w.register_page.register_user()
+            self.shot("02b-auth-register-loading")
             self.wait(predicate=lambda: w.register_page.btn_register.isEnabled())
             yield
             self.shot("03-auth-register-error")
@@ -134,8 +136,13 @@ def main():
                     (hash_password("review-password"), lab.me),
                 )
             w.auth_page.login.setText(lab.me)
+            w.auth_page.password.setText("incorrect-test-password")
+            w.auth_page.login_user()
+            self.wait(predicate=lambda:w.auth_page.btn_login.isEnabled());yield
+            self.shot('03c-auth-login-error')
             w.auth_page.password.setText("review-password")
             w.auth_page.login_user()
+            self.shot('03d-auth-login-loading')
             self.wait(
                 predicate=lambda: (
                     w.main_page is not None and w.stack.currentWidget() == w.main_page
@@ -192,6 +199,7 @@ def main():
             m.show_chats()
             self.wait(predicate=lambda: len(m.chats_page.dialog_model.rows) > 0)
             yield
+            self.shot("08b-chat-none")
             m.chats_page.open_chat(m.chats_page.dialog_model.rows[0])
             self.wait(predicate=lambda: len(m.chats_page.conversation.rows) > 0)
             yield
@@ -207,6 +215,7 @@ def main():
             self.wait(predicate=lambda: bool(m.channels_page.channels))
             yield
             ch = m.channels_page
+            self.shot("11a-channel-list")
             ch._set_invites_dropdown_open(True)
             self.wait();yield
             self.shot('11b-channel-invites')
@@ -240,9 +249,17 @@ def main():
             self.shot("16-channel-join")
             ch.open_channel(ch.channels[0])
             ch.open_channel_settings()
+            self.shot("16b-channel-settings-loading")
             self.wait(0.6)
             yield
             self.shot("17-channel-settings")
+            save_config({'api_port':lab.free_port()})
+            ch.load_channel_details(silent=False)
+            self.wait(predicate=lambda:not ch._loading_channel_details);yield
+            self.shot('17a-channel-settings-error')
+            save_config(lab.config)
+            ch.load_channel_details(silent=False)
+            self.wait(predicate=lambda:not ch._loading_channel_details);yield
             old_code = ch.settings_code_lbl.text()
             ch.ask_regenerate_channel_code()
             self.wait(); yield
@@ -278,7 +295,7 @@ def main():
             m.profile_page.save_changes()
             self.shot('20b-profile-saving')
             self.wait(predicate=lambda:not m.profile_page._saving);yield
-            assert m.profile_page.feedback.text() == 'Изменения сохранены'
+            assert m.profile_page.feedback.text() == 'Профиль обновлён.'
             self.shot('20c-profile-saved')
             m.profile_page.show_section("password")
             self.wait()
@@ -337,10 +354,19 @@ def main():
                 self.wait(2)
                 yield
                 self.shot("25-active-call", m.call_window)
+                m.show_chats();m.refresh_voice_dock()
                 self.shot("25b-voice-dock")
-                m.call_window._mic_clicked()
+                m.open_voice_surface()
+                m.call_window._mic_clicked();m.call_window._sound_clicked()
                 self.shot("26-call-muted", m.call_window)
-                m.call_window._mic_clicked()
+                m.call_window._mic_clicked();m.call_window._sound_clicked()
+                provider=m.call_window.activity_provider
+                m.call_window.activity_provider=lambda:dict(quality='Нестабильное',quality_score=20,latency_ms=180,jitter_ms=80)
+                m.call_window._update_activity()
+                self.visual_fixtures.append('26a-call-quality')
+                self.shot('26a-call-quality',m.call_window)
+                m.call_window.activity_provider=provider
+                m.call_window._update_activity()
                 self.wait(2)
                 yield
                 # Reset only diagnostic counters after screenshots/warmup. No devices involved.
@@ -649,6 +675,7 @@ def main():
                 json.dumps(
                     dict(
                         screens=self.log,
+                        visual_fixtures=self.visual_fixtures,
                         error=self.error,
                         performance=getattr(self, "performance", None),
                         audio=getattr(self, "audio_results", None),

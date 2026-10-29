@@ -33,6 +33,7 @@ def build_auth_layout(page, title, subtitle):
     tagline.setObjectName("AuthSubtitle")
     tagline.setStyleSheet("font-size:18px;")
     tagline.setWordWrap(True)
+    tagline.setContentsMargins(4,0,0,0)
     hero.addWidget(tagline)
     hero.addStretch(4)
     outer.addLayout(hero, 1)
@@ -64,6 +65,9 @@ def build_auth_layout(page, title, subtitle):
     form.addSpacing(28)
     scroll.setWidget(card)
     outer.addWidget(scroll)
+    illustration=QSvgWidget(str(ASSETS / "illustration-chat.svg"),page)
+    illustration.setFixedSize(384,224)
+    illustration.setAttribute(Qt.WA_TransparentForMouseEvents)
 
     class FitAuth(QObject):
         def eventFilter(self, obj, event):
@@ -74,6 +78,8 @@ def build_auth_layout(page, title, subtitle):
                 outer.setSpacing(round(40 + 40 * fraction))
                 top = max(20, min(92, (page.height() - 680) // 2 + 3))
                 outer.setContentsMargins(left, top, right, max(20, top - 6))
+                illustration.move(left+50,min(443,page.height()-264))
+                illustration.setVisible(page.height()>=700)
             return False
 
     page._fit_auth = FitAuth(page)
@@ -95,6 +101,9 @@ def finish_auth_layout(form, status, primary, secondary, registration=False):
     form.addSpacing(27)
     secondary.setFixedHeight(40)
     secondary.setProperty("flat", True)
+    secondary.setProperty("text_color", "#91ADFF")
+    from .widgets import font
+    secondary.setFont(font(14))
     form.addWidget(secondary)
     form.addStretch()
 

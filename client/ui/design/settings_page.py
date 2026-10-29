@@ -123,6 +123,11 @@ class SettingsPage(QWidget):
         self.microphone_button.setMaximumWidth(860)
         self.microphone_button.clicked.connect(self.check_microphone)
         fields.addWidget(self.microphone_button)
+        self.microphone_host=QWidget()
+        self.microphone_layout=QVBoxLayout(self.microphone_host)
+        self.microphone_layout.setContentsMargins(0,12,0,0)
+        fields.addWidget(self.microphone_host)
+        self.microphone_host.hide()
         fields.addSpacing(53)
         save = Button("Сохранить", primary=True)
         save.setFixedSize(170, 40)
@@ -201,6 +206,14 @@ class SettingsPage(QWidget):
             "Настройки сохранены. Устройства применятся при следующем подключении."
         )
 
+    def stop_microphone_check(self):
+        panel=getattr(self,'microphone_check',None)
+        if panel is None:
+            return True
+        panel.close()
+        self.microphone_host.hide()
+        return not (panel.worker and panel.worker.is_alive())
+
     def check_microphone(self):
         if self.main.voice_client or getattr(
             self.main.channels_page, "_voice_client", None
@@ -211,7 +224,24 @@ class SettingsPage(QWidget):
             return
         from .microphone_check import MicrophoneCheck
 
-        self.microphone_check = MicrophoneCheck(self)
+        previous=getattr(self,'microphone_check',None)
+        if previous is not None:
+            previous.close()
+            if previous.worker and previous.worker.is_alive():
+                self.saved_status.setText('Проверка останавливается. Повторите через секунду.')
+                return
+            previous.deleteLater()
+        channels=self.main.channels_page
+        if channels.active_channel:
+            self.main.show_channels()
+            channels.close_channel_settings()
+            channels.switch_to_voice_tab()
+            self.microphone_check=MicrophoneCheck(channels)
+            channels.voice_tab_layout.insertWidget(channels.voice_tab_layout.count()-1,self.microphone_check)
+        else:
+            self.microphone_check=MicrophoneCheck(self.microphone_host)
+            self.microphone_layout.addWidget(self.microphone_check)
+            self.microphone_host.show()
         self.microphone_check.show()
 
     def set_reduced_motion(self, value):

@@ -7,6 +7,7 @@ from .widgets import Button
 def build(page):
     tab=QWidget()
     layout=QVBoxLayout(tab)
+    page.voice_tab_layout=layout
     layout.setContentsMargins(16,36,24,36)
     layout.setSpacing(0)
     title=QLabel('Участники голосового')

@@ -169,6 +169,15 @@ def build(page):
     tabs.addStretch()
     root.addLayout(tabs)
     root.addSpacing(34)
+    from .state_surfaces import LoadingState, EmptyState, InlineNote
+    page.settings_loading_surface=LoadingState()
+    page.settings_error_surface=EmptyState('Настройки недоступны',
+        'Не удалось загрузить данные канала.','Повторить',
+        lambda:page.load_channel_details(silent=False))
+    page.settings_error_surface.layout().setContentsMargins(0,58,20,0)
+    for surface in (page.settings_loading_surface,page.settings_error_surface):
+        root.addWidget(surface);surface.hide()
+    page._settings_load_state='ready'
 
     def card(attr):
         widget = QFrame()
@@ -306,6 +315,9 @@ def build(page):
     page.members_layout.setSpacing(18)
     take(page.settings_confirm, root)
     page.settings_confirm.hide()
+    page.settings_feedback=InlineNote()
+    root.addSpacing(29)
+    root.addWidget(page.settings_feedback)
     root.addStretch()
     page.settings_scroll.setWidget(content)
     page.show_settings_section("general")

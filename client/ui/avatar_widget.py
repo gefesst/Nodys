@@ -50,10 +50,10 @@ class AvatarLabel(QLabel):
             self._dot.hide()
             return
 
-        dot = max(9, int(self.size_px * 0.24))
-        border = max(2, int(self.size_px * 0.05))
-        x = self.size_px - dot - max(1, int(self.size_px * 0.03))
-        y = self.size_px - dot - max(1, int(self.size_px * 0.03))
+        dot = 12 if self.size_px >= 64 else 8
+        border = 2
+        x = self.size_px - dot + 1
+        y = self.size_px - dot + 1
         self._dot.setFixedSize(dot, dot)
         self._dot.move(x, y)
 

@@ -42,6 +42,7 @@ def confirm(parent, title, description, accept_text, callback, *, danger=False):
     accept = Button(accept_text, primary=not danger)
     accept.setFixedSize(156, 40)
     if danger:
+        accept.setProperty("danger",True)
         accept.setStyleSheet(
             "color:#FF9C9C;background:#49313B;border:1px solid #6B424C;"
         )

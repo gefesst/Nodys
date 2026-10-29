@@ -2,7 +2,7 @@
 
 import threading
 from PySide6.QtCore import QObject, Signal, QTimer
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QProgressBar
+from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QProgressBar
 from .widgets import Button
 
 
@@ -12,11 +12,13 @@ class MeterSignals(QObject):
     finished = Signal()
 
 
-class MicrophoneCheck(QDialog):
+class MicrophoneCheck(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Проверка микрофона")
-        self.resize(460, 260)
+        self.setObjectName("MicrophoneCheck")
+        self.setMinimumHeight(105)
+        self.setStyleSheet("QFrame#MicrophoneCheck {background:#202D3D;border:1px solid #354152;border-radius:12px;}")
         self.stop_event = threading.Event()
         self.level = 0
         self.worker = None
@@ -26,21 +28,28 @@ class MicrophoneCheck(QDialog):
         self.signals.ready.connect(
             lambda: self.status.setText("Говорите: отображается только уровень сигнала")
         )
-        root = QVBoxLayout(self)
-        self.status = QLabel(
-            "Проверка начинается только по кнопке. Звук не сохраняется и не передаётся."
-        )
+        root = QHBoxLayout(self)
+        root.setContentsMargins(22,16,18,16)
+        root.setSpacing(16)
+        column=QVBoxLayout();column.setSpacing(8)
+        self.title=QLabel('Проверка микрофона')
+        self.title.setStyleSheet('font-size:16px;font-weight:600;')
+        column.addWidget(self.title)
+        self.status=QLabel('Проверка начинается по кнопке. Звук не сохраняется и не передаётся.')
         self.status.setWordWrap(True)
-        root.addWidget(self.status)
-        self.meter = QProgressBar()
-        self.meter.setRange(0, 100)
+        self.status.setStyleSheet('font-size:13px;color:#ACB9CC;')
+        column.addWidget(self.status)
+        root.addLayout(column,1)
+        self.meter=QProgressBar();self.meter.setRange(0,100);self.meter.setTextVisible(False)
+        self.meter.setFixedSize(140,12)
+        self.meter.setStyleSheet('QProgressBar {background:#354152;border:0;border-radius:6px;} QProgressBar::chunk {background:#67D5AD;border-radius:6px;}')
         root.addWidget(self.meter)
-        self.start_button = Button("Начать проверку", "mic", True)
+        self.start_button=Button('Проверить',primary=True)
+        self.start_button.setFixedSize(120,40)
         self.start_button.clicked.connect(self.start)
         root.addWidget(self.start_button)
-        stop = Button("Остановить и закрыть")
-        stop.clicked.connect(self.close)
-        root.addWidget(stop)
+        stop=Button('', 'close');stop.setFixedSize(28,28);stop.setAccessibleName('Остановить проверку микрофона')
+        stop.clicked.connect(self.close);root.addWidget(stop)
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(lambda: self.meter.setValue(self.level))

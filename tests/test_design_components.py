@@ -41,6 +41,35 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_inline_microphone_check_releases_stream_on_close(self):
+        import threading
+        import numpy as np
+        from unittest.mock import patch
+        from PySide6.QtWidgets import QWidget
+        from ui.design.microphone_check import MicrophoneCheck
+        entered, released = threading.Event(), threading.Event()
+        class Stream:
+            def __init__(self, **kw): self.callback=kw['callback']
+            def __enter__(self):
+                self.callback(np.array([[0.2]],dtype=float),1,None,None)
+                entered.set()
+                return self
+            def __exit__(self,*args): released.set()
+        host=QWidget()
+        panel=MicrophoneCheck(host)
+        self.assertFalse(panel.isWindow())
+        with patch.dict(sys.modules,{'sounddevice':SimpleNamespace(InputStream=Stream)}), patch('config.load_config',return_value={}):
+            try:
+                panel.start()
+                self.assertTrue(entered.wait(2))
+                self.assertEqual(panel.level,50)
+                panel.close()
+                self.assertTrue(released.wait(2))
+            finally:
+                panel.stop_event.set()
+                if panel.worker: panel.worker.join(2)
+        host.close()
+
     def test_resize_targets_follow_all_edges_without_covering_content(self):
         from PySide6.QtCore import QPoint
         from PySide6.QtWidgets import QWidget

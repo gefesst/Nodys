@@ -221,6 +221,8 @@ class Button(QPushButton):
         color = "#142039" if self.primary else SUB if self.property("flat") else FG
         if self.property("danger"):
             color = RED
+        if self.property("text_color"):
+            color = self.property("text_color")
         if not self.isEnabled():
             color = "#8190A5"
         p.setFont(self.font())
@@ -236,6 +238,27 @@ class Button(QPushButton):
             p.setBrush(Qt.NoBrush)
             p.setPen(QPen(QColor(ACC), 2))
             p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 11, 11)
+
+
+class RoundCallButton(Button):
+    def __init__(self, label, symbol, danger=False):
+        super().__init__(label, symbol)
+        self.setFixedSize(52,52)
+        self.setProperty('danger',danger)
+        self.setAccessibleName(label)
+
+    def paintEvent(self,event):
+        painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
+        danger=bool(self.property('danger'))
+        off=self.property('off')=='true'
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else '#3A4D67' if self._hover else '#303E53'))
+        painter.drawEllipse(QRectF(0,0,52,52))
+        icon(painter,self.icon_name,QRectF(15,15,22,22),RED if danger or off else FG)
+        if off:
+            painter.setPen(QPen(QColor(RED),1.65));painter.drawLine(15,16,37,38)
+        if self.hasFocus():
+            painter.setBrush(Qt.NoBrush);painter.setPen(QPen(QColor(ACC),2));painter.drawEllipse(QRectF(1,1,50,50))
 
 
 class DialogDelegate(QStyledItemDelegate):

@@ -25,6 +25,7 @@ class OverlayDialog(QDialog):
         self.setWindowFlags(Qt.Widget)
         self._host_ref = weakref.ref(host)
         self.anchor = anchor
+        self.dim = dim
         self.preferred_size = (width, height)
         self.setObjectName("OverlayDialog")
         self.shade = DismissShade(host, self)
@@ -68,7 +69,7 @@ class OverlayDialog(QDialog):
             self.shade.setGeometry(
                 88, 42, self.host.width() - 88, self.host.height() - 42
             )
-            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;")
+            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;" if self.dim else "background:transparent;border:0;")
         if self.anchor == "modal":
             x = min(
                 self.host.width() - width - 20, (self.host.width() - width) // 2 + 125
@@ -77,7 +78,7 @@ class OverlayDialog(QDialog):
             self.shade.setGeometry(
                 88, 42, self.host.width() - 88, self.host.height() - 42
             )
-            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;")
+            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;" if self.dim else "background:transparent;border:0;")
         self.setGeometry(x, y, width, height)
 
     def show(self):

@@ -1,6 +1,6 @@
 """Private conversations: real data, scoped requests and shared Nodus components."""
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListView, QFrame
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListView, QFrame, QStackedWidget,QSizePolicy
 from application.request_scope import RequestScope
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -60,7 +60,14 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.list_status.setObjectName('Muted')
         left.addWidget(self.list_status)
         root.addWidget(sidebar)
-        body = QVBoxLayout()
+        self.workspace=QStackedWidget()
+        root.addWidget(self.workspace,1)
+        from ui.design.state_surfaces import EmptyState
+        self.no_dialog=EmptyState("Выберите диалог","Все разговоры — здесь. Выберите человека слева.")
+        self.no_dialog.layout().setContentsMargins(40,262,48,20)
+        self.workspace.addWidget(self.no_dialog)
+        self.chat_body=QWidget()
+        body = QVBoxLayout(self.chat_body)
         body.setContentsMargins(24, 26, 24, 24)
         body.setSpacing(16)
         header = QHBoxLayout()
@@ -73,6 +80,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.chat_header = QLabel('Выберите диалог')
         self.chat_header.setObjectName('ChatTitle')
         self.chat_header.setMinimumWidth(0)
+        self.chat_header.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         self.presence = QLabel('')
         self.presence.setObjectName('Muted')
         labels.addWidget(self.chat_header)
@@ -100,7 +108,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         body.addWidget(self.conversation, 1)
         self.input_edit = self.conversation.editor
         self.send_btn = self.conversation.send_button
-        root.addLayout(body, 1)
+        self.workspace.addWidget(self.chat_body)
+        self.workspace.setCurrentWidget(self.no_dialog)
         self.toast = Toast(self)
         self.msg_timer = QTimer(self)
         self.msg_timer.setInterval(2000)
@@ -140,6 +149,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.dialog_model.replace([])
         self.chat_header.setText('Выберите диалог')
         self.presence.clear()
+        self.workspace.setCurrentWidget(self.no_dialog)
 
     def load_friends(self, force=False):
         if self._loading_friends or not self.ctx.login or not self._alive:
@@ -176,6 +186,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                 self.active_friend = None
                 self.conversation.select(None)
                 self.chat_header.setText('Выберите диалог')
+                self.workspace.setCurrentWidget(self.no_dialog)
 
     def filter_friends(self, text):
         self.dialog_model.filter(text)
@@ -199,6 +210,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if self.active_friend and self.active_friend['login'] == friend['login']:
             return
         self.active_friend = friend
+        self.workspace.setCurrentWidget(self.chat_body)
         self.update_header()
         self.conversation.select(friend['login'], friend.get('nickname', friend['login']))
         self.filter_friends(self.search.text())

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from ui.avatar_widget import AvatarLabel
-from ui.design.widgets import Button
+from ui.design.widgets import Button, RoundCallButton
 from ui.design.motion import reduced
 
 
@@ -44,6 +44,7 @@ class ActiveCallWindow(CallPanel):
         parent=None,
     ):
         super().__init__(parent)
+        self.dim = False
         self.my_login = my_login
         self.peer_login = peer_login
         self.peer_nickname = peer_nickname or peer_login
@@ -99,22 +100,23 @@ class ActiveCallWindow(CallPanel):
         self.speaking_lbl.hide()
         self.quality_bars_lbl = QLabel(self)
         self.quality_bars_lbl.hide()
-        root.addSpacing(58)
-        btns = QHBoxLayout()
-        btns.setSpacing(15)
-        self.btn_mic = Button("Микрофон")
-        self.btn_sound = Button("Звук")
-        self.btn_end = Button("Завершить")
-        self.btn_end.setProperty("danger", True)
-        for button, width, callback in [
-            (self.btn_mic, 145, self._mic_clicked),
-            (self.btn_sound, 145, self._sound_clicked),
-            (self.btn_end, 155, self._end_clicked),
-        ]:
-            button.setFixedHeight(40)
-            button.setMaximumWidth(width)
+        root.addSpacing(48)
+        btns=QHBoxLayout();btns.setSpacing(0);btns.setContentsMargins(5,0,5,0)
+        self.btn_mic=RoundCallButton('Микрофон','mic')
+        self.btn_sound=RoundCallButton('Звук','headphones')
+        self.btn_end=RoundCallButton('Завершить','end',danger=True)
+        for button,label,callback in [
+            (self.btn_mic,'Микрофон',self._mic_clicked),
+            (self.btn_sound,'Звук',self._sound_clicked),
+            (self.btn_end,'Завершить',self._end_clicked)]:
+            column=QVBoxLayout();column.setSpacing(0)
             button.clicked.connect(callback)
-            btns.addWidget(button, 1)
+            column.addWidget(button,0,Qt.AlignHCenter)
+            column.addSpacing(9)
+            caption=QLabel(label);caption.setAlignment(Qt.AlignCenter);caption.setFixedHeight(15)
+            caption.setStyleSheet('font-size:12px;color:'+('#FFA7AE' if button is self.btn_end else '#ACB9CC')+';')
+            column.addWidget(caption)
+            btns.addLayout(column,1)
         root.addLayout(btns)
         root.addStretch()
 
@@ -153,6 +155,8 @@ class ActiveCallWindow(CallPanel):
         except Exception:
             return
 
+        if not a:
+            return
         me = bool(a.get("me_speaking"))
         peer = bool(a.get("peer_speaking"))
 
@@ -187,6 +191,9 @@ class ActiveCallWindow(CallPanel):
         score = float(a.get("quality_score", 0.0) or 0.0)
         if quality is not None:
             self.quality_lbl.setText(f"Качество: {quality} · {lat} мс")
+            if score < 50:
+                self.state_lbl.setText("Связь нестабильна")
+                self.state_lbl.setStyleSheet("color:#ACB9CC;font-size:15px;")
             bars, color = self._bars_for_quality(score)
             self.quality_bars_lbl.setText(bars)
             self.quality_bars_lbl.setStyleSheet(

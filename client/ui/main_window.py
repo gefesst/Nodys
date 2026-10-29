@@ -127,11 +127,10 @@ class MainWindow(QWidget):
         root.addWidget(sidebar)
         workspace=QWidget();workspace_layout=QVBoxLayout(workspace);workspace_layout.setContentsMargins(0,0,0,0);workspace_layout.setSpacing(0)
         workspace_layout.addWidget(self.stack,1)
-        self.voice_dock=QFrame();self.voice_dock.setObjectName('CallCard');dock=QHBoxLayout(self.voice_dock)
-        self.voice_dock_label=QLabel();dock.addWidget(self.voice_dock_label,1)
-        open_voice=Button('Открыть','wave');open_voice.clicked.connect(self.open_voice_surface);dock.addWidget(open_voice)
-        end_voice=Button('Отключиться','end');end_voice.clicked.connect(self.end_voice_surface);dock.addWidget(end_voice)
-        workspace_layout.addWidget(self.voice_dock);self.voice_dock.hide();root.addWidget(workspace,1)
+        root.addWidget(workspace,1)
+        from ui.design.voice_dock import VoiceDock
+        self.voice_dock=VoiceDock(self)
+
 
         # Политика polling (инициализируем до первого переключения вкладок).
         self._poll_state = {
@@ -225,6 +224,7 @@ class MainWindow(QWidget):
     def _on_stack_current_changed(self, _idx: int):
         try:
             self._reposition_inline_call_ui()
+            if hasattr(self,"voice_dock"): self.voice_dock.position()
         except Exception:
             pass
         self._apply_polling_policy()
@@ -533,6 +533,9 @@ class MainWindow(QWidget):
     # ==================================================
 
     def set_active_nav(self, active_btn):
+        panel=getattr(self,"call_window",None)
+        if panel is not None and panel.isVisible():
+            panel.hide()
         self.settings_button.primary = active_btn is None
         self.settings_button.update()
         for b in (self.btn_friends, self.btn_chats, self.btn_channels, self.btn_profile):
@@ -660,17 +663,26 @@ class MainWindow(QWidget):
     def refresh_voice_dock(self):
         private = bool(self.voice_client)
         channel = bool(getattr(self.channels_page,'_voice_joined',False))
-        self.voice_dock.setVisible(private or channel)
+        panel=getattr(self,'call_window',None)
+        channel_surface=(self.stack.currentWidget() is self.channels_page and
+            self.channels_page.main_stack.currentWidget() is self.channels_page.channel_page and
+            self.channels_page.channel_inner_stack.currentIndex()==1)
+        self.voice_dock.setVisible((private and not (panel and panel.isVisible())) or (channel and not channel_surface))
+        self.voice_dock.position()
         if private:
             activity=self.voice_client.get_activity()
-            peer=self.current_call_user or 'Собеседник'
-            self.voice_dock_label.setText(f'Звонок · {peer} · {activity.get("quality","Подключение")}')
+            peer=panel.peer_nickname if panel else self.current_call_user or 'Собеседник'
+            self.voice_dock.title.setText(peer)
+            self.voice_dock.status.setText('В разговоре · '+(panel.timer_lbl.text() if panel else 'Подключение…'))
+            self.voice_dock.participants.setText(activity.get('quality','Подключение…'))
         elif channel:
-            self.voice_dock_label.setText('Голосовой канал · '+str((self.channels_page.active_channel or {}).get('name','')))
+            self.voice_dock.title.setText(str((self.channels_page.active_channel or {}).get('name','Голосовой канал')))
+            self.voice_dock.status.setText('В голосовом канале')
+            self.voice_dock.participants.setText(f'{len(self.channels_page._voice_participants)} участников')
 
     def open_voice_surface(self):
         if self.call_window:
-            self.call_window.show();self.call_window.raise_()
+            self.call_window.show();self.call_window.raise_();self.voice_dock.hide()
         else:
             self.show_channels();self.channels_page.switch_to_voice_tab()
 
@@ -708,6 +720,7 @@ class MainWindow(QWidget):
         if outgoing is not None:
             outgoing.finished_by_server = True
             outgoing.close()
+            outgoing.deleteLater()
             self.outgoing_window = None
         if state is None:
             self._hide_incoming_inline()
@@ -734,6 +747,14 @@ class MainWindow(QWidget):
             self.outgoing_window.show()
 
     def _start_voice_for_peer(self, peer_login: str):
+        if self.current_call_user != peer_login:
+            return
+        settings=getattr(self,"settings_page",None)
+        if settings is not None and not settings.stop_microphone_check():
+            call_id=(self.calls.state or {}).get("call_id")
+            token=self.ctx.session_token
+            QTimer.singleShot(50,lambda:self._start_voice_for_peer(peer_login) if self.ctx.session_token==token and (self.calls.state or {}).get("call_id")==call_id else None)
+            return
         try:
             if hasattr(self.channels_page, "stop_voice_session"):
                 self.channels_page.stop_voice_session(show_toast=False)
@@ -779,9 +800,7 @@ class MainWindow(QWidget):
             if self.voice_client:
                 self.voice_client.set_sound_enabled(enabled)
 
-        if self.call_window and self.call_window.isVisible():
-            self.call_window._ending = True
-            self.call_window.close()
+        self._close_call_window()
 
         self.call_window = ActiveCallWindow(
             my_login=self.ctx.login,
@@ -819,6 +838,7 @@ class MainWindow(QWidget):
             if self.call_window:
                 self.call_window._ending = True
                 self.call_window.close()
+                self.call_window.deleteLater()
         except Exception:
             pass
         self.call_window = None
@@ -842,6 +862,7 @@ class MainWindow(QWidget):
     def resizeEvent(self, event):
         try:
             self._reposition_inline_call_ui()
+            if hasattr(self,"voice_dock"): self.voice_dock.position()
         except Exception:
             pass
         super().resizeEvent(event)
@@ -1012,6 +1033,7 @@ class MainWindow(QWidget):
         if outgoing is not None:
             outgoing.finished_by_server = True
             outgoing.close()
+            outgoing.deleteLater()
             self.outgoing_window = None
         quick = getattr(self, 'quick_switch', None)
         if quick is not None:

@@ -244,7 +244,9 @@ class ChannelMemberItem(QFrame):
                 lay.addWidget(btn)
 
         if can_manage and role != "owner" and login and login != current_login:
-            remove_btn = QPushButton("···")
+            from ui.design.widgets import Button
+            remove_btn = Button("", "more")
+            remove_btn.setProperty("flat",True)
             remove_btn.setFixedSize(40,40)
             remove_btn.setAccessibleName("Действия с участником")
             remove_btn.setObjectName("ChannelTinyDangerButton")
@@ -674,11 +676,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         top = QFrame()
         top.setObjectName("ChannelTopBar")
         top_l = QHBoxLayout(top)
-        top_l.setContentsMargins(8, 0, 16, 24)
+        top_l.setContentsMargins(8, 0, 0, 24)
         top.setFixedHeight(66)
         self.channel_header_avatar=AvatarLabel(40)
         top_l.addWidget(self.channel_header_avatar)
-        top_l.setSpacing(10)
+        top_l.setSpacing(14)
 
         title_col = QVBoxLayout()
         title_col.setContentsMargins(0, 0, 0, 0)
@@ -686,6 +688,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.channel_name_lbl = QLabel("Канал")
         self.channel_name_lbl.setObjectName("ChannelOpenTitle")
+        self.channel_name_lbl.setMinimumWidth(0)
+        self.channel_name_lbl.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
         title_col.addWidget(self.channel_name_lbl)
 
         self.channel_code_lbl = QLabel("")
@@ -700,6 +704,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channel_settings_btn.setFixedSize(140,40)
         self.channel_settings_btn.clicked.connect(self.open_channel_settings)
         top_l.addWidget(self.channel_settings_btn)
+        from ui.design.widgets import Button
+        self.channel_info_btn=Button('', 'info')
+        self.channel_info_btn.setProperty('flat',True)
+        self.channel_info_btn.setFixedSize(32,40)
+        self.channel_info_btn.setAccessibleName('Информация о канале')
+        self.channel_info_btn.clicked.connect(lambda:(self.open_channel_settings(),self.show_settings_section('general')))
+        top_l.addWidget(self.channel_info_btn)
         install_opacity_feedback(self.channel_settings_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         ch_root.addWidget(top)
@@ -968,6 +979,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         super().resizeEvent(event)
         self._reposition_overlays()
         self._apply_settings_responsive_layout()
+        if hasattr(self,'voice_tab_layout'):
+            self.voice_tab_layout.setContentsMargins(16,36,24,66 if self.height()>=800 else 16)
         if hasattr(self,'voice_members_scroll'):
             columns=max(1,min(3,(self.voice_members_scroll.viewport().width()+20)//310))
             if columns!=getattr(self,'_voice_columns',None):
@@ -1215,7 +1228,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         code = (self.active_channel or {}).get("code", "")
         self.channel_name_lbl.setText(name)
         self.channel_header_avatar.set_avatar((self.active_channel or {}).get('avatar',''), nickname=name)
-        count=(self.active_channel or {}).get('members_count')
+        count=(self.active_channel or {}).get('participants_count',(self.active_channel or {}).get('members_count'))
         prefix=f'{count} участников · ' if count is not None else ''
         self.channel_code_lbl.setText(prefix + (f'Код {code}' if code else ''))
 
@@ -1635,7 +1648,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def show_settings_section(self, key):
         self._settings_section = key
         for name, card in [('general',self.settings_general_card),('access',self.settings_access_card),('members',self.settings_members_card)]:
-            card.setVisible(name == key)
+            card.setVisible(name == key and getattr(self,"_settings_load_state","ready")=="ready")
             with QSignalBlocker(self.settings_sections[name]):
                 self.settings_sections[name].setChecked(name == key)
         self.settings_scroll.verticalScrollBar().setValue(0)
@@ -1837,6 +1850,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     # ------------------------------------------------------------------
     # Settings page (stage 2)
     # ------------------------------------------------------------------
+    def _show_settings_load_state(self, state):
+        self._settings_load_state=state
+        self.settings_loading_surface.setVisible(state=='loading')
+        self.settings_error_surface.setVisible(state=='error')
+        self.show_settings_section(getattr(self,'_settings_section','general'))
+
     def open_channel_settings(self):
         if not self.active_channel:
             self.show_toast("Сначала выберите канал")
@@ -1849,6 +1868,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.settings_invite_status.clear()
         self.settings_invite_status.setVisible(False)
         self.main_stack.setCurrentWidget(self.settings_page)
+        self.settings_feedback.clear()
+        self._show_settings_load_state("loading")
         self._apply_settings_responsive_layout(force=True)
         self.load_channel_details(silent=False)
 
@@ -1872,6 +1893,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         revision = self._settings_revision
         self._loading_channel_details = True
+        if not silent:
+            self._show_settings_load_state("loading")
         payload = {
             "action": "get_channel_details",
             "channel_id": channel_id,
@@ -1882,10 +1905,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 if revision != self._settings_revision:
                     return
                 if resp.get("status") != "ok":
-                    if not silent:
-                        self.show_toast(resp.get("message", "Не удалось загрузить настройки канала"))
+                    if self.main_stack.currentWidget()==self.settings_page and (not silent or self._settings_load_state=='loading'):
+                        self._show_settings_load_state('error')
                     return
 
+                self._show_settings_load_state('ready')
                 details = {
                     "channel": resp.get("channel") or {},
                     "my_role": resp.get("my_role") or "member",
@@ -2057,6 +2081,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         revision = self._settings_revision
         self._saving_channel_settings = True
+        self.settings_feedback.clear()
+        self.settings_save_btn.setEnabled(False)
+        self.settings_access_save.setEnabled(False)
         payload = {
             "action": "update_channel_settings",
             "channel_id": self._active_channel_id(),
@@ -2069,7 +2096,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         def cb(resp):
             try:
                 if resp.get("status") != "ok":
-                    self.show_toast(resp.get("message", "Не удалось сохранить настройки"))
+                    self.settings_feedback.set_tone("error")
+                    self.settings_feedback.setText(resp.get("message", "Не удалось сохранить настройки"))
                     return
 
                 ch = resp.get("channel") or {}
@@ -2077,12 +2105,16 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self.active_channel = dict({**(self.active_channel or {}), **ch})
                     self._apply_channel_header()
 
-                self.show_toast("Настройки канала сохранены")
+                self.settings_feedback.set_tone("success")
+                self.settings_feedback.setText("Настройки канала сохранены")
                 self.load_channels(force_refresh=True, preferred_channel_id=self._active_channel_id())
                 if revision == self._settings_revision:
                     self.load_channel_details(silent=True)
             finally:
                 self._saving_channel_settings = False
+                allowed=bool(self._settings_permissions.get("manage_channel",False))
+                self.settings_save_btn.setEnabled(allowed)
+                self.settings_access_save.setEnabled(allowed)
 
         self.start_request(payload, cb)
 
@@ -2372,6 +2404,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         if not bool((self._settings_permissions or {}).get("can_join_voice", True)):
             self.show_toast("У вас нет прав для входа в голосовой канал")
+            return
+
+        settings=getattr(self._main_window,'settings_page',None)
+        if settings is not None and not settings.stop_microphone_check():
+            channel_id=self._active_channel_id()
+            QTimer.singleShot(50,lambda:self.toggle_voice_join() if self._alive and self._active_channel_id()==channel_id and not self._voice_joined else None)
             return
 
         # Avoid audio device conflicts with private peer-to-peer calls
