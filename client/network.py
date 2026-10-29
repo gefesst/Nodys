@@ -353,7 +353,7 @@ class NetworkThread(QObject):
                     return
 
                 except socket.timeout:
-                    last_err = {"status": "error", "message": "Таймаут сети"}
+                    last_err = {"status": "error", "code": "network_error", "message": "Таймаут сети"}
                     if attempt < max_attempts and _is_retryable_error(last_err):
                         delay = min(policy.base_delay * (2 ** (attempt - 1)), policy.max_delay)
                         if policy.jitter > 0:
@@ -363,7 +363,7 @@ class NetworkThread(QObject):
                     self._emit_if_alive(last_err)
                     return
                 except ConnectionRefusedError:
-                    last_err = {"status": "error", "message": "Сервер не запущен"}
+                    last_err = {"status": "error", "code": "network_error", "message": "Сервер не запущен"}
                     if attempt < max_attempts and _is_retryable_error(last_err):
                         delay = min(policy.base_delay * (2 ** (attempt - 1)), policy.max_delay)
                         if policy.jitter > 0:
@@ -373,7 +373,7 @@ class NetworkThread(QObject):
                     self._emit_if_alive(last_err)
                     return
                 except OSError as e:
-                    last_err = {"status": "error", "message": f"Ошибка сокета: {e}"}
+                    last_err = {"status": "error", "code": "network_error", "message": f"Ошибка сокета: {e}"}
                     if attempt < max_attempts and _is_retryable_error(last_err):
                         delay = min(policy.base_delay * (2 ** (attempt - 1)), policy.max_delay)
                         if policy.jitter > 0:
@@ -387,10 +387,10 @@ class NetworkThread(QObject):
                 self._emit_if_alive(last_err)
 
         except socket.timeout:
-            self._emit_if_alive({"status": "error", "message": "Таймаут сети"})
+            self._emit_if_alive({"status": "error", "code": "network_error", "message": "Таймаут сети"})
         except ConnectionRefusedError:
-            self._emit_if_alive({"status": "error", "message": "Сервер не запущен"})
+            self._emit_if_alive({"status": "error", "code": "network_error", "message": "Сервер не запущен"})
         except OSError as e:
-            self._emit_if_alive({"status": "error", "message": f"Ошибка сокета: {e}"})
+            self._emit_if_alive({"status": "error", "code": "network_error", "message": f"Ошибка сокета: {e}"})
         except Exception as e:
-            self._emit_if_alive({"status": "error", "message": f"Ошибка сети: {e}"})
+            self._emit_if_alive({"status": "error", "code": "network_error", "message": f"Ошибка сети: {e}"})

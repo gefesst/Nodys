@@ -6,6 +6,11 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 MAPPING = {
+    "friends-menu":"43g-friends-menu","chat-menu":"43h-chat-menu",
+    "idea-new-messages":"43d-chat-new-messages","idea-offline-draft":"43e-chat-offline-draft",
+    "idea-reconnected":"43f-chat-reconnected",
+    "settings-saved":"42f-channel-settings-saved","settings-leave":"42g-channel-leave-confirm",
+    "chat-unread":"43-chat-unread","chat-search":"43b-chat-search","stress-long-text":"43c-chat-long-text",
     "channels-text-empty":"42-channel-text-empty","channels-text-error":"42b-channel-text-error",
     "channels-text-denied":"42c-channel-text-denied","channels-voice-denied":"42d-channel-voice-denied",
     "channels-voice-quality":"42e-channel-voice-quality",

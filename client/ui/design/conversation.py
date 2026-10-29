@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 import uuid
-from PySide6.QtCore import Qt, QTimer, QPoint, Signal
+from PySide6.QtCore import Qt, QTimer, QPoint, Signal, QEvent
 from PySide6.QtWidgets import (
     QWidget,
     QFrame,
@@ -33,6 +33,10 @@ class Conversation(QWidget):
         self.identity = None
         self.name = ""
         self.scope = RequestScope()
+        self.unread_boundary = None
+        self.unread_count = 0
+        self.unseen_new = 0
+        self.unread_initialized = False
         self.rows = []
         self.loading = False
         self.history_error = False
@@ -75,6 +79,11 @@ class Conversation(QWidget):
         self.view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self.context_menu)
         self.view.verticalScrollBar().valueChanged.connect(self.scrolled)
+        self.new_messages_button=Button('Новые сообщения','arrowdown',parent=self.view.viewport())
+        self.new_messages_button.setFixedSize(240,40)
+        self.new_messages_button.clicked.connect(lambda:self.load('latest'))
+        self.new_messages_button.hide()
+        self.view.viewport().installEventFilter(self)
         self.history_stack = QStackedWidget()
         self.history_stack.addWidget(self.view)
         self.empty_state = EmptyState('Здесь начинается разговор' if channel else 'Начните разговор',
@@ -89,6 +98,16 @@ class Conversation(QWidget):
         for surface in (self.empty_state, self.loading_state, self.error_state):
             self.history_stack.addWidget(surface)
         root.addWidget(self.history_stack, 1)
+        self.connection_restored=QLabel('Соединение восстановлено')
+        self.connection_restored.setStyleSheet('background:#203D3B;color:#67D5AD;border:1px solid #395D59;border-radius:10px;font-size:13px;padding:0 16px;')
+        self.connection_restored.setFixedSize(270,40)
+        self.connection_restored.hide()
+        root.insertWidget(0,self.connection_restored,0,Qt.AlignHCenter)
+        self.recovery_timer=QTimer(self);self.recovery_timer.setSingleShot(True)
+        self.recovery_timer.timeout.connect(self.connection_restored.hide)
+        self.offline_note=InlineNote()
+        self.offline_note.set_tone('error')
+        root.addWidget(self.offline_note)
         self.permission_note = InlineNote()
         root.addWidget(self.permission_note)
         self.send_error = InlineNote()
@@ -137,9 +156,15 @@ class Conversation(QWidget):
         self.remember_draft()
         self.scope.invalidate()
         self.send_error.clear()
+        self.offline_note.clear()
+        self.connection_restored.hide();self.recovery_timer.stop()
         self.loading = False
         self.history_error = False
         self.identity, self.name = identity, name
+        self.unread_boundary = None
+        self.unread_count = 0
+        self.unseen_new = 0
+        self.unread_initialized = False
         self.rows = []
         self.older = self.newer = False
         self.at_latest = True
@@ -194,9 +219,14 @@ class Conversation(QWidget):
             self.loading = False
             if response.get("status") != "ok":
                 self.history_error = True
+                if response.get("code") == "network_error":
+                    self.offline_note.setText("Нет соединения. Текст сохранён в этом окне.")
                 self.hint.setText(response.get("message", "История недоступна"))
                 self.update_controls(keep_hint=True)
                 return
+            if self.offline_note.text():
+                self.offline_note.clear()
+                self.connection_restored.show();self.recovery_timer.start(4000)
             self.history_error = False
             incoming = response.get("messages", [])
             if direction == "poll" and not self.at_latest:
@@ -222,6 +252,18 @@ class Conversation(QWidget):
 
         self.request(data, done)
 
+    def eventFilter(self, watched, event):
+        if watched is self.view.viewport() and event.type()==QEvent.Resize:
+            self.new_messages_button.move(max(0,watched.width()-260),max(0,watched.height()-60))
+        return super().eventFilter(watched,event)
+
+    def _update_new_messages(self):
+        count=self.unseen_new
+        noun='новое сообщение' if count%10==1 and count%100!=11 else 'новых сообщения' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'новых сообщений'
+        self.new_messages_button.setText(f'{count} {noun}' if count and not self.newer else 'Новые сообщения')
+        self.new_messages_button.setVisible(bool(self.newer or count))
+        self.new_messages_button.raise_()
+
     def anchor(self):
         index = self.view.indexAt(QPoint(80, 12))
         if index.isValid() and index.row() < len(self.rows):
@@ -242,6 +284,11 @@ class Conversation(QWidget):
             self.latest.setText("Есть новые сообщения ↓")
             self.update_controls()
             return
+        if direction == 'latest':
+            self.unseen_new=0
+        elif direction=='poll' and not near_bottom:
+            known={row['id'] for row in self.rows}
+            self.unseen_new+=sum(row['id'] not in known and row['from_user']!=self.owner.ctx.login for row in incoming)
         self._applying = True
         if direction == "latest":
             rows = incoming
@@ -267,6 +314,11 @@ class Conversation(QWidget):
             if row["from_user"] == self.owner.ctx.login and row["id"] <= read_through:
                 row["is_read"] = True
         self.at_latest = not self.newer
+        if direction == "latest" and not self.channel and not self.unread_initialized:
+            self.unread_initialized = True
+            unread = [row for row in self.rows if row['from_user'] != self.owner.ctx.login and not row.get('is_read')]
+            self.unread_boundary = unread[0]['id'] if unread else None
+            self.unread_count = len(unread)
         rendered = []
         previous_author = previous_date = None
         for row in self.rows:
@@ -297,9 +349,10 @@ class Conversation(QWidget):
                     row["text"],
                     (row.get("created_at") or "")[11:16],
                     bool(row.get("is_read")),
-                    author != previous_author or date != previous_date,
+                    author != previous_author or date != previous_date or row["id"] == self.unread_boundary,
                     date_label,
                     date != previous_date,
+                    self.unread_count if row["id"] == self.unread_boundary else 0,
                 )
             )
             previous_author, previous_date = author, date
@@ -328,12 +381,15 @@ class Conversation(QWidget):
         if self._applying or self.loading or not self.rows:
             return
         bar = self.view.verticalScrollBar()
+        if value >= bar.maximum()-20 and not self.newer:
+            self.unseen_new=0;self._update_new_messages()
         if value < 20 and self.older:
             QTimer.singleShot(0, lambda: self.load("older"))
         elif value >= bar.maximum() - 20 and self.newer:
             QTimer.singleShot(0, lambda: self.load("newer"))
 
     def update_controls(self, keep_hint=False):
+        self._update_new_messages()
         surface = self.view if self.rows else (
             self.loading_state if self.loading else
             self.error_state if self.history_error else self.empty_state)
@@ -426,7 +482,10 @@ class Conversation(QWidget):
             self.notice.emit(message)
             self.update_controls()
             if not success and self.identity == identity:
-                self.send_error.setText(message + " · Повторите отправку")
+                if response.get('code') == 'network_error':
+                    self.offline_note.setText('Нет соединения. Текст сохранён в этом окне.')
+                else:
+                    self.send_error.setText(message + " · Повторите отправку")
 
         self.request(data, done)
 
@@ -435,11 +494,10 @@ class Conversation(QWidget):
         if not index.isValid():
             return
         text = index.data()
-        menu = QMenu(self)
-        menu.setAttribute(Qt.WA_DeleteOnClose)
+        from .action_menu import ActionMenu
+        menu = ActionMenu(self)
         menu.addAction(
             "Копировать текст", lambda: QApplication.clipboard().setText(text)
         )
-        menu.addAction("К последним сообщениям", lambda: self.load("latest"))
         menu.popup(self.view.viewport().mapToGlobal(pos))
         self._menu = menu

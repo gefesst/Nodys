@@ -7,7 +7,7 @@ from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
 from ui.design.tokens import LIST_WIDTH
-from ui.design.widgets import Button, DialogDelegate, Toast, ASSETS
+from ui.design.widgets import Button, DialogDelegate, Toast, ASSETS, ElidedLabel
 from ui.design.models import DialogModel
 from ui.design.conversation import Conversation
 
@@ -88,7 +88,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         header.addWidget(self.avatar)
         labels = QVBoxLayout()
         labels.setSpacing(6)
-        self.chat_header = QLabel('Выберите диалог')
+        self.chat_header = ElidedLabel('Выберите диалог')
         self.chat_header.setObjectName('ChatTitle')
         self.chat_header.setMinimumWidth(0)
         self.chat_header.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
@@ -211,7 +211,9 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
     def update_header(self):
         friend = self.active_friend
-        self.chat_header.setText(friend.get('nickname', friend['login']))
+        name=friend.get('nickname',friend['login'])
+        self.chat_header.setText(name)
+        self.conversation.name=name
         self.avatar.set_avatar(friend.get('avatar', ''), friend['login'], friend.get('nickname', ''))
         self.avatar.set_online(friend.get('online', False))
         self.presence.setText('В сети' if friend.get('online') else 'Не в сети')

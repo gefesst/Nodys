@@ -41,6 +41,36 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_long_header_elides_and_restores_full_name_on_resize(self):
+        from ui.design.widgets import ElidedLabel
+        label=ElidedLabel('Александра Константинопольская-Рождественская')
+        self.addCleanup(label.close)
+        label.resize(180,30);label.show();self.app.processEvents()
+        self.assertTrue(label.text().endswith('…'))
+        self.assertEqual(label.toolTip(),label.full_text)
+        label.resize(900,30);self.app.processEvents()
+        self.assertEqual(label.text(),label.full_text)
+
+    def test_inline_menu_stays_inside_window_and_escape_does_not_activate(self):
+        from PySide6.QtWidgets import QWidget, QPushButton
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        from ui.design.action_menu import ActionMenu
+        host=QWidget();host.resize(1120,620);host.show()
+        self.addCleanup(host.close)
+        fired=[]
+        menu=ActionMenu(host);menu.addAction('Action',lambda:fired.append(True))
+        menu.popup(host.mapToGlobal(QPoint(1100,610)))
+        self.assertLessEqual(menu.geometry().right(),host.width()-12)
+        self.assertLessEqual(menu.geometry().bottom(),host.height()-12)
+        QTest.keyClick(menu.buttons[0],Qt.Key_Escape)
+        self.assertFalse(fired)
+        self.assertFalse(menu.isVisible())
+        other=ActionMenu(host);other.addAction('Action',lambda:fired.append(True))
+        other.popup(host.mapToGlobal(QPoint(500,200)))
+        QTest.keyClick(other.buttons[0],Qt.Key_Return)
+        self.assertEqual(fired,[True])
+
     def test_quick_switch_arrow_keys_and_empty_result(self):
         from PySide6.QtWidgets import QWidget
         from PySide6.QtTest import QTest

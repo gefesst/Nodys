@@ -649,12 +649,13 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.start_request(data, cb)
 
     def show_friend_actions_menu(self, friend_login, anchor_btn):
-        menu=QMenu(self);menu.setAttribute(Qt.WA_DeleteOnClose)
-        menu.addAction('Мини-профиль',lambda:self.show_mini_profile(friend_login))
-        menu.addAction('Написать сообщение',lambda:self.open_friend_chat(friend_login))
-        menu.addAction('Позвонить',lambda:self.call_friend(friend_login))
-        menu.addSeparator();menu.addAction('Удалить друга',lambda:self.confirm_and_remove_friend(friend_login))
-        menu.popup(anchor_btn.mapToGlobal(anchor_btn.rect().bottomLeft()));self._actions_menu=menu
+        from ui.design.action_menu import ActionMenu
+        menu=ActionMenu(self,danger=True,anchor_right=True)
+        menu.addAction('Удалить друга',lambda:self.confirm_and_remove_friend(friend_login))
+        point=anchor_btn.mapToGlobal(anchor_btn.rect().bottomRight())
+        point.setX(point.x()-menu.width()-5)
+        point.setY(point.y()+13)
+        menu.popup(point);self._actions_menu=menu
 
     def open_friend_chat(self, login):
         host=self.parentWidget()

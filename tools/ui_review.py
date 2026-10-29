@@ -25,7 +25,7 @@ def main():
     parser.add_argument("--relogin-cycles", type=int, default=1)
     parser.add_argument("--resize-all", action="store_true")
     parser.add_argument("--visual-only", action="store_true")
-    parser.add_argument("--section",choices=("all","profile","voice","channels","calls"),default="all")
+    parser.add_argument("--section",choices=("all","profile","voice","channels","calls","messages"),default="all")
     args = parser.parse_args()
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
@@ -110,6 +110,62 @@ def main():
             self.log.append(name)
             print("Captured", name, flush=True)
 
+        def messages_review(self,m):
+            from PySide6.QtWidgets import QPushButton
+            m.show_friends()
+            self.wait(predicate=lambda:bool(m.friends_page._friends_data));yield
+            more=m.friends_page.findChild(QPushButton,'FriendMoreButton')
+            more.click();self.shot('43g-friends-menu');m.friends_page._actions_menu.close()
+            m.show_chats();page=m.chats_page
+            self.wait(predicate=lambda:bool(page.dialog_model.rows));yield
+            peer=lab.people[0][0]
+            page.open_chat(next(row for row in page.dialog_model.rows if row['login']==peer))
+            c=page.conversation
+            self.wait(predicate=lambda:bool(c.rows) and not c.loading);yield
+            assert any(message.unread_count for message in c.model.rows)
+            self.shot('43-chat-unread')
+            first=c.view.visualRect(c.model.index(0)).center()
+            c.context_menu(first)
+            self.shot('43h-chat-menu');c._menu.close()
+            page.search.setText('Алексей')
+            assert len(page.dialog_model.rows)==1
+            self.shot('43b-chat-search')
+            page.search.clear()
+            self.wait(predicate=lambda:not page._loading_friends);yield
+            long_name='Александра Константинопольская-Рождественская'
+            assert lab.request(peer,'update_profile',nickname=long_name,avatar='')['status']=='ok'
+            page.load_friends(force=True);self.wait(predicate=lambda:not page._loading_friends);yield
+            assert page.chat_header.toolTip()==long_name, (page.chat_header.toolTip(),page.active_friend)
+            text='Длинное сообщение: '+('Проверяем перенос строк, ширину пузыря и прокрутку. '*30)+'\n'+('https://example.test/very-long-path-'*15)
+            c.editor.setPlainText(text);c.send()
+            self.wait(predicate=lambda:peer not in c.pending);yield
+            assert not c.editor.toPlainText()
+            c.load('latest');self.wait(predicate=lambda:not c.loading);yield
+            assert any(row['text']==text for row in c.rows)
+            self.shot('43c-chat-long-text')
+            assert c.view.horizontalScrollBar().maximum()==0
+            page.msg_timer.stop();page.friends_timer.stop()
+            self.wait(predicate=lambda:not c.loading);yield
+            bar=c.view.verticalScrollBar();bar.setValue(max(25,bar.maximum()//2))
+            assert lab.request(peer,'send_message',to_user=lab.me,text='Новое сообщение во время чтения')['status']=='ok'
+            c.load('poll');self.wait(predicate=lambda:not c.loading);yield
+            assert c.new_messages_button.isVisible() and bar.value()<bar.maximum()-20, (c.unseen_new,c.newer,bar.value(),bar.maximum(),c.rows[-1]["text"])
+            self.shot('43d-chat-new-messages')
+            c.new_messages_button.click();self.wait(predicate=lambda:not c.loading);yield
+            assert not c.new_messages_button.isVisible()
+            from config import save_config
+            draft='Буду через десять минут. Не начинайте без меня.'
+            c.editor.setPlainText(draft)
+            save_config({'api_port':lab.free_port()})
+            c.load('latest');self.wait(predicate=lambda:not c.loading);yield
+            assert c.offline_note.text() and c.editor.toPlainText()==draft
+            self.shot('43e-chat-offline-draft')
+            save_config(lab.config)
+            c.load('latest');self.wait(predicate=lambda:not c.loading);yield
+            assert c.connection_restored.isVisible() and not c.offline_note.text()
+            assert c.editor.toPlainText()==draft
+            self.shot('43f-chat-reconnected')
+
         def calls_review(self,m):
             from server import server
             from config import save_config
@@ -189,6 +245,23 @@ def main():
                 ch.voice_quality_lbl.setText('Связь нестабильна · задержка 180 мс · возможны перерывы звука')
                 ch.voice_quality_lbl.show();self.shot('42e-channel-voice-quality');ch.voice_quality_lbl.hide()
             self.visual_fixtures.extend(['42-channel-text-empty: empty history cache','42b-channel-text-error: failed history renderer','42c-channel-text-denied: permission renderer; server ACL tested separately','42d-channel-voice-denied: permission renderer; server ACL tested separately','42e-channel-voice-quality: simulated quality warning'])
+            ch.open_channel_settings()
+            self.wait(predicate=lambda:not ch._loading_channel_details);yield
+            ch.save_channel_settings()
+            self.wait(predicate=lambda:not ch._saving_channel_settings);yield
+            assert ch.settings_feedback.text()=='Настройки канала сохранены'
+            self.shot('42f-channel-settings-saved')
+            from server import server
+            guest_channel=server.create_channel(lab.people[0][0],'Общий канал')
+            server.join_channel_by_code(lab.me,guest_channel['code'])
+            ch.load_channels(force_refresh=True)
+            self.wait(predicate=lambda:not ch._loading_channels);yield
+            ch.open_channel(next(row for row in ch.channels if row['id']==guest_channel['id']))
+            ch.open_channel_settings()
+            self.wait(predicate=lambda:not ch._loading_channel_details);yield
+            ch.ask_leave_channel()
+            self.shot('42g-channel-leave-confirm');ch.hide_settings_confirm()
+
 
         def microphone_review(self,m):
             m.settings_page.check_microphone()
@@ -292,6 +365,10 @@ def main():
             yield
             m = w.main_page
             lab.tokens[lab.me] = m.ctx.session_token
+            if args.section=="messages":
+                w.resize(1440,900)
+                yield from self.messages_review(m)
+                return
             if args.section=="calls":
                 w.resize(1440,900)
                 yield from self.calls_review(m)

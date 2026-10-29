@@ -697,7 +697,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         title_col.setContentsMargins(0, 0, 0, 0)
         title_col.setSpacing(1)
 
-        self.channel_name_lbl = QLabel("Канал")
+        from ui.design.widgets import ElidedLabel
+        self.channel_name_lbl = ElidedLabel("Канал")
         self.channel_name_lbl.setObjectName("ChannelOpenTitle")
         self.channel_name_lbl.setMinimumWidth(0)
         self.channel_name_lbl.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)

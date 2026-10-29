@@ -11,6 +11,7 @@ from PySide6.QtCore import (
     QEasingCurve,
     QTimer,
     Signal,
+    QEvent,
 )
 from PySide6.QtGui import (
     QColor,
@@ -24,6 +25,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QWidget,
+    QLabel,
+    QSizePolicy,
     QApplication,
     QPushButton,
     QStyledItemDelegate,
@@ -38,6 +41,32 @@ from .tokens import ACC, FG, SUB, MUT, EDGE, GREEN, RED
 
 ASSETS = Path(__file__).parent / "assets"
 ICONS = {}
+
+
+class ElidedLabel(QLabel):
+    """Keep the full name accessible while fitting the available header width."""
+    def __init__(self,text='',parent=None):
+        super().__init__(text,parent)
+        self.full_text=text
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
+        self.setToolTip(text);self.setAccessibleName(text)
+
+    def setText(self,text):
+        self.full_text=text
+        self.setToolTip(text);self.setAccessibleName(text)
+        self._fit()
+
+    def _fit(self):
+        super().setText(self.fontMetrics().elidedText(self.full_text,Qt.ElideRight,max(0,self.contentsRect().width())))
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event);self._fit()
+
+    def changeEvent(self,event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.FontChange,QEvent.StyleChange) and hasattr(self,'full_text'):
+            self._fit()
 
 
 class MessageList(QListView):
@@ -380,7 +409,7 @@ class MessageDelegate(QStyledItemDelegate):
 
     def geometry(self, m, width):
         maxw = max(180, min(660, width - 114))
-        key = (m.text, maxw, m.group, m.divider)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -419,6 +448,7 @@ class MessageDelegate(QStyledItemDelegate):
         bh = y + 40
         head = (27 if m.divider else 41) if m.group else 0
         head += 28 if m.divider else 0
+        head += 40 if m.unread_count else 0
         height = head + bh + 8
         value = (layout, bw, bh, head, height)
         self.cache[key] = value
@@ -467,13 +497,24 @@ class MessageDelegate(QStyledItemDelegate):
             p.setOpacity(min(1, (time.perf_counter() - self.fade_start) / 0.16))
         x = o.rect.x() + 58
         y = o.rect.y() + head
-        date_offset = 28 if m.divider else (14 if m.group else 0)
+        unread_offset = 40 if m.unread_count else 0
+        date_offset = unread_offset + (28 if m.divider else (14 if m.group else 0))
+        if m.unread_count:
+            count=m.unread_count
+            noun='непрочитанное сообщение' if count%10==1 and count%100!=11 else 'непрочитанных сообщения' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'непрочитанных сообщений'
+            label=f'{count} {noun}'
+            p.setFont(font(12));label_width=p.fontMetrics().horizontalAdvance(label)
+            center=self.view.viewport().width()/2;line_y=o.rect.y()+20
+            p.setPen(QPen(QColor(ACC),1))
+            p.drawLine(10,line_y,int(center-label_width/2-16),line_y)
+            p.drawLine(int(center+label_width/2+16),line_y,self.view.viewport().width()-10,line_y)
+            draw_text(p,center-label_width/2,o.rect.y()+24,label,12,ACC)
         if m.divider:
             p.setFont(font(11))
             label_width = p.fontMetrics().horizontalAdvance(m.date)
             center = self.view.viewport().width() / 2
             p.setPen(QPen(QColor(EDGE), 1))
-            line_y = o.rect.y() + 14
+            line_y = o.rect.y() + unread_offset + 14
             p.drawLine(10, line_y, int(center - label_width / 2 - 16), line_y)
             p.drawLine(
                 int(center + label_width / 2 + 16),
@@ -481,7 +522,7 @@ class MessageDelegate(QStyledItemDelegate):
                 self.view.viewport().width() - 10,
                 line_y,
             )
-            draw_text(p, center - label_width / 2, o.rect.y() + 18, m.date, 11, MUT)
+            draw_text(p, center - label_width / 2, o.rect.y() + unread_offset + 18, m.date, 11, MUT)
         if m.group:
             display_name = self.own_name() if own else m.name
             parts = display_name.split()

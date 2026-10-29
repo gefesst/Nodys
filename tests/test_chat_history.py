@@ -133,6 +133,35 @@ class ConversationTests(unittest.TestCase):
         self.chat.select(peer, peer.title())
         self.requests[-1][1](self.response(peer))
 
+    def test_network_recovery_preserves_draft_and_is_scoped_to_dialog(self):
+        self.select('bob')
+        self.chat.editor.setPlainText('unsent draft')
+        self.chat.load('latest')
+        self.requests[-1][1](dict(status='error',code='network_error',message='Offline'))
+        self.assertTrue(self.chat.offline_note.text())
+        self.chat.load('latest');self.requests[-1][1](self.response())
+        self.assertFalse(self.chat.offline_note.text())
+        self.assertFalse(self.chat.connection_restored.isHidden())
+        self.assertEqual(self.chat.editor.toPlainText(),'unsent draft')
+        self.chat.select('carol')
+        self.assertTrue(self.chat.connection_restored.isHidden())
+        self.requests[-1][1](dict(status='error',message='Permission denied'))
+        self.assertFalse(self.chat.offline_note.text())
+
+    def test_unread_boundary_survives_receipts_and_resets_between_dialogs(self):
+        self.chat.select('bob')
+        response=self.response(count=3)
+        response['messages'][0]['is_read']=True
+        self.requests[-1][1](response)
+        self.assertEqual([(m.id,m.unread_count) for m in self.chat.model.rows],[(1,0),(2,2),(3,0)])
+        self.chat.apply([dict(row,is_read=True) for row in response['messages']], 'latest',response)
+        self.assertEqual(self.chat.model.rows[1].unread_count,2)
+        self.chat.select('carol')
+        self.requests[-1][1](dict(status='ok',messages=[],has_older=False,has_newer=False))
+        self.assertIsNone(self.chat.unread_boundary)
+        self.chat.apply(self.response('carol',1)['messages'],'poll',{})
+        self.assertEqual(self.chat.model.rows[0].unread_count,0)
+
     def test_rapid_switch_discards_old_results_and_loading_state(self):
         for peer in ("bob", "carol", "dave"):
             self.chat.select(peer, peer)
