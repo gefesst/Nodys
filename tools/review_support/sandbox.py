@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 class Sandbox:
-    def __init__(self, project):
+    def __init__(self, project, *, reference_dialogs=False):
         self.project = Path(project)
         self.folder = tempfile.TemporaryDirectory(prefix="nodus-ui-lab-")
         self.path = Path(self.folder.name)
@@ -30,6 +30,8 @@ class Sandbox:
             ("maria", "Мария Ким"),
             ("sergey", "Сергей Волков"),
         ]
+        if reference_dialogs:
+            self.people += [("pavel", "Павел Орлов"), ("darya", "Дарья Соколова")]
         self.me = "andrey"
         for login, name in [(self.me, "Андрей")] + self.people:
             assert server.add_user(login, secrets.token_urlsafe(20), name, "")
@@ -38,6 +40,9 @@ class Sandbox:
                 server.send_friend_request(self.me, login)
                 server.accept_friend_request(self.me, login)
         server.set_session_offline(self.tokens["sergey"])
+        if reference_dialogs:
+            for peer in ("pavel", "darya"):
+                server.set_session_offline(self.tokens[peer])
         texts = [
             "Привет! Собрал всё в одном месте.\nПосмотри, когда будет минутка.",
             "Сегодня проверим каналы и звонки?",
@@ -52,6 +57,8 @@ class Sandbox:
                     peer if i in (2, 4) else self.me,
                     t,
                 )
+        if reference_dialogs:
+            self.seed_reference_dialogs(server)
         self.channel = server.create_channel(self.me, "Свои люди")
         server.join_channel_by_code(self.people[0][0], self.channel["code"])
         self.port = self.free_port()
@@ -105,6 +112,29 @@ class Sandbox:
                 time.sleep(0.05)
         else:
             raise TimeoutError("Local server startup timed out")
+
+    def seed_reference_dialogs(self, server):
+        """Same six conversations as the approved chat; disposable database only."""
+        from datetime import datetime, timedelta, timezone
+        from server.storage.database import connect
+        latest = datetime.now(timezone.utc).replace(tzinfo=None, second=0, microsecond=0) - timedelta(minutes=10)
+        with connect(server.CHAT_DB) as conn:
+            rows=conn.execute("SELECT id FROM messages WHERE from_user='alexey' OR to_user='alexey' ORDER BY id").fetchall()
+            for index, (message_id,) in enumerate(rows):
+                stamp = latest - timedelta(minutes=len(rows)-1-index)
+                conn.execute("UPDATE messages SET timestamp=? WHERE id=?", (str(stamp),message_id))
+            conn.execute("DELETE FROM messages WHERE from_user<>'alexey' AND to_user<>'alexey'")
+            for peer,text,stamp,read in [
+                ('anna','Спасибо за помощь.',latest-timedelta(minutes=17),0),
+                ('anna','Спасибо, всё получилось',latest-timedelta(minutes=16),0),
+                ('sergey','Завтра после семи?',latest-timedelta(minutes=28),1),
+                ('maria','Отправила новые идеи',latest-timedelta(minutes=110),1),
+                ('pavel','Хорошо, до встречи',latest-timedelta(days=1),1),
+                ('darya','На связи',latest-timedelta(days=2),1),
+            ]:
+                conn.execute("INSERT INTO messages(from_user,to_user,text,timestamp,is_read) VALUES(?,?,?,?,?)",
+                             (peer,self.me,text,str(stamp),read))
+        server.mark_chat_read('alexey',self.me)
 
     @staticmethod
     def free_port(kind=socket.SOCK_STREAM):

@@ -51,6 +51,25 @@ class DesignGeometryTests(unittest.TestCase):
         label.resize(900,30);self.app.processEvents()
         self.assertEqual(label.text(),label.full_text)
 
+    def test_dialog_order_uses_last_message_not_presence(self):
+        from ui.chats_page import ChatsPage
+        from ui.design.models import DialogModel
+        from unittest.mock import Mock
+        page = SimpleNamespace(unread_counts={},
+            dialog_summaries={"recent": {"timestamp": "2026-10-29 14:36:00"},
+                              "older": {"timestamp": "2026-10-29 14:20:00"}},
+            dialog_model=DialogModel(), filter_friends=Mock(), search=SimpleNamespace(text=lambda: ""),
+            active_friend=None)
+        friends=[dict(login="older",nickname="Anna",online=True),
+                 dict(login="empty",nickname="Aaron",online=True),
+                 dict(login="recent",nickname="Zoe",online=False)]
+        ChatsPage.handle_friends(page,dict(status="ok",friends=friends))
+        self.assertEqual([row['login'] for row in page.dialog_model.rows], ['recent','older','empty'])
+        for row in friends:
+            row['online']=not row['online']
+        ChatsPage.handle_friends(page,dict(status="ok",friends=friends))
+        self.assertEqual([row['login'] for row in page.dialog_model.rows], ['recent','older','empty'])
+
     def test_inline_menu_stays_inside_window_and_escape_does_not_activate(self):
         from PySide6.QtWidgets import QWidget, QPushButton
         from PySide6.QtCore import QPoint, Qt

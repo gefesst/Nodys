@@ -45,11 +45,14 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         title.setContentsMargins(10,0,10,0)
         left.addWidget(title)
         self.search = QLineEdit()
+        self.search.setFixedHeight(40)
+        self.search.setStyleSheet('min-height:16px;max-height:16px;')
         self.search.setPlaceholderText('Найти диалог')
         self.search.addAction(QIcon(str(ASSETS/'search.svg')),QLineEdit.LeadingPosition)
         self.search.textChanged.connect(self.filter_friends)
-        search_row=QHBoxLayout();search_row.setContentsMargins(10,0,10,0)
+        search_row=QHBoxLayout();search_row.setContentsMargins(10,2,10,0)
         search_row.addWidget(self.search);left.addLayout(search_row)
+        left.addSpacing(5)
         self.dialog_model = DialogModel(self)
         self.dialogs = QListView()
         self.dialogs.setModel(self.dialog_model)
@@ -181,10 +184,12 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if response.get('status') != 'ok':
             self.list_status.setText(response.get('message', 'Не удалось загрузить диалоги'))
             return  # A transient failure must not remove the selected friend/draft.
-        rows = sorted(response.get('friends', []), key=lambda r: (not r.get('online'), r.get('nickname', '').casefold()))
+        rows = sorted(response.get('friends', []), key=lambda r: r.get('nickname', r['login']).casefold())
         for row in rows:
             row['unread_count'] = self.unread_counts.get(row['login'], 0)
             row['summary'] = self.dialog_summaries.get(row['login'], {})
+        # Presence changes must not reshuffle conversations while the user reads.
+        rows.sort(key=lambda row: row['summary'].get('timestamp') or '', reverse=True)
         self.dialog_model.replace(rows)
         self.filter_friends(self.search.text())
         if self.active_friend:

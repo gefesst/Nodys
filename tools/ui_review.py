@@ -30,7 +30,7 @@ def main():
     output=Path(args.output)
     if output.exists() and any(output.iterdir()):
         parser.error('Use a new empty output directory; existing evidence must not be mixed with another run.')
-    lab = Sandbox(ROOT)
+    lab = Sandbox(ROOT, reference_dialogs=args.section == 'messages')
     # Auth must be tested through the ordinary application, not by setting UserContext.
     from config import save_config
 
@@ -57,6 +57,8 @@ def main():
             self.source_tree_sha256=digest.hexdigest()
             self.log = []
             self.visual_fixtures = []
+            if args.section == 'messages':
+                self.visual_fixtures.append('Reference dialog seed: six named contacts, distinct previews and read states; dates relative to current local day in disposable database')
             self.error = None
             self.deadline = time.monotonic() + 300
             self.until = 0
