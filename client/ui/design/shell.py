@@ -24,7 +24,7 @@ class WindowDot(QPushButton):
 class TitleBar(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
-        self.setFixedHeight(40)
+        self.setFixedHeight(42)
         import sys
         row = QHBoxLayout(self)
         row.setContentsMargins(18, 0, 18, 0)
@@ -52,7 +52,7 @@ class TitleBar(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'brand'):
-            self.brand.setGeometry(self.width()//2-100,0,200,40)
+            self.brand.setGeometry(self.width()//2-100,0,200,self.height())
 
     def maximize(self):
         self.window().showNormal() if self.window().isMaximized() else self.window().showMaximized()
@@ -87,10 +87,10 @@ class NavButton(Button):
             color.setAlpha(255 if active else int(150 * self._hover))
             p.setPen(Qt.NoPen)
             p.setBrush(color)
-            p.drawRoundedRect(QRectF(3, 2, 58, 64), 14, 14)
-        icon(p, self.icon_name, QRectF(21, 11, 22, 22), ACC if active else SUB)
+            p.drawRoundedRect(QRectF(4, 0, 56, 68), 14, 14)
+        icon(p, self.icon_name, QRectF(23, 10, 18, 18), ACC if active else SUB)
         p.setPen(QColor(FG if active else SUB))
-        p.setFont(font(10, True))
+        p.setFont(font(11, True))
         p.drawText(QRectF(0, 38, 64, 25), Qt.AlignCenter, self.text().split(" (")[0])
         if "(" in self.text():
             p.setPen(Qt.NoPen)
@@ -150,9 +150,11 @@ def create_resize_handles(window):
 
 def position_resize_handles(window):
     w, h, d = window.width(), window.height(), 5
+    corner = 14  # Reach the visible arc; a 5px square is outside the rounded mask.
     geometries = ((0,d,d,h-2*d), (w-d,d,d,h-2*d),
                   (d,0,w-2*d,d), (d,h-d,w-2*d,d),
-                  (0,0,d,d), (w-d,0,d,d), (0,h-d,d,d), (w-d,h-d,d,d))
+                  (0,0,corner,corner), (w-corner,0,corner,corner),
+                  (0,h-corner,corner,corner), (w-corner,h-corner,corner,corner))
     for handle, geometry in zip(window.resize_handles, geometries):
         handle.setGeometry(*geometry)
         handle.setVisible(not window.isMaximized() and not window.isFullScreen())

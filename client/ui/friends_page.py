@@ -42,14 +42,17 @@ class FriendItem(QFrame):
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
-        text_col.setSpacing(6)
+        text_col.setSpacing(5)
+        text_col.setAlignment(Qt.AlignVCenter)
 
         name = QLabel(nickname)
         name.setObjectName("FriendItemName")
+        name.setFixedHeight(20)
         text_col.addWidget(name)
 
         sub = QLabel(f"@{login} · {'В сети' if online else 'Не в сети'}" if request_from is None else f"Запрос от: {login}")
         sub.setObjectName("FriendItemSub")
+        sub.setFixedHeight(20)
         text_col.addWidget(sub)
 
         layout.addLayout(text_col)
@@ -61,7 +64,7 @@ class FriendItem(QFrame):
             self.call_btn = Button('Позвонить','phone')
             self.call_btn.setObjectName("FriendCallButton")
             btn_size = 34
-            self.call_btn.setFixedSize(150, 42)
+            self.call_btn.setFixedSize(156, 40)
             self.call_btn.setToolTip("Позвонить")
             if on_call:
                 self.call_btn.clicked.connect(lambda: on_call(login))
@@ -79,6 +82,7 @@ class FriendItem(QFrame):
             self.more_btn.setFont(f)
             if on_manage:
                 self.more_btn.clicked.connect(lambda: on_manage(login, self.more_btn))
+            layout.addSpacing(16)
             layout.addWidget(self.more_btn)
             install_opacity_feedback(self.more_btn, hover_opacity=0.99, pressed_opacity=0.93, duration_ms=80)
 
@@ -131,23 +135,23 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         from ui.design.tokens import LIST_WIDTH
         outer = QHBoxLayout(self);outer.setContentsMargins(0,0,0,0);outer.setSpacing(0)
         sidebar=QFrame();sidebar.setObjectName('SectionSidebar');sidebar.setFixedWidth(LIST_WIDTH)
-        side=QVBoxLayout(sidebar);side.setContentsMargins(16,32,12,20);side.setSpacing(10)
-        eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');side.addWidget(eyebrow)
-        heading=QLabel('Друзья');heading.setObjectName('PageTitle');side.addWidget(heading);side.addSpacing(15)
+        side=QVBoxLayout(sidebar);side.setContentsMargins(14,32,14,20);side.setSpacing(10)
+        eyebrow=QLabel('ЛИЧНЫЕ');eyebrow.setObjectName('Eyebrow');eyebrow.setFixedHeight(12);eyebrow.setContentsMargins(8,0,0,0);side.addWidget(eyebrow)
+        heading=QLabel('Друзья');heading.setObjectName('PageTitle');heading.setFixedHeight(31);heading.setContentsMargins(8,0,0,0);side.addWidget(heading);side.addSpacing(17)
         self.view_buttons={}
         for mode,text in [('all','Все друзья'),('online','В сети'),('requests','Заявки'),('add','Добавить друга')]:
             button=QPushButton(text);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.clicked.connect(lambda checked=False,m=mode:self.set_view(m));side.addWidget(button);self.view_buttons[mode]=button
         side.addStretch();outer.addWidget(sidebar)
         work=QWidget();outer.addWidget(work,1)
         root = QVBoxLayout(work)
-        root.setContentsMargins(40, 32, 40, 20)
-        root.setSpacing(12)
+        root.setContentsMargins(40, 32, 48, 20)
+        root.setSpacing(0)
         root.setAlignment(Qt.AlignTop)
 
         # ---------- Top bar card ----------
         topbar = QFrame()
         topbar.setObjectName("FriendsTopBar")
-        topbar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        topbar.setFixedHeight(62)
         head = QHBoxLayout(topbar)
         head.setContentsMargins(0, 0, 0, 0)
         head.setSpacing(10)
@@ -175,12 +179,12 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         install_opacity_feedback(self.add_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 
         root.addWidget(topbar)
-        root.addSpacing(6)
+        root.addSpacing(10)
         divider = QFrame()
         divider.setObjectName("Divider")
         divider.setFixedHeight(1)
         root.addWidget(divider)
-        root.addSpacing(24)
+        root.addSpacing(43)
 
         # ---------- Inline add panel ----------
         self.add_panel = QFrame()

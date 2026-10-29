@@ -211,9 +211,9 @@ class Button(QPushButton):
             bg = QColor("#252E3A")
         if self.property("flat") and not self._hover and not self.isDown():
             bg.setAlpha(0)
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
         p.setBrush(bg)
-        p.drawRoundedRect(QRectF(3, 3, self.width() - 6, self.height() - 6), 9, 9)
+        p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 9, 9)
         color = "#142039" if self.primary else FG
         if not self.isEnabled():
             color = "#8190A5"

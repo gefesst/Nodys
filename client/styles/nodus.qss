@@ -97,3 +97,8 @@ QLabel#CallTimer {font-size:18px;font-weight:600;}
 QFrame#ChannelVoiceMemberItem[speaking="true"] {border:1px solid #67D5AD;}
 QLabel#ChannelVoiceMemberName {font-size:16px;font-weight:600;}
 QLabel#ChannelVoiceMemberMeta {font-size:12px;color:@SUB@;}
+
+/* Geometry and type sizes from the approved friends-all SVG. */
+QLabel#FriendsTitle {font-size:28px;font-weight:700;}
+QLabel#PageTitle {font-size:26px;font-weight:700;}
+QFrame#FriendItem {border-radius:12px;}

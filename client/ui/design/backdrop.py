@@ -33,6 +33,8 @@ def install(window):
             effect.setAutoresizingMask_(NSViewWidthSizable | NSViewHeightSizable)
             parent.addSubview_positioned_relativeTo_(effect, -1, view)
             window._native_backdrop = effect
+            from .window_shape import apply
+            apply(window)
             window.backdrop_description = "macOS: NSVisualEffectView за фоном 96%"
         elif sys.platform == "win32":
             import ctypes

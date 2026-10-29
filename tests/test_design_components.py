@@ -59,6 +59,22 @@ class DesignGeometryTests(unittest.TestCase):
                                  for h in window.resize_handles))
         window.close()
 
+    def test_rounded_corners_still_have_reachable_resize_handles(self):
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QWidget
+        from ui.design.shell import create_resize_handles, position_resize_handles
+        from ui.design.window_shape import window_region
+
+        window = QWidget()
+        window.resize(1120, 620)
+        window.resize_handles = create_resize_handles(window)
+        position_resize_handles(window)
+        region = window_region(1120, 620)
+        for handle in window.resize_handles[4:]:
+            center = handle.geometry().center()
+            self.assertTrue(region.contains(QPoint(center)))
+        window.close()
+
     def test_resize_fallback_preserves_minimum_and_opposite_corner(self):
         from PySide6.QtCore import Qt, QPoint, QPointF
         from PySide6.QtWidgets import QWidget
@@ -79,6 +95,35 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertIsNone(handle.drag_origin)
         window.close()
 
+    def test_channel_forms_keep_reference_geometry_under_theme_and_resize(self):
+        from PySide6.QtCore import QPoint
+        from ui.channels_page import ChannelsPage
+        from ui.design import tokens
+        previous = self.app.styleSheet()
+        style = (Path(__file__).resolve().parents[1] / 'client/styles/nodus.qss').read_text()
+        for key, value in vars(tokens).items():
+            if isinstance(value, str):
+                style = style.replace('@' + key + '@', value)
+        self.app.setStyleSheet(style)
+        page = ChannelsPage()
+        page.show()
+        try:
+            for width, height in ((1032, 578), (1192, 738), (1352, 858)):
+                page.resize(width, height)
+                for form, field, button in (
+                    (page.create_page, page.create_name_input, page.create_confirm_btn),
+                    (page.join_page, page.join_code_input, page.join_confirm_btn),
+                ):
+                    page.main_stack.setCurrentWidget(form)
+                    self.app.processEvents()
+                    self.assertEqual(field.height(), 46)
+                    self.assertEqual(button.size().toTuple(), (200, 40))
+                    self.assertEqual(button.mapTo(page, QPoint()).y(), 429)
+                    self.assertLessEqual(field.mapTo(page, QPoint()).x() + field.width(), width)
+        finally:
+            page.close()
+            self.app.setStyleSheet(previous)
+
     def test_voice_tiles_reflow_and_clear_all_participants(self):
         from ui.channels_page import ChannelsPage
         page=ChannelsPage()
@@ -98,6 +143,17 @@ class DesignGeometryTests(unittest.TestCase):
         page._render_voice_participants()
         self.assertEqual(page.voice_members_layout.count(),1)
         page.close()
+
+    def test_outer_window_region_cuts_four_corners_and_restores_maximized(self):
+        from PySide6.QtCore import QPoint
+        from ui.design.window_shape import window_region
+        for width,height in ((1120,620),(1280,780),(1440,900)):
+            region=window_region(width,height)
+            for x,y in ((0,0),(width-1,0),(0,height-1),(width-1,height-1)):
+                self.assertFalse(region.contains(QPoint(x,y)))
+                self.assertTrue(window_region(width,height,True).contains(QPoint(x,y)))
+            self.assertTrue(region.contains(QPoint(width//2,0)))
+            self.assertTrue(region.contains(QPoint(width//2,height//2)))
 
     def test_theme_does_not_clip_navigation_or_icon_buttons(self):
         from PySide6.QtWidgets import QWidget, QVBoxLayout

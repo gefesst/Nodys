@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QLabel, QPushButton, QSizeGrip
-from PySide6.QtCore import Qt, Slot, QTimer
+from PySide6.QtCore import Qt, Slot, QTimer, QEvent
 from network import NetworkThread
 from PySide6.QtGui import QIcon, QPainter, QColor
 from ui.design.shell import TitleBar, create_resize_handles, position_resize_handles
@@ -105,9 +105,17 @@ class AppWindow(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        from ui.design.window_shape import apply
+        apply(self)
         if not hasattr(self, "backdrop_description"):
             from ui.design.backdrop import install
             QTimer.singleShot(0, lambda: install(self))
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.WindowStateChange:
+            from ui.design.window_shape import apply
+            apply(self)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -121,6 +129,8 @@ class AppWindow(QWidget):
             self.grip.raise_()
         if hasattr(self, "resize_handles"):
             position_resize_handles(self)
+        from ui.design.window_shape import apply
+        apply(self)
         super().resizeEvent(event)
 
     def _cancel_resume(self):
