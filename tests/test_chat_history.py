@@ -19,6 +19,15 @@ class HistoryStorageTests(unittest.TestCase):
         self.server.init_chat_db()
         self.repo = self.server._messages_service()
 
+    def test_read_receipt_does_not_mark_messages_arriving_after_displayed_tail(self):
+        validate=load("read_receipt_requests", "server/protocol/requests.py").validate
+        validate({"action":"mark_chat_read","friend_login":"bob","through_id":1})
+        shown=self.repo.save_message("bob","alice","shown")
+        self.repo.save_message("bob","alice","arrived later")
+        self.repo.mark_chat_read("alice","bob",shown)
+        self.assertEqual(self.repo.get_unread_counts("alice"),{"bob":1})
+        self.assertEqual([r["is_read"] for r in self.repo.get_messages("alice","bob")],[1,0])
+
     def test_dialog_summaries_are_scoped_and_include_latest_direction(self):
         self.repo.save_message('alice', 'bob', 'old')
         self.repo.save_message('bob', 'alice', 'new reply')
@@ -164,6 +173,23 @@ class ConversationTests(unittest.TestCase):
         self.chat.apply(self.response()["messages"], "latest", {})
         self.assertEqual(self.chat.model.rows[0].avatar, "channel-avatar")
         self.assertEqual(self.chat.model.rows[0].name, "Channel Bob")
+
+    def test_prefetch_is_bounded_does_not_mark_read_and_populates_first_open(self):
+        self.chat.prefetch(["bob","carol","dan"])
+        self.assertEqual(len(self.requests),2)
+        self.assertTrue(all(r[0]["action"]=="get_messages" for r in self.requests))
+        self.requests[0][1](self.response("bob"))
+        self.assertEqual(len(self.requests),3)
+        self.assertIsNone(self.chat.identity)
+        self.chat.select("bob")
+        self.assertEqual(len(self.chat.model.rows),2)
+        self.assertTrue(self.chat.history_loaded)
+        self.assertIs(self.chat.history_stack.currentWidget(),self.chat.view)
+        self.assertEqual(self.requests[-1][0]["after_id"],2)
+        stale=self.requests[1][1]
+        self.chat.reset()
+        stale(self.response("carol"))
+        self.assertFalse(self.chat.prefetched)
 
     def test_first_open_keeps_composer_and_history_in_place_until_reply(self):
         self.chat.select("bob")

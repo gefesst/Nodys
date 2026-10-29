@@ -233,7 +233,10 @@ class RequestRouter:
             friend = (data.get("friend_login") or "").strip()
             if not friend:
                 return {"status": "error", "message": "Не указан собеседник"}
-            self.messages.mark_chat_read(current_user, friend)
+            through=data.get("through_id")
+            if through is not None and (type(through) is not int or through<1):
+                return {"status":"error","code":"invalid_request","message":"Некорректная граница прочтения"}
+            self.messages.mark_chat_read(current_user, friend, through)
             return {"status": "ok"}
 
         if action == "get_unread_counts":

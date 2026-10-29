@@ -44,11 +44,11 @@ class MessageRepository:
             rows = cur.fetchall()
             return [dict(r) for r in reversed(rows)]
 
-    def mark_chat_read(self, current_user: str, friend: str) -> None:
+    def mark_chat_read(self, current_user: str, friend: str, through_id=None) -> None:
         with database_connection(self.database) as conn:
             conn.execute(
-                "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0",
-                (friend, current_user),
+                "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0" + (" AND id<=?" if through_id is not None else ""),
+                (friend, current_user, through_id) if through_id is not None else (friend, current_user),
             )
             conn.commit()
 

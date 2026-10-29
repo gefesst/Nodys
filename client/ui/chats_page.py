@@ -23,6 +23,9 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.scope = RequestScope()
         self.active_friend = None
         self._loading_friends = self._loading_unread = False
+        self._read_revision = 0
+        self._read_pending = set()
+        self._read_markers = {}
         self.unread_counts = {}
         self.dialog_summaries = {}
         self.unread_total = 0
@@ -161,6 +164,9 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.conversation.reset()
         self.active_friend = None
         self._loading_friends = self._loading_unread = False
+        self._read_revision = 0
+        self._read_pending = set()
+        self._read_markers = {}
         self.unread_counts = {}
         self.dialog_summaries = {}
         self.unread_total = 0
@@ -197,6 +203,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         rows.sort(key=lambda row: row['summary'].get('timestamp') or '', reverse=True)
         self.dialog_model.replace(rows)
         self.filter_friends(self.search.text())
+        self.conversation.prefetch([row["login"] for row in sorted(rows,key=lambda r:bool(r.get("unread_count")),reverse=True)])
         if self.active_friend:
             found = next((r for r in rows if r['login'] == self.active_friend['login']), None)
             if found:
@@ -237,6 +244,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.workspace.setCurrentWidget(self.chat_body)
         self.update_header()
         self.conversation.select(friend['login'], friend.get('nickname', friend['login']))
+        if self.conversation.history_loaded:
+            self.mark_chat_read(friend['login'])
         self.filter_friends(self.search.text())
         for i, row in enumerate(self.dialog_model.rows):
             if row['login'] == friend['login']:
@@ -257,14 +266,23 @@ class ChatsPage(QWidget, ThreadSafeMixin):
             return
         self._loading_unread = True
         ticket = self.scope.capture('unread', self.ctx.login)
+        read_revision=self._read_revision
         def done(response):
             if not self.scope.accepts(ticket, self.ctx.login):
                 return
             self._loading_unread = False
+            if read_revision!=self._read_revision:
+                self.load_unread_counts(force=True)
+                return
             if response.get('status') == 'ok':
-                self.unread_counts = response.get('counts', {})
-                self.dialog_summaries = response.get('summaries', {})
-                self.unread_total = int(response.get('total', 0))
+                self.unread_counts = dict(response.get('counts', {}))
+                for peer in self._read_pending:self.unread_counts.pop(peer,None)
+                summaries=response.get('summaries', {})
+                for peer,summary in summaries.items():
+                    if summary!=self.dialog_summaries.get(peer):
+                        self.conversation.prefetched.pop(peer,None)
+                self.dialog_summaries = summaries
+                self.unread_total = sum(self.unread_counts.values())
                 if self.on_unread_total_changed:
                     self.on_unread_total_changed(self.unread_total)
             self.load_friends(force=force)
@@ -272,8 +290,25 @@ class ChatsPage(QWidget, ThreadSafeMixin):
 
     def mark_chat_read(self, friend_login=None):
         peer = friend_login or (self.active_friend or {}).get('login')
-        if peer:
-            self.start_request(dict(action='mark_chat_read', friend_login=peer), lambda _: None)
+        if not peer or peer in self._read_pending:return
+        last=max((row['id'] for row in self.conversation.rows if row['from_user']==peer),default=0)
+        if not last or (self._read_markers.get(peer)==last and not self.unread_counts.get(peer)):return
+        self._read_markers[peer]=last
+        self._read_pending.add(peer)
+        self._read_revision+=1
+        self.unread_counts.pop(peer,None)
+        self.unread_total=sum(self.unread_counts.values())
+        if self.on_unread_total_changed:self.on_unread_total_changed(self.unread_total)
+        rows=[dict(row,unread_count=self.unread_counts.get(row['login'],0)) for row in self.dialog_model.all_rows]
+        self.dialog_model.replace(rows)
+        epoch=self.scope.epoch
+        def done(response):
+            if epoch!=self.scope.epoch:return
+            self._read_pending.discard(peer)
+            self._read_revision+=1
+            if response.get('status')!='ok':self._read_markers.pop(peer,None)
+            self.load_unread_counts(force=True)
+        self.start_request(dict(action='mark_chat_read',friend_login=peer,through_id=last),done)
 
     def show_peer_profile(self):
         if self.active_friend and self.host:

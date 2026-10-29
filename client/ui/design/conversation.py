@@ -41,6 +41,9 @@ class Conversation(QWidget):
         self.unread_initialized = False
         self.rows = []
         self.history_cache = OrderedDict()
+        self.prefetched = OrderedDict()
+        self.prefetch_pending = set()
+        self.prefetch_queue = []
         self.loading = False
         self.history_loaded = False
         self.history_error = False
@@ -157,6 +160,31 @@ class Conversation(QWidget):
         if self.identity is not None:
             self.drafts[self.identity] = self.editor.toPlainText()
 
+    def prefetch(self, peers):
+        """Warm recent conversations without selecting or marking them read."""
+        for peer in peers[:20]:
+            if peer != self.identity and peer not in self.prefetched and peer not in self.history_cache and peer not in self.prefetch_pending and peer not in self.prefetch_queue:
+                self.prefetch_queue.append(peer)
+        self.prefetch_queue=self.prefetch_queue[:20]
+        self._drain_prefetch()
+
+    def _drain_prefetch(self):
+        if not getattr(self.owner,"_alive",True):return
+        while self.prefetch_queue and len(self.prefetch_pending)<2:
+            peer=self.prefetch_queue.pop(0)
+            self.prefetch_pending.add(peer)
+            epoch=self.epoch
+            token=getattr(self.owner.ctx,"session_token",None)
+            def done(response,peer=peer,epoch=epoch,token=token):
+                if epoch!=self.epoch or token!=getattr(self.owner.ctx,"session_token",None):return
+                self.prefetch_pending.discard(peer)
+                if response.get("status")=="ok" and peer!=self.identity:
+                    self.prefetched[peer]=deepcopy(response)
+                    self.prefetched.move_to_end(peer)
+                    while len(self.prefetched)>20:self.prefetched.popitem(last=False)
+                self._drain_prefetch()
+            self.request(dict(action="get_messages",to_user=peer,paged=True,limit=self.PAGE),done)
+
     def select(self, identity, name="", can_send=True):
         self.remember_draft()
         if self.identity is not None and self.history_loaded:
@@ -169,6 +197,7 @@ class Conversation(QWidget):
             self.history_cache.move_to_end(self.identity)
             while len(self.history_cache)>20:
                 self.history_cache.popitem(last=False)
+        warmed=self.prefetched.pop(identity,None)
         cached=self.history_cache.pop(identity,None)
         if cached is not None:self.history_cache[identity]=cached
         self.scope.invalidate()
@@ -199,11 +228,14 @@ class Conversation(QWidget):
             self.history_loaded=True
             self.model.replace(cached["rendered"])
             self.view.doItemsLayout()
+        if cached is None and warmed is not None:
+            self.history_loaded=True
+            self.apply(warmed.get("messages",[]),"latest",warmed)
         self.update_controls()
         if cached is not None:
             self.view.verticalScrollBar().setValue(cached["scroll"])
         if identity is not None:
-            self.load("poll" if cached is not None else "latest")
+            self.load("poll" if cached is not None or warmed is not None else "latest")
 
     def reset(self):
         self.epoch += 1
@@ -213,6 +245,9 @@ class Conversation(QWidget):
         self.retries.clear()
         self.identity = None
         self.history_cache.clear()
+        self.prefetched.clear()
+        self.prefetch_pending.clear()
+        self.prefetch_queue.clear()
         self.select(None)
 
     def payload(self, action):

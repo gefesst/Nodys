@@ -367,6 +367,26 @@ class DesignGeometryTests(unittest.TestCase):
         model.replace([dict(rows[0], online=False), rows[1]])
         self.assertEqual(changes.count(), 1)
 
+    def test_read_badge_clears_immediately_and_rejects_older_unread_response(self):
+        from ui.chats_page import ChatsPage
+        page=ChatsPage();self.addCleanup(page.close)
+        page.ctx=SimpleNamespace(login="alice",session_token="test")
+        calls=[];page.start_request=lambda data,callback:calls.append((data,callback))
+        page.unread_counts={"bob":2,"carol":1}
+        page.dialog_model.replace([{"login":"bob","unread_count":2},{"login":"carol","unread_count":1}])
+        page.conversation.rows=[{"id":4,"from_user":"bob"}]
+        totals=[];page.on_unread_total_changed=totals.append
+        page.load_unread_counts(force=True)
+        old=calls[0][1]
+        page.mark_chat_read("bob")
+        self.assertEqual(page.unread_counts,{"carol":1})
+        self.assertEqual(totals[-1],1)
+        self.assertEqual(page.dialog_model.rows[0]["unread_count"],0)
+        self.assertEqual(calls[-1][0]["through_id"],4)
+        old({"status":"ok","counts":{"bob":2,"carol":1},"total":3})
+        self.assertNotIn("bob",page.unread_counts)
+        self.assertEqual(calls[-1][0]["action"],"get_unread_counts")
+
     def test_dialog_order_uses_last_message_not_presence(self):
         from ui.chats_page import ChatsPage
         from ui.design.models import DialogModel
@@ -375,7 +395,7 @@ class DesignGeometryTests(unittest.TestCase):
             dialog_summaries={"recent": {"timestamp": "2026-10-29 14:36:00"},
                               "older": {"timestamp": "2026-10-29 14:20:00"}},
             dialog_model=DialogModel(), filter_friends=Mock(), search=SimpleNamespace(text=lambda: ""),
-            active_friend=None)
+            active_friend=None,conversation=SimpleNamespace(prefetch=Mock()))
         friends=[dict(login="older",nickname="Anna",online=True),
                  dict(login="empty",nickname="Aaron",online=True),
                  dict(login="recent",nickname="Zoe",online=False)]

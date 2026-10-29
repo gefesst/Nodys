@@ -8,7 +8,7 @@ TEXT_LIMITS = {
     'role':32, 'text_min_role':32, 'voice_min_role':32,
     'text':8000, 'message':8000,
 }
-INTEGER_LIMITS = {'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
+INTEGER_LIMITS = {'through_id':(1,2**63-1), 'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
                   'sequence':(0,2**63-1), 'after_event_id':(0,2**63-1), 'limit':(1,500)}
 
 
