@@ -101,7 +101,11 @@ class ActiveCallWindow(CallPanel):
         self.speaking_lbl.hide()
         self.quality_bars_lbl = QLabel(self)
         self.quality_bars_lbl.hide()
-        root.addSpacing(48)
+        from ui.design.microphone_check import MicrophoneMeter
+        self.voice_meter=MicrophoneMeter(130,22)
+        root.addSpacing(12)
+        root.addWidget(self.voice_meter,0,Qt.AlignHCenter)
+        root.addSpacing(14)
         btns=QHBoxLayout();btns.setSpacing(0);btns.setContentsMargins(5,0,5,0)
         self.btn_mic=RoundCallButton('Микрофон','mic')
         self.btn_sound=RoundCallButton('Звук','headphones')
@@ -160,8 +164,13 @@ class ActiveCallWindow(CallPanel):
             return
 
         if not a:
+            self.voice_meter.reset()
             return
-        me = bool(a.get("me_speaking"))
+        if not self.mic_enabled or a.get("quality")=="Переподключение":
+            self.voice_meter.reset()
+        else:
+            self.voice_meter.setAudioLevel(float(a.get("mic_level",0)))
+        me = bool(a.get("me_speaking")) and self.mic_enabled
         peer = bool(a.get("peer_speaking"))
 
         if peer and me:
@@ -232,6 +241,7 @@ class ActiveCallWindow(CallPanel):
 
     def _mic_clicked(self):
         self.mic_enabled = not self.mic_enabled
+        if not self.mic_enabled:self.voice_meter.reset()
         from ui.design.widgets import set_voice_button_state
         set_voice_button_state(self.btn_mic,"mic",self.mic_enabled)
         if self.on_mic_toggle:

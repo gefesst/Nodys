@@ -393,7 +393,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         sidebar.setObjectName("ChannelsSidebarCard")
         sidebar.setFixedWidth(220)
         sb_l = QVBoxLayout(sidebar)
-        sb_l.setContentsMargins(12, 30, 12, 20)
+        sb_l.setContentsMargins(12, 30, 12, 16)
         sb_l.setSpacing(10)
 
         eyebrow=QLabel('ПРОСТРАНСТВА');eyebrow.setObjectName('Eyebrow');eyebrow.setContentsMargins(10,0,0,0);sb_l.addWidget(eyebrow)
@@ -2469,10 +2469,16 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             self.voice_status_lbl.setText("Вы подключены к другой комнате" if self._voice_joined else "Вы не в голосовом канале")
             self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#EDF2FA;")
 
+        if joined:
+            self.voice_status_lbl.setFixedWidth(56)
+        else:
+            self.voice_status_lbl.setMinimumWidth(0)
+            self.voice_status_lbl.setMaximumWidth(16777215)
+        self.voice_status_lbl.setWordWrap(not joined)
+        self.voice_status_lbl.setFixedHeight(20 if joined else 40)
         self.voice_meter.setVisible(joined)
         if not joined or self._voice_muted:
-            self.voice_meter.samples=[0]*10
-            self.voice_meter.setValue(0)
+            self.voice_meter.reset()
         self.voice_mute_btn.setVisible(joined)
         self.voice_deafen_btn.setVisible(joined)
         self.voice_quality_lbl.setVisible(False)
@@ -2679,15 +2685,19 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
 
             reconnecting=quality == "Переподключение"
             elapsed=max(0,int(time.monotonic()-getattr(self,'_voice_started_at',time.monotonic())))
-            state="Восстанавливаем соединение…" if reconnecting else f"{elapsed//60:02}:{elapsed%60:02}"
+            state=f"{elapsed//60:02}:{elapsed%60:02}"
             if not self.viewing_connected_room():
                 self.render_rooms()
                 return
-            self.voice_meter.setAudioLevel(0 if self._voice_muted or reconnecting else float(activity.get("mic_level",0)))
+            if self._voice_muted or reconnecting:
+                self.voice_meter.reset()
+            else:
+                self.voice_meter.setAudioLevel(float(activity.get("mic_level",0)))
             self.voice_status_lbl.setText(state)
             self.voice_status_lbl.setStyleSheet('font-size:16px;font-weight:600;color:'+('#EAC184' if reconnecting else '#67D5AD')+';')
-            self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)
+            self.voice_quality_lbl.setVisible(reconnecting or latency > 150 or jitter > 60)
             self.voice_quality_lbl.setText(
+                "Восстанавливаем соединение…" if reconnecting else
                 f"Связь нестабильна · задержка {latency} мс · возможны перерывы звука"
             )
             # keep local speaking indicator fresh between server syncs

@@ -23,6 +23,10 @@ class MicrophoneMeter(QWidget):
         self.setAccessibleDescription(str(level)+'%')
         self.update()
 
+    def reset(self):
+        self.samples=[0]*10
+        self.setValue(0)
+
     def setAudioLevel(self, rms):
         # A perceptual scale keeps quiet speech visible without amplifying audio.
         import math

@@ -1,6 +1,6 @@
 """Persistent voice controls in the secondary sidebar, without shrinking chat history."""
 from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpacityEffect,QApplication
-from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve,Qt
+from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve,Qt,QTimer
 from .motion import reduced
 from .widgets import Button, set_voice_button_state
 
@@ -17,7 +17,13 @@ class VoiceDock(QFrame):
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
         self.title.setMinimumHeight(0);self.title.setFixedHeight(27);self.title.clicked.connect(main.open_voice_surface)
         layout.addWidget(self.title)
-        self.status=QLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;');layout.addWidget(self.status)
+        self.status=QLabel();self.status.setStyleSheet('font-size:12px;color:#67D5AD;')
+        from .microphone_check import MicrophoneMeter
+        self.meter=MicrophoneMeter(82,18)
+        self._meter_source=None
+        status_row=QHBoxLayout();status_row.setSpacing(8);status_row.addWidget(self.status,1);status_row.addWidget(self.meter)
+        layout.addLayout(status_row)
+        self.meter_timer=QTimer(self);self.meter_timer.setInterval(125);self.meter_timer.timeout.connect(self.update_meter)
         row=QHBoxLayout();row.setSpacing(12)
         self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');row.addWidget(self.participants,1)
         self.controls={}
@@ -54,9 +60,24 @@ class VoiceDock(QFrame):
         channel=self.main.channels_page
         muted=not panel.mic_enabled if panel else bool(getattr(channel,"_voice_muted",False))
         deafened=not panel.sound_enabled if panel else bool(getattr(channel,"_voice_deafened",False))
+        if muted:self.meter.reset()
         for symbol,off,label in (("mic",muted,"Микрофон"),("headphones",deafened,"Звук")):
             button=self.controls[symbol]
             set_voice_button_state(button,symbol,not off)
+
+    def update_meter(self):
+        panel=getattr(self.main,"call_window",None)
+        channel=self.main.channels_page
+        source=getattr(self.main,"voice_client",None) if panel else getattr(channel,"_voice_client",None)
+        muted=not panel.mic_enabled if panel else bool(getattr(channel,"_voice_muted",False))
+        if source is not self._meter_source:
+            self.meter.reset()
+            self._meter_source=source
+        if muted or source is None:
+            self.meter.reset();return
+        activity=source.get_activity() or {}
+        if activity.get('quality')=='Переподключение':self.meter.reset()
+        else:self.meter.setAudioLevel(float(activity.get('mic_level',0)))
 
     def get_progress(self):
         return self._progress
@@ -75,6 +96,10 @@ class VoiceDock(QFrame):
         if visible==self._present:
             return
         self._present=visible
+        self.meter.reset()
+        if visible:
+            self.update_meter();self.meter_timer.start()
+        else:self.meter_timer.stop()
         if not visible:
             focused=QApplication.focusWidget()
             if focused is not None and (focused is self or self.isAncestorOf(focused)):

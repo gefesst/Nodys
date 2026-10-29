@@ -198,6 +198,36 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertEqual(dock.controls["headphones"].icon_name,"headphones-off")
         self.assertTrue(dock.controls["headphones"].property("danger"))
 
+    def test_voice_meters_clear_immediately_on_mute_and_source_change(self):
+        from PySide6.QtWidgets import QWidget
+        from ui.design.voice_dock import VoiceDock
+        from ui.call_window import ActiveCallWindow
+        main=QWidget();self.addCleanup(main.close)
+        main.open_voice_surface=lambda:None;main.end_voice_surface=lambda:None
+        activity=dict(mic_level=.1,me_speaking=True)
+        source=SimpleNamespace(get_activity=lambda:activity)
+        main.call_window=None
+        main.channels_page=SimpleNamespace(_voice_muted=False,_voice_deafened=False,_voice_client=source)
+        dock=VoiceDock(main)
+        for _ in range(10):dock.update_meter()
+        self.assertTrue(all(dock.meter.samples))
+        main.channels_page._voice_muted=True;dock.sync_controls()
+        self.assertEqual(dock.meter.samples,[0]*10)
+        dock.update_meter();self.assertEqual(dock.meter.samples,[0]*10)
+        window=ActiveCallWindow('alice','bob',activity_provider=lambda:activity,parent=main)
+        self.addCleanup(window.close)
+        main.call_window=window;main.voice_client=source
+        for _ in range(10):window._update_activity();dock.update_meter()
+        self.assertTrue(any(window.voice_meter.samples))
+        window._mic_clicked();dock.sync_controls()
+        self.assertEqual(window.voice_meter.samples,[0]*10)
+        self.assertEqual(dock.meter.samples,[0]*10)
+        window._update_activity();self.assertEqual(window.voice_meter.samples,[0]*10)
+        window._mic_clicked()
+        for _ in range(10):dock.update_meter()
+        main.voice_client=SimpleNamespace(get_activity=lambda:dict(mic_level=0))
+        dock.update_meter();self.assertEqual(dock.meter.samples,[0]*10)
+
     def test_voice_dock_animation_reverses_and_reserves_bottom_space(self):
         from PySide6.QtWidgets import QWidget
         from ui.design.voice_dock import VoiceDock
