@@ -2,7 +2,7 @@
 
 import threading
 import time
-from PySide6.QtCore import QObject, Signal, QTimer, Qt, QRectF
+from PySide6.QtCore import QObject, Signal, QTimer, Qt, QRectF, QByteArray
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QHBoxLayout, QLabel, QWidget
 from .widgets import Button, ASSETS
 from PySide6.QtSvgWidgets import QSvgWidget
@@ -59,7 +59,7 @@ class MicrophoneCheck(QFrame):
         root = QHBoxLayout(self)
         root.setContentsMargins(22,16,112,16)
         root.setSpacing(16)
-        symbol=QSvgWidget(str(ASSETS/"mic.svg"));symbol.setFixedSize(22,22)
+        symbol=QSvgWidget();symbol.load(QByteArray((ASSETS/"mic.svg").read_bytes().replace(b"#ACB9CC",b"#91ADFF")));symbol.setFixedSize(22,22)
         symbol_column=QVBoxLayout();symbol_column.setContentsMargins(0,7,0,0)
         symbol_column.addWidget(symbol);symbol_column.addStretch()
         root.addLayout(symbol_column)

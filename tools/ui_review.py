@@ -27,6 +27,9 @@ def main():
     parser.add_argument("--visual-only", action="store_true")
     parser.add_argument("--section",choices=("all","profile","voice","channels","calls","messages"),default="all")
     args = parser.parse_args()
+    output=Path(args.output)
+    if output.exists() and any(output.iterdir()):
+        parser.error('Use a new empty output directory; existing evidence must not be mixed with another run.')
     lab = Sandbox(ROOT)
     # Auth must be tested through the ordinary application, not by setting UserContext.
     from config import save_config
@@ -263,6 +266,43 @@ def main():
             self.shot('42g-channel-leave-confirm');ch.hide_settings_confirm()
 
 
+        def voice_review(self,m):
+            from unittest.mock import patch
+            ch=m.channels_page
+            m.show_channels()
+            self.wait(predicate=lambda:bool(ch.channels));yield
+            ch.open_channel(ch.channels[0]);ch.switch_to_voice_tab()
+            self.wait(predicate=lambda:not ch._loading_channel_details);yield
+            remotes=[]
+            try:
+                if args.synthetic_voice:
+                    from review_support.audio import SyntheticVoiceClient
+                    for peer,_ in lab.people[:2]:
+                        assert lab.request(peer,'join_channel',code=lab.channel['code'])['status']=='ok' or peer==lab.people[0][0]
+                        remote=SyntheticVoiceClient(login=peer,token=lab.tokens[peer],host='127.0.0.1',port=lab.voice_port)
+                        remote.start(room_id=ch._voice_room_id());remotes.append((peer,remote))
+                        assert lab.request(peer,'set_channel_voice_presence',channel_id=lab.channel['id'],joined=True,speaking=False,sequence=time.time_ns())['status']=='ok'
+                    ch.load_voice_participants(force=True)
+                    self.wait(predicate=lambda:len(ch._voice_participants)>=2);yield
+                    self.shot('44-channel-voice-present')
+                m.show_settings();self.wait();yield
+                yield from self.microphone_review(m)
+                if args.synthetic_voice:
+                    ch.toggle_voice_join();self.wait(predicate=lambda:ch._voice_joined);yield
+                    ch.sync_voice_presence(force_pull=True)
+                    self.wait(predicate=lambda:len(ch._voice_participants)>=3);yield
+                    self.wait(2);yield
+                    self.shot('44b-channel-voice-active')
+                    ch.toggle_voice_mute();self.shot('44c-channel-voice-muted')
+                    with patch.object(ch._voice_client,'get_activity',return_value=dict(quality='Нестабильное',latency_ms=180,jitter_ms=80)):
+                        ch.update_voice_status();self.shot('44d-channel-voice-quality')
+                    self.visual_fixtures.append('44d-channel-voice-quality: injected quality counters; encrypted transport uses synthetic PCM')
+            finally:
+                ch.stop_voice_session()
+                for peer,remote in remotes:
+                    remote.stop()
+                    lab.request(peer,'leave_channel_voice',channel_id=lab.channel['id'],sequence=time.time_ns())
+
         def microphone_review(self,m):
             m.settings_page.check_microphone()
             mic=m.settings_page.microphone_check
@@ -383,13 +423,7 @@ def main():
                 return
             if args.section=="voice":
                 w.resize(1440,900)
-                m.show_channels()
-                self.wait(predicate=lambda:bool(m.channels_page.channels));yield
-                m.channels_page.open_channel(m.channels_page.channels[0])
-                self.wait(predicate=lambda:not m.channels_page._loading_channel_details);yield
-                m.show_settings()
-                self.wait();yield
-                yield from self.microphone_review(m)
+                yield from self.voice_review(m)
                 return
             self.wait(1)
             yield

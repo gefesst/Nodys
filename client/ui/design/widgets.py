@@ -270,7 +270,8 @@ class Button(QPushButton):
         total = width + (26 if self.icon_name else 0)
         x = 12 if self.property("align_left") else (self.width() - total) / 2
         if self.icon_name:
-            icon(p, self.icon_name, QRectF(x, (self.height() - 18) / 2, 18, 18), color)
+            symbol_color = ACC if self.icon_name == "phone" and self.isEnabled() and not self.primary and not self.property("danger") else color
+            icon(p, self.icon_name, QRectF(x, (self.height() - 18) / 2, 18, 18), symbol_color)
             x += 26
         p.setPen(QColor(color))
         p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, self.text())

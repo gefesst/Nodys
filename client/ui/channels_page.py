@@ -35,6 +35,12 @@ from settings import get_voice_endpoint
 from ui.design.motion import TransitionStack as QStackedWidget
 
 
+def participants_text(count):
+    count=int(count)
+    suffix='участник' if count%10==1 and count%100!=11 else 'участника' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'участников'
+    return f'{count} {suffix}'
+
+
 class ChannelListItem(QFrame):
     def __init__(self, channel: dict, active: bool = False, on_click=None):
         super().__init__()
@@ -83,8 +89,7 @@ class ChannelListItem(QFrame):
             or self.channel.get("members_count")
             or 0
         )
-        suffix = "участник" if participants_count % 10 == 1 and participants_count % 100 != 11 else "участника" if participants_count % 10 in (2,3,4) and participants_count % 100 not in (12,13,14) else "участников"
-        sub = QLabel(f"{participants_count} {suffix}")
+        sub = QLabel(participants_text(participants_count))
         self.setToolTip(role_text)
         sub.setObjectName("ChannelListItemSub")
         text_col.addWidget(sub)
@@ -1247,7 +1252,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.channel_name_lbl.setText(name)
         self.channel_header_avatar.set_avatar((self.active_channel or {}).get('avatar',''), nickname=name)
         count=(self.active_channel or {}).get('participants_count',(self.active_channel or {}).get('members_count'))
-        prefix=f'{count} участников · ' if count is not None else ''
+        prefix=participants_text(count)+' · ' if count is not None else ''
         self.channel_code_lbl.setText(prefix + (f'Код {code}' if code else ''))
 
     def _apply_channel_permissions_ui(self):
@@ -1724,10 +1729,10 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def _render_voice_participants(self):
         self._clear_voice_members_list()
 
-        participants = self._voice_participants or []
+        participants = sorted(self._voice_participants or [],key=lambda p:(p.get("login")==self.ctx.login,(p.get("nickname") or p.get("login","")).casefold()))
         self.voice_members_layout.setAlignment(Qt.AlignTop | (Qt.AlignLeft if participants else Qt.AlignmentFlag(0)))
         count=len(participants)
-        self.voice_members_count.setText('Нет участников' if not count else f'{count} участников')
+        self.voice_members_count.setText('Нет участников' if not count else participants_text(count))
         if not participants:
             from ui.design.state_surfaces import EmptyState
             empty=EmptyState('Пока тихо','Подключитесь к голосовому первым.')
@@ -1952,6 +1957,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 if ch:
                     # sync active channel data
                     self.active_channel = dict({**(self.active_channel or {}), **ch})
+                    self.channels=[dict(row,**ch) if row.get("id")==channel_id else row for row in self.channels]
                     self._apply_channel_header()
                     self.render_channels()
 
@@ -2374,6 +2380,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     # ------------------------------------------------------------------
     def _apply_voice_local_controls(self):
         joined = bool(self._voice_joined)
+        if not joined:
+            self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#EDF2FA;")
 
         self.voice_mute_btn.setVisible(joined)
         self.voice_deafen_btn.setVisible(joined)
@@ -2485,7 +2493,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self._voice_started_at=time.monotonic()
             self._last_voice_presence_push_ts = 0.0
             self._apply_voice_local_controls()
-            self.voice_status_lbl.setText("Вы подключены к голосовому каналу")
+            self.update_voice_status()
             self.voice_stats_timer.start()
             self.voice_presence_timer.start()
             self._apply_channel_permissions_ui()
@@ -2560,24 +2568,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             me = bool(activity.get("me_speaking", False)) and not self._voice_muted
             peer = bool(activity.get("peer_speaking", False))
 
-            if quality == "Переподключение":
-                state = "Восстанавливаем соединение…"
-            elif self._voice_deafened:
-                state = "Вы в канале (звук выключен)"
-            elif self._voice_muted and peer:
-                state = "Вы без микрофона · говорит другой участник"
-            elif self._voice_muted:
-                state = "Вы без микрофона"
-            elif me and peer:
-                state = "Вы и другие участники говорите"
-            elif me:
-                state = "Вы говорите"
-            elif peer:
-                state = "Говорит другой участник"
-            else:
-                state = "Голосовой канал подключен"
-
+            reconnecting=quality == "Переподключение"
+            elapsed=max(0,int(time.monotonic()-getattr(self,'_voice_started_at',time.monotonic())))
+            state="Восстанавливаем соединение…" if reconnecting else f"Вы подключены · {elapsed//60:02}:{elapsed%60:02}"
             self.voice_status_lbl.setText(state)
+            self.voice_status_lbl.setStyleSheet('font-size:16px;font-weight:600;color:'+('#EAC184' if reconnecting else '#67D5AD')+';')
             self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)
             self.voice_quality_lbl.setText(
                 f"Связь нестабильна · задержка {latency} мс · возможны перерывы звука"

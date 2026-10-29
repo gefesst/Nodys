@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 MAPPING = {
+    "channels-voice":"44-channel-voice-present",
     "friends-menu":"43g-friends-menu","chat-menu":"43h-chat-menu",
     "idea-new-messages":"43d-chat-new-messages","idea-offline-draft":"43e-chat-offline-draft",
     "idea-reconnected":"43f-chat-reconnected",
@@ -13,7 +14,7 @@ MAPPING = {
     "chat-unread":"43-chat-unread","chat-search":"43b-chat-search","stress-long-text":"43c-chat-long-text",
     "channels-text-empty":"42-channel-text-empty","channels-text-error":"42b-channel-text-error",
     "channels-text-denied":"42c-channel-text-denied","channels-voice-denied":"42d-channel-voice-denied",
-    "channels-voice-quality":"42e-channel-voice-quality",
+    "channels-voice-quality":"44d-channel-voice-quality",
     "call-connecting":"41-call-connecting","call-busy":"41b-call-busy",
     "call-timeout":"41c-call-timeout","call-error":"41d-call-error",
     'auth-login':'01-auth-login', 'auth-login-error':'03c-auth-login-error',
@@ -34,7 +35,7 @@ MAPPING = {
     'channels-join':'16-channel-join', 'channels-voice-empty':'14-channel-voice',
     'idea-voice-reconnect':'29e-channel-voice-reconnecting',
     'idea-mic-check':'29f-microphone-level','idea-mic-silent':'29g-microphone-silent','idea-mic-permission':'29h-microphone-permission',
-    'channels-voice-active':'29-channel-voice-active','channels-voice-muted':'29b-channel-voice-muted',
+    'channels-voice-active':'44b-channel-voice-active','channels-voice-muted':'44c-channel-voice-muted',
     'settings-loading':'16b-channel-settings-loading','settings-error':'17a-channel-settings-error',
     'settings-info':'17-channel-settings', 'settings-roles':'18b-channel-permissions',
     'settings-members':'18c-channel-members-roles', 'settings-regenerate':'17b-channel-regenerate-confirm',
@@ -51,6 +52,19 @@ MAPPING = {
 }
 
 
+def find_capture(name, folders):
+    """Return only a frame recorded by its successful run, never stale files."""
+    for candidate in folders:
+        run=candidate/'review.json'
+        if not run.exists():
+            continue
+        metadata=json.loads(run.read_text())
+        path=candidate/'sizes'/f'{name}-1440.png'
+        if metadata.get('error') is None and name in metadata.get('screens',[]) and path.exists():
+            return path
+    return None
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--references',type=Path,required=True)
@@ -65,7 +79,7 @@ def main():
         slug=item['slug'];name=MAPPING.get(slug)
         actual=None
         if name:
-            actual=next((folder/'sizes'/f'{name}-1440.png' for folder in [args.captures]+args.additional_captures if (folder/'sizes'/f'{name}-1440.png').exists()),None)
+            actual=find_capture(name,[args.captures]+args.additional_captures)
         reference=args.references/f'{slug}.png'
         record={'slug':slug,'title':item['title'],'capture':None,'visual_acceptance':'unverified'}
         folder=args.output/slug;folder.mkdir(exist_ok=True)
