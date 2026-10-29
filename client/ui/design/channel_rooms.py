@@ -82,6 +82,9 @@ class RoomNavigationMixin:
         for room in rooms:
             if room['kind']=='voice' and room['id']==self.voice_room_id:
                 room['participants']=self._voice_participants
+            # Server list snapshots can arrive after leave or after selecting another room.
+            # Only the locally confirmed connection may display our own membership.
+            room['participants']=[p for p in room.get('participants',[]) if p.get('login')!=self.ctx.login or (self._voice_joined and room['id']==self.voice_room_id)]
         for room in rooms:
             for person in room.get('participants',[]):
                 avatar=self._room_avatars.get((room['id'],person['login']))
@@ -111,14 +114,15 @@ class RoomNavigationMixin:
                 button=Button(room['name'],'hash' if kind=='text' else 'wave',primary=selected==(kind,room['id']))
                 button.setMinimumWidth(0);button.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed);button.setFixedHeight(34);button.setProperty('flat',True);button.setProperty('align_left',True)
                 button.setAccessibleName(('Текстовый ' if kind=='text' else 'Голосовой ')+room['name'])
-                button.clicked.connect(lambda _,r=dict(room):self.select_room(r));line.addWidget(button,1)
-                if self._rooms_manage:
-                    edit=Button('⋯');edit.setMinimumWidth(0);edit.setFixedSize(22,30);edit.setProperty('flat',True);edit.setAccessibleName('Переименовать '+room['name'])
-                    edit.clicked.connect(lambda _,r=dict(room):self.edit_room_dialog(room=r));line.addWidget(edit)
+                button.clicked.connect(lambda _,r=dict(room):self.select_room(r))
                 group=OccupiedRoom(room['id'] in newly_occupied) if room.get('participants') else QWidget()
                 group_layout=QVBoxLayout(group);group_layout.setContentsMargins(0,0,0,6 if room.get('participants') else 0);group_layout.setSpacing(3)
-                group_layout.addWidget(container)
-                self.rooms_layout.addWidget(group)
+                group_layout.addWidget(button)
+                line.addWidget(group,1)
+                if self._rooms_manage:
+                    edit=Button('⋯');edit.setMinimumWidth(0);edit.setFixedSize(22,34);edit.setProperty('flat',True);edit.setAccessibleName('Переименовать '+room['name'])
+                    edit.clicked.connect(lambda _,r=dict(room):self.edit_room_dialog(room=r));line.addWidget(edit,0,Qt.AlignTop)
+                self.rooms_layout.addWidget(container)
                 for person in room.get('participants',[]):
                     from ui.avatar_widget import AvatarLabel
                     member=QWidget();member_row=QHBoxLayout(member);member_row.setContentsMargins(20,2,0,2);member_row.setSpacing(6)
@@ -141,7 +145,7 @@ class RoomNavigationMixin:
                 # Complete teardown before changing the room used by presence.
                 self.stop_voice_session(show_toast=False)
                 self.voice_room_id=room['id']
-                self._voice_participants=[];self._voice_participants_signature=''
+                self._voice_participants=[p for p in room.get('participants',[]) if p.get('login')!=self.ctx.login];self._voice_participants_signature=''
                 self._render_voice_participants()
             self.switch_to_voice_tab()
         self.room_title.setText(('# ' if room['kind']=='text' else 'Голосовой · ')+room['name'])

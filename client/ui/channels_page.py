@@ -704,7 +704,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         top.setObjectName("ChannelTopBar")
         top_l = QHBoxLayout(top)
         top_l.setContentsMargins(8, 0, 0, 12)
-        top.setFixedHeight(50)
+        top.setFixedHeight(52)
         self.channel_header_avatar=AvatarLabel(32)
         top_l.addWidget(self.channel_header_avatar)
         top_l.setSpacing(14)
@@ -727,15 +727,16 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         top_l.addLayout(title_col,1)
         top_l.addStretch()
 
-        self.channel_settings_btn = QPushButton("Настройки")
+        from ui.design.widgets import Button
+        self.channel_settings_btn = Button("Настройки")
         self.channel_settings_btn.setObjectName("ChannelSecondaryButton")
-        self.channel_settings_btn.setFixedSize(120,34)
+        self.channel_settings_btn.setFixedSize(120,40)
         self.channel_settings_btn.clicked.connect(self.open_channel_settings)
         top_l.addWidget(self.channel_settings_btn)
         from ui.design.widgets import Button
         self.channel_info_btn=Button('', 'info')
         self.channel_info_btn.setProperty('flat',True)
-        self.channel_info_btn.setFixedSize(32,40)
+        self.channel_info_btn.setFixedSize(40,40)
         self.channel_info_btn.setAccessibleName('Информация о канале')
         self.channel_info_btn.clicked.connect(lambda:(self.open_channel_settings(),self.show_settings_section('general')))
         top_l.addWidget(self.channel_info_btn)
@@ -1852,8 +1853,8 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                 if self._voice_joined and self.ctx.login and not any((p.get("login") == self.ctx.login) for p in participants):
                     participants.insert(0, {
                         "login": self.ctx.login,
-                        "nickname": self.ctx.login,
-                        "avatar": "",
+                        "nickname": self.ctx.nickname or self.ctx.login,
+                        "avatar": self.ctx.avatar or "",
                         "role": (self._channel_details.get("my_role") or "member"),
                         "online": True,
                         "speaking": False,
@@ -1944,8 +1945,9 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                     speaking = False
                 self._push_voice_presence(speaking=speaking, joined=True)
 
-        # The room sidebar is visible on both text and voice screens.
-        if foreground:
+        # Initial join must populate our row even if the window has just lost focus.
+        # Periodic refresh remains limited to the visible room sidebar.
+        if foreground or force_pull:
             self.load_voice_participants(force=force_pull)
 
     # ------------------------------------------------------------------
@@ -2622,7 +2624,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self._voice_muted = False
         self._voice_deafened = False
         self._voice_participants_signature = ""
-        self._voice_participants = []
+        self._voice_participants = [p for p in self._voice_participants if p.get("login") != self.ctx.login]
         self._render_voice_participants()
         self.voice_join_btn.setText("Подключиться")
         self.voice_status_lbl.setText("Вы не в голосовом канале")

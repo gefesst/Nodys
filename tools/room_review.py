@@ -16,6 +16,7 @@ def main():
     prepare_platform_plugins()
     from PySide6.QtWidgets import QApplication,QLineEdit
     from ui.design.widgets import Button
+    from review_support import audio  # synthetic devices; real encrypted transport
     from app_window import AppWindow
     app=QApplication([])
     from application.qt_runtime import prepare_application_fonts
@@ -64,6 +65,15 @@ def main():
         assert result['status']=='ok',result
         p.select_room(voice);p.load_rooms(force=True)
         wait(lambda:bool(p._voice_participants));shot('voice-room')
+        p.toggle_voice_join();wait(lambda:p._voice_joined)
+        wait(lambda:any(person['login']==lab.me for person in p._voice_participants))
+        shot('voice-connected')
+        p.toggle_voice_join();wait(lambda:not p._voice_joined)
+        for target in (next(r for r in p._rooms if r['name']=='Встреча'),voice):
+            p.select_room(target);p.load_rooms(force=True);wait(seconds=.4)
+            assert not p._voice_joined and p._voice_client is None
+            assert not any(login==lab.me for _,login in p._room_avatars)
+        checks.append('join, leave and switch rooms without phantom self or automatic rejoin (synthetic audio)')
         p.edit_room_dialog(kind='text');wait();shot('create-room-dialog');p._room_editor.reject()
         for i in range(12):
             result=lab.request(lab.me,'create_channel_room',channel_id=cid,kind='text',name=f'тема-{i+1}')

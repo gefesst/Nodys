@@ -782,6 +782,44 @@ class DesignGeometryTests(unittest.TestCase):
             page.close()
             self.app.setStyleSheet(previous)
 
+    def test_leave_and_room_selection_do_not_restore_stale_self_presence(self):
+        from ui.channels_page import ChannelsPage
+        from ui.design.channel_rooms import OccupiedRoom
+        from ui.design.widgets import Button
+        page=ChannelsPage();self.addCleanup(page.close)
+        page.ctx=SimpleNamespace(login='me',nickname='My name',avatar='my-avatar',session_token='token')
+        page.active_channel={'id':1,'name':'Space'}
+        page.start_request=lambda *args,**kwargs:None
+        people=[dict(login='me',nickname='My name'),dict(login='other',nickname='Other')]
+        page._rooms=[dict(id=i,kind='voice',name=str(i),participants=list(people)) for i in (1,2)]
+        page._rooms_manage=True;page._voice_joined=True;page._voice_participants=list(people)
+        page._render_voice_participants()
+        group=page.rooms_panel.findChild(OccupiedRoom)
+        self.assertFalse(any(b.accessibleName().startswith('Переименовать') for b in group.findChildren(Button)))
+        page.stop_voice_session()
+        self.assertFalse(page._voice_joined)
+        self.assertEqual([p['login'] for p in page._voice_participants],['other'])
+        for room in (page._rooms[1],page._rooms[0],page._rooms[1]):
+            page.select_room(room)
+            page.render_rooms()  # Replay the old room-list snapshot after every selection.
+            self.assertFalse(page._voice_joined)
+            self.assertIsNone(page._voice_client)
+            self.assertFalse(any(login=='me' for _,login in page._room_avatars))
+            self.assertTrue(any(login=='other' for _,login in page._room_avatars))
+
+    def test_join_fallback_keeps_own_profile_avatar(self):
+        from ui.channels_page import ChannelsPage
+        page=ChannelsPage();self.addCleanup(page.close)
+        page.ctx=SimpleNamespace(login='me',nickname='My name',avatar='persisted-avatar',session_token='token')
+        page.active_channel={'id':1,'name':'Space'};page._voice_joined=True
+        callbacks=[]
+        page.start_request=lambda payload,callback,*args,**kwargs:callbacks.append(callback)
+        page.load_voice_participants(force=True)
+        callbacks[-1]({'status':'ok','participants':[]})
+        self.assertEqual(page._voice_participants[0]['nickname'],'My name')
+        self.assertEqual(page._voice_participants[0]['avatar'],'persisted-avatar')
+        page._voice_joined=False
+
     def test_room_speaking_ring_uses_same_snapshot_without_rebuilding_sidebar(self):
         from ui.channels_page import ChannelsPage
         from ui.avatar_widget import AvatarLabel
