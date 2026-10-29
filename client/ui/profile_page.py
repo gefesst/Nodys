@@ -283,6 +283,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         def apply_avatar():
             self.avatar_path=pending_avatar
             self._apply_avatar(self.avatar_path)
+            self.save_changes(avatar_only=True)
         dialog=confirm(self,'Новый аватар',
             'Новый аватар будет виден друзьям\nи участникам ваших каналов.',
             'Применить',apply_avatar)
@@ -291,13 +292,13 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         preview.move(503,58)
         preview.show()
 
-    def save_changes(self):
+    def save_changes(self, checked=False, *, avatar_only=False):
         if self._saving:return
-        changing_password = getattr(self, "_profile_section", "edit") == "password"
+        changing_password = not avatar_only and getattr(self, "_profile_section", "edit") == "password"
         if changing_password and not self.password_edit.text():
             self.show_toast("Введите новый пароль", msec=2800)
             return
-        nickname = self.nickname if changing_password else self.nickname_edit.text().strip()
+        nickname = self.nickname if changing_password or avatar_only else self.nickname_edit.text().strip()
         if not nickname:
             self.show_toast("Никнейм не может быть пустым", msec=2800)
             return

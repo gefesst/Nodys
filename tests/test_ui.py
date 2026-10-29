@@ -90,6 +90,36 @@ class UiTests(unittest.TestCase):
         self.assertTrue(p.invites_dropdown.isHidden())
         self.assertIs(p.main_stack.currentWidget(),current)
 
+    def test_avatar_apply_saves_without_submitting_other_edits(self):
+        from ui.profile_page import ProfilePage
+        from PySide6.QtWidgets import QDialog
+        page=ProfilePage('alice','Alice');self.addCleanup(page.close)
+        page.nickname_edit.setText('Unsaved nickname')
+        requests=[]
+        page.start_request=lambda data,callback:requests.append(data)
+        dialog=QDialog(page)
+        def confirm(parent,title,message,label,callback):
+            callback()
+            return dialog
+        with patch('ui.profile_page.QFileDialog.getOpenFileName',return_value=('avatar.png','')), patch('ui.profile_page.encode_avatar',return_value='avatar-payload'), patch('ui.design.dialogs.confirm',side_effect=confirm):
+            page.choose_avatar()
+        self.assertEqual(requests[0]['avatar'],'avatar-payload')
+        self.assertEqual(requests[0]['nickname'],'Alice')
+        self.assertEqual(requests[0]['password'],'')
+
+    def test_invites_close_without_moving_sidebar_heading(self):
+        p=self.page;p.resize(1120,700);p.show();self.app.processEvents()
+        p.load_channel_invites=lambda **kwargs:None
+        p.channels=[{'id':1,'name':'Test'}]
+        p.render_channels()
+        self.app.processEvents()
+        before=p.create_channel_btn.pos()
+        p._set_invites_dropdown_open(True);p.invites_animation.setCurrentTime(180)
+        self.app.processEvents()
+        p.close_invites();self.app.processEvents()
+        self.assertEqual(p.create_channel_btn.pos(),before)
+        self.assertFalse(p.invites_toggle_btn.isChecked())
+
     def test_forms_survive_empty_poll(self):
         p = self.page
         p.start_request = lambda data, callback, **kw: callback({'status':'ok','channels':[]})

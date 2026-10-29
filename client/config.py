@@ -17,7 +17,7 @@ def _locked(function):
 from typing import Any, Dict
 
 
-APP_NAME = "Nodys"
+APP_NAME = "Nodys"  # Legacy storage namespace: keep existing noda profiles and sessions.
 LEGACY_CONFIG_FILE = "config.json"  # старое расположение (cwd)
 
 

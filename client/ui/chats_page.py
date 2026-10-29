@@ -64,6 +64,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.dialogs.setUniformItemSizes(True)
         self.dialogs.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.dialogs.setMouseTracking(True)
+        self.dialogs.setResizeMode(QListView.Adjust)
+        self.dialogs.setUniformItemSizes(True)
         self.dialogs.clicked.connect(lambda index: self.open_chat(index.data(Qt.UserRole)))
         self.dialogs.activated.connect(lambda index: self.open_chat(index.data(Qt.UserRole)))
         left.addWidget(self.dialogs, 1)

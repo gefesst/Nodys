@@ -54,7 +54,7 @@ QLabel#AuthHero {font-size:44px;font-weight:700;}
 QLabel#AuthSubtitle {color:@SUB@;font-size:16px;}
 QLabel#ErrorLabel {color:@RED@;}
 QFrame#UserMiniCard {background:transparent;border:0;border-radius:10px;}
-QFrame#UserMiniCard:hover {background:#2B3B51;}
+QFrame#UserMiniCard:hover {background:rgba(43,59,81,150);}
 QLabel#UserMiniNick {font-size:10px;color:@SUB@;}
 QLabel#ProfileStatusOnline {color:@GREEN@;}
 QLabel#ProfileStatusOffline {color:@MUT@;}
@@ -83,7 +83,7 @@ QLabel#FriendItemSub {font-size:13px;}
 QLabel#ChatTitle {font-size:21px;font-weight:600;}
 QFrame#ComposerFrame {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
 QFrame#ComposerFrame[editorFocused="true"] {border-color:@ACC@;}
-QPlainTextEdit#MessageComposer {background:transparent;border:0;padding:12px 14px;min-height:0;}
+QPlainTextEdit#MessageComposer {background:transparent;border:0;padding:14px 14px 10px 14px;min-height:0;}
 
 QLabel#ReadOnlyField {background:@SURFACE@;border:1px solid @EDGE@;border-radius:9px;padding:12px 14px;color:@SUB@;}
 QLabel#FieldHeading {font-size:20px;font-weight:600;}

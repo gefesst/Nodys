@@ -438,7 +438,9 @@ class DialogDelegate(QStyledItemDelegate):
         self._avatars = OrderedDict()
 
     def sizeHint(self, o, i):
-        return QSize(300, 82)
+        view=self.parent()
+        height=view.viewport().height() if view is not None else 410
+        return QSize(300, max(64, height//5))
 
     def paint(self, p, o, index):
         d = index.data(Qt.UserRole)
@@ -453,10 +455,10 @@ class DialogDelegate(QStyledItemDelegate):
             p.drawRoundedRect(r, 11, 11)
         if selected:
             p.setBrush(QColor(ACC))
-            p.drawRoundedRect(QRectF(r.left(), r.top() + 18, 3, 38), 1.5, 1.5)
+            p.drawRoundedRect(QRectF(r.left(), r.center().y() - 19, 3, 38), 1.5, 1.5)
         n = d.get("nickname", d["login"])
         ini = self._avatar_helper._initials(n)
-        avatar(p, r.left() + 14, r.top() + 17, ini, 38, d.get("online", False))
+        avatar(p, r.left() + 14, r.center().y() - 19, ini, 38, d.get("online", False))
         if d.get("avatar"):
             key = (d["avatar"], d["login"], bool(d.get("online")))
             if key not in self._avatars:
@@ -465,10 +467,10 @@ class DialogDelegate(QStyledItemDelegate):
                 self._avatars[key] = self._avatar_helper.grab()
                 if len(self._avatars) > 128:
                     self._avatars.popitem(last=False)
-            p.drawPixmap(r.left() + 14, r.top() + 17, self._avatars[key])
+            p.drawPixmap(r.left() + 14, r.center().y() - 19, self._avatars[key])
         p.setFont(font(14, True))
         title = p.fontMetrics().elidedText(n, Qt.ElideRight, r.width() - 126)
-        draw_text(p, r.left() + 67, r.top() + 27, title, 14, FG, True)
+        draw_text(p, r.left() + 67, r.center().y() - 9, title, 14, FG, True)
         summary = d.get("summary") or {}
         preview = summary.get("text", "").replace("\n", " ")
         if preview and summary.get("outgoing"):
@@ -479,7 +481,7 @@ class DialogDelegate(QStyledItemDelegate):
         preview = p.fontMetrics().elidedText(
             preview, Qt.ElideRight, max(20, r.width() - 110)
         )
-        draw_text(p, r.left() + 67, r.top() + 51, preview, 12, SUB)
+        draw_text(p, r.left() + 67, r.center().y() + 15, preview, 12, SUB)
         timestamp = summary.get("timestamp", "")
         if timestamp:
             from datetime import datetime, timedelta
@@ -495,13 +497,13 @@ class DialogDelegate(QStyledItemDelegate):
                 )
                 p.setFont(font(11))
                 stamp_width = p.fontMetrics().horizontalAdvance(stamp)
-                draw_text(p, r.right() - 18 - stamp_width, r.top() + 27, stamp, 11, MUT)
+                draw_text(p, r.right() - 18 - stamp_width, r.center().y() - 9, stamp, 11, MUT)
             except (ValueError, TypeError):
                 pass
         count = int(d.get("unread_count", 0) or 0)
         if count:
             badge_width = 20 if count < 10 else 28
-            badge = QRectF(r.right() - 14 - badge_width, r.top() + 42, badge_width, 20)
+            badge = QRectF(r.right() - 14 - badge_width, r.center().y() + 6, badge_width, 20)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor(ACC))
             p.drawRoundedRect(badge, 10, 10)

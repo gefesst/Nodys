@@ -439,6 +439,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self.invites_badge = QLabel("")
         self.invites_badge.setObjectName("ChannelsInviteBadge")
+        self.invites_badge.setFixedHeight(20)
         self.invites_badge.setVisible(False)
         self.invites_badge.setAlignment(Qt.AlignCenter)
         self.invites_badge.setParent(self.invites_toggle_btn)
@@ -1068,6 +1069,17 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         if opened:
             self.load_channel_invites(force=True)
 
+    def close_invites(self):
+        self.invites_animation.stop()
+        with QSignalBlocker(self.invites_toggle_btn):
+            self.invites_toggle_btn.setChecked(False)
+        self.invites_dropdown.setFixedHeight(0)
+        self.invites_dropdown.hide()
+
+    def hideEvent(self, event):
+        self.close_invites()
+        super().hideEvent(event)
+
     def _finish_invites_animation(self):
         self.invites_dropdown.setVisible(self.invites_toggle_btn.isChecked())
 
@@ -1361,7 +1373,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
         self._channels_signature = digest
 
-        self.channels_scroll.setMaximumHeight(max(180, len(self.channels)*82))
+        self.channels_scroll.setMaximumHeight(16777215)
         self.channels_scroll.setUpdatesEnabled(False)
         try:
             self._clear_channels_list()

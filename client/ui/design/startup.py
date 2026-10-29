@@ -26,7 +26,7 @@ class StartupProgress(QWidget):
         self.animation.setDuration(1800)
         self.animation.setLoopCount(-1)
         self.animation.setEasingCurve(QEasingCurve.Linear)
-        self.setAccessibleName('Подключение к Nodus')
+        self.setAccessibleName('Подключение к noda')
 
     def get_phase(self):
         return self._phase
@@ -69,7 +69,7 @@ class StartupPage(QWidget):
         layout.addStretch()
         layout.addWidget(StartupMark(), 0, Qt.AlignHCenter)
         layout.addSpacing(22)
-        title = QLabel('Nodus')
+        title = QLabel('noda')
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet('font-size:30px;font-weight:600;')
         layout.addWidget(title)

@@ -1,13 +1,13 @@
-# Nodys
+# noda
 
-Python/PySide6 desktop voice chat. The Nodus 3.3 interface is implemented in `feat/nodus-approved-design` for review. The ordinary entry point remains `client/main.py`; application packaging remains deferred.
+Python/PySide6 desktop voice chat. The noda interface is implemented in `feat/nodus-approved-design` for review. The ordinary entry point remains `client/main.py`; application packaging remains deferred.
 
 ## Local preview
 
-On Windows install Python 3.13 (with the Python launcher) and open `Просмотр Nodys.cmd`. On macOS open `Просмотр Nodys.command`. Both enable TLS automatically and install pinned dependencies in `.venv`. Temporary certificates are generated without an external OpenSSL installation.
-Two clients open: Alice (channel owner) and Bob (member), with an isolated temporary database and configuration. Preview uses loopback ports 15555/15556. Close both clients to stop the servers and remove preview data. Restart the launcher after each change to see current code.
+On Windows install Python 3.13 (with the Python launcher) and open `Просмотр noda.cmd`. On macOS open `Просмотр noda.command`. Both enable TLS automatically and install pinned dependencies in `.venv`. Temporary certificates are generated without an external OpenSSL installation.
+One client opens with six sample conversations. This manual preview keeps its own local database and preferences between restarts, including profile avatars. Data lives in `noda/preview` under the OS local application-data directory and stays separate from production and disposable automated tests. TLS uses a local certificate and dynamically allocated loopback ports.
 
-Cross-platform: create a Python virtual environment, install `requirements.txt`, then run `python tools/preview.py --tls`. Use `--clients 1` for one window.
+Cross-platform: create a Python virtual environment, install `requirements.txt`, then run `python tools/live_preview.py`. For a disposable two-client test use `python tools/preview.py --tls`.
 
 ## Checks
 

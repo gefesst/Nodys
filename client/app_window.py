@@ -22,7 +22,7 @@ class AppWindow(QWidget):
     """
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Nodus")
+        self.setWindowTitle("noda")
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
         available = self.screen().availableGeometry()

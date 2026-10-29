@@ -9,7 +9,7 @@ class BrandMark(QWidget):
     def __init__(self, size=44, parent=None):
         super().__init__(parent)
         self.setFixedSize(size, size)
-        self.setAccessibleName("Nodus")
+        self.setAccessibleName("noda")
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.renderer = QSvgRenderer(str(Path(__file__).parent / "assets/logo.svg"), self)
 

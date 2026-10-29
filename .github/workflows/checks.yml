@@ -35,7 +35,7 @@ jobs:
       - run: python tools/check.py
       - name: Windows launcher and two-client TLS preview
         if: runner.os == 'Windows'
-        run: '& ".\Просмотр Nodys.cmd" --smoke-seconds 8'
+        run: '& ".\Просмотр noda.cmd" --smoke-seconds 8'
       - name: Two-client TLS preview smoke
         if: runner.os != 'Windows'
         run: python tools/preview.py --tls --smoke-seconds 8

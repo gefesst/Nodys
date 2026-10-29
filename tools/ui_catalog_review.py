@@ -107,7 +107,7 @@ def main():
         report.append(record)
         cards.append(f'<section><h2>{html.escape(item["title"])} · {slug}</h2><p>{status}</p><div>{figures}</div></section>')
     (args.output/'coverage.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
-    intro='<h1>Сверка полного каталога Nodus 3.3</h1><p>Это индекс доказательств, а не подтверждение готовности. Данные, состояние, время, системная рамка, фон и растеризация шрифтов могут различаться. Пустые строки нельзя считать проверенными.</p>'
+    intro='<h1>Сверка полного каталога noda</h1><p>Это индекс доказательств, а не подтверждение готовности. Данные, состояние, время, системная рамка, фон и растеризация шрифтов могут различаться. Пустые строки нельзя считать проверенными.</p>'
     style='<style>body{background:#18212a;color:#edf2fa;font:14px Arial;margin:24px}section{margin:36px 0}section div{display:grid;grid-template-columns:1fr 1fr;gap:16px}figure{margin:0}img{width:100%}figcaption{padding:8px}h2{font-size:20px}</style>'
     (args.output/'index.html').write_text('<!doctype html><meta charset="utf-8">'+style+intro+''.join(cards))
     print(json.dumps({'references':len(report),'mapped_captures':sum(bool(r['capture']) for r in report),'accepted':0}))

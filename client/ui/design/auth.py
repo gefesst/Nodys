@@ -23,7 +23,7 @@ def build_auth_layout(page, title, subtitle):
     hero.setSpacing(0)
     hero.addStretch(1)
     hero.addSpacing(5)
-    words = QLabel('Свои люди.<br><span style="color:#91ADFF">Рядом в Nodus.</span>')
+    words = QLabel('Свои люди.<br><span style="color:#91ADFF">Рядом в noda.</span>')
     words.setObjectName("AuthHero")
     words.setStyleSheet("font-size:48px;font-weight:700;")
     words.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)

@@ -60,6 +60,22 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertLessEqual(editor.height(),130)
         editor.clear();self.app.processEvents();self.assertEqual(editor.height(),44)
 
+    def test_five_dialogs_fit_and_sixth_scrolls_at_available_heights(self):
+        from ui.design.widgets import DialogDelegate
+        from ui.design.models import DialogModel
+        from PySide6.QtWidgets import QListView
+        view=QListView();self.addCleanup(view.close)
+        model=DialogModel(view);view.setModel(model);view.setItemDelegate(DialogDelegate(view))
+        view.setResizeMode(QListView.Adjust);view.setUniformItemSizes(True)
+        rows=[{'login':f'friend{i}','nickname':f'Friend {i}'} for i in range(6)]
+        for height in (340,500,600):
+            view.resize(310,height);view.show()
+            model.replace(rows[:5]);self.app.processEvents();view.doItemsLayout()
+            self.assertEqual(view.verticalScrollBar().maximum(),0)
+            self.assertLess(view.visualRect(model.index(4)).bottom(),view.viewport().height())
+            model.replace(rows);self.app.processEvents();view.doItemsLayout()
+            self.assertGreater(view.verticalScrollBar().maximum(),0)
+
     def test_voice_dock_controls_follow_channel_and_private_call_state(self):
         from PySide6.QtWidgets import QWidget
         from ui.design.voice_dock import VoiceDock

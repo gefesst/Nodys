@@ -5,14 +5,17 @@ from pathlib import Path
 
 
 class Sandbox:
-    def __init__(self, project, *, reference_dialogs=False):
+    def __init__(self, project, *, reference_dialogs=False, data_dir=None):
         self.project = Path(project)
-        self.folder = tempfile.TemporaryDirectory(prefix="nodus-ui-lab-")
-        self.path = Path(self.folder.name)
+        self.folder = tempfile.TemporaryDirectory(prefix="nodus-ui-lab-") if data_dir is None else None
+        self.path = Path(data_dir) if data_dir is not None else Path(self.folder.name)
+        self.path.mkdir(parents=True, exist_ok=True)
+        self.path.chmod(0o700)
+        existing = (self.path / "users.db").exists()
         self.children = []
         self.logs = []
         os.environ["NODYS_CONFIG_DIR"] = str(self.path / "config")
-        (self.path / "config").mkdir()
+        (self.path / "config").mkdir(exist_ok=True)
         sys.path.insert(0, str(self.project))
         sys.path.insert(0, str(self.project / "client"))
         sys.path.insert(0, str(self.project / "tools"))
@@ -34,38 +37,56 @@ class Sandbox:
             self.people += [("pavel", "Павел Орлов"), ("darya", "Дарья Соколова")]
         self.me = "andrey"
         for login, name in [(self.me, "Андрей")] + self.people:
-            assert server.add_user(login, secrets.token_urlsafe(20), name, "")
+            if not existing:
+                assert server.add_user(login, secrets.token_urlsafe(20), name, "")
             self.tokens[login] = server.create_session(login)[0]
-            if login != self.me:
+            if login != self.me and not existing:
                 server.send_friend_request(self.me, login)
                 server.accept_friend_request(self.me, login)
         server.set_session_offline(self.tokens["sergey"])
         if reference_dialogs:
             for peer in ("pavel", "darya"):
                 server.set_session_offline(self.tokens[peer])
-        texts = [
-            "Привет! Собрал всё в одном месте.\nПосмотри, когда будет минутка.",
-            "Сегодня проверим каналы и звонки?",
-            "Да, давай. Я уже посмотрел переписку —\nтеперь всё гораздо удобнее.",
-            "Отлично. Начнём с нашего канала,\nа потом созвонимся.",
-            "Договорились. Буду через десять минут.",
-        ]
-        for peer, _ in self.people:
-            for i, t in enumerate(texts):
-                server.save_message(
-                    self.me if i in (2, 4) else peer,
-                    peer if i in (2, 4) else self.me,
-                    t,
-                )
-        if reference_dialogs:
-            self.seed_reference_dialogs(server)
-        self.channel = server.create_channel(self.me, "Свои люди")
-        server.join_channel_by_code(self.people[0][0], self.channel["code"])
+        if not existing:
+            texts = [
+                "Привет! Собрал всё в одном месте.\nПосмотри, когда будет минутка.",
+                "Сегодня проверим каналы и звонки?",
+                "Да, давай. Я уже посмотрел переписку —\nтеперь всё гораздо удобнее.",
+                "Отлично. Начнём с нашего канала,\nа потом созвонимся.",
+                "Договорились. Буду через десять минут.",
+            ]
+            for peer, _ in self.people:
+                for i, t in enumerate(texts):
+                    server.save_message(
+                        self.me if i in (2, 4) else peer,
+                        peer if i in (2, 4) else self.me,
+                        t,
+                    )
+            if reference_dialogs:
+                self.seed_reference_dialogs(server)
+            self.channel = server.create_channel(self.me, "Свои люди")
+            server.join_channel_by_code(self.people[0][0], self.channel["code"])
+        else:
+            channels = server.list_user_channels(self.me)
+            self.channel = channels[0] if channels else {}
         self.port = self.free_port()
         self.voice_port = self.free_port(socket.SOCK_DGRAM)
         cert = self.path / "cert.pem"
         key = self.path / "key.pem"
-        create_certificate(cert, key)
+        from datetime import datetime, timedelta, timezone
+        from cryptography import x509
+        renew = not (cert.exists() and key.exists())
+        if not renew:
+            try:
+                renew = x509.load_pem_x509_certificate(cert.read_bytes()).not_valid_after_utc < datetime.now(timezone.utc) + timedelta(days=1)
+            except ValueError:
+                renew = True
+        if renew:
+            suffix=secrets.token_hex(6)
+            new_cert=self.path/f"cert-{suffix}.pem"
+            new_key=self.path/f"key-{suffix}.pem"
+            create_certificate(new_cert,new_key)
+            new_cert.replace(cert);new_key.replace(key)
         self.config = dict(
             api_host="localhost",
             api_port=self.port,
@@ -75,7 +96,8 @@ class Sandbox:
             api_ca_file=str(cert),
         )
         configfile = self.path / "config/config.json"
-        configfile.write_text(json.dumps(self.config))
+        previous = json.loads(configfile.read_text()) if configfile.exists() else {}
+        configfile.write_text(json.dumps(dict(previous, **self.config)))
         configfile.chmod(0o600)
         env = dict(
             os.environ,
@@ -164,4 +186,5 @@ class Sandbox:
                 p.wait()
         for f in self.logs:
             f.close()
-        self.folder.cleanup()
+        if self.folder is not None:
+            self.folder.cleanup()

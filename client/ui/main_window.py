@@ -39,7 +39,7 @@ class MainWindow(QWidget):
         self.is_logging_out = False
         self._is_closing = False
 
-        self.setWindowTitle("Nodys")
+        self.setWindowTitle("noda")
         # Чуть шире и немного ниже по высоте для более удобной стартовой компоновки.
         self.setMinimumSize(1080, 580)
         self.setObjectName("MainWindowRoot")
@@ -78,19 +78,19 @@ class MainWindow(QWidget):
         sidebar.setObjectName('Sidebar')
         sidebar.setFixedWidth(RAIL_WIDTH)
         menu_layout = QVBoxLayout(sidebar)
-        menu_layout.setContentsMargins(12,28,12,16)
+        menu_layout.setContentsMargins(12,16,12,16)
         menu_layout.setSpacing(0)
         from ui.design.brand import BrandMark
         brand = BrandMark(44)
         menu_layout.addWidget(brand,0,Qt.AlignHCenter)
-        menu_layout.addSpacing(12)
-        wordmark = QLabel('nodus');wordmark.setAlignment(Qt.AlignCenter)
+        menu_layout.addSpacing(6)
+        wordmark = QLabel('noda');wordmark.setAlignment(Qt.AlignCenter)
         wordmark.setFixedHeight(14);wordmark.setStyleSheet('font-size:12px;font-weight:700;color:#ACB9CC;')
         menu_layout.addWidget(wordmark)
-        menu_layout.addSpacing(16)
+        menu_layout.addSpacing(10)
         brand_separator=QFrame();brand_separator.setObjectName("Divider");brand_separator.setFixedHeight(1)
         menu_layout.addWidget(brand_separator)
-        menu_layout.addSpacing(16)
+        menu_layout.addSpacing(10)
         self.btn_friends = NavButton('Друзья','users')
         self.btn_chats = NavButton('Чаты','chat')
         self.btn_channels = NavButton('Каналы','hash')
@@ -607,6 +607,7 @@ class MainWindow(QWidget):
         self._apply_polling_policy(force=True)
 
     def show_channels(self):
+        self.channels_page.close_invites()
         self.set_active_nav(self.btn_channels)
         self.stack.setCurrentIndex(2)
         self._apply_polling_policy(force=True)

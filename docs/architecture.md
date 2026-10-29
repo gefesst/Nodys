@@ -47,7 +47,7 @@ Network and audio lifecycle work runs outside Qt. Network requests remain retain
 
 ## Development and validation
 
-Platform launchers (`Просмотр Nodys.cmd` on Windows, `Просмотр Nodys.command` on macOS) start the same isolated Alice/Bob TLS preview. Certificates are generated with the installed cryptography library; no external OpenSSL executable is required. Preview resources never belong in production packaging. Runtime dependencies are pinned. CI checks Windows, macOS and Linux, refuses skipped tests, runs the actual Windows launcher, TLS two-client process smoke, undefined-name analysis, Bandit medium/high severity checks and dependency auditing. See [audit-closeout.md](audit-closeout.md) for measured evidence and remaining external acceptance. Packaging is deferred.
+Platform launchers (`Просмотр noda.cmd` on Windows, `Просмотр noda.command` on macOS) start the same persistent local noda preview (one window, sample conversations); `--smoke-seconds` uses disposable data for CI. Certificates are generated with the installed cryptography library; no external OpenSSL executable is required. Preview resources never belong in production packaging. Runtime dependencies are pinned. CI checks Windows, macOS and Linux, refuses skipped tests, runs the actual Windows launcher, TLS two-client process smoke, undefined-name analysis, Bandit medium/high severity checks and dependency auditing. See [audit-closeout.md](audit-closeout.md) for measured evidence and remaining external acceptance. Packaging is deferred.
 
 ## Security follow-through
 

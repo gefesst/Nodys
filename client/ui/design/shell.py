@@ -39,14 +39,14 @@ class TitleBar(QWidget):
                 button.setToolTip(text);button.setAccessibleName(text)
                 button.clicked.connect(callback);row.addWidget(button)
             row.addStretch()
-            self.brand = QLabel('Nodus', self)
+            self.brand = QLabel('noda', self)
             self.brand.setObjectName('WindowBrand')
             self.brand.setAlignment(Qt.AlignCenter)
             self.brand.setAttribute(Qt.WA_TransparentForMouseEvents)
         else:
             from .brand import BrandMark
             row.addWidget(BrandMark(24))
-            logo=QLabel('Nodus');logo.setObjectName('WindowBrand');row.addWidget(logo);row.addStretch()
+            logo=QLabel('noda');logo.setObjectName('WindowBrand');row.addWidget(logo);row.addStretch()
             for text, tip, callback in [('—','Свернуть',parent.showMinimized),('□','Развернуть',self.maximize),('×','Закрыть',parent.close)]:
                 button=Button(text);button.setProperty('flat',True);button.setFixedSize(36,32)
                 button.setToolTip(tip);button.setAccessibleName(tip);button.clicked.connect(callback);row.addWidget(button)
