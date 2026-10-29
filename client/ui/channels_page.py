@@ -1678,6 +1678,17 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                     for identity in list(cache):
                         if (identity[0] if isinstance(identity,tuple) else identity) not in available:cache.pop(identity,None)
                 self.conversation.prefetch([(int(channel['id']),0) for channel in self.channels])
+                barrier = getattr(self, 'startup_barrier', None)
+                if barrier is not None and barrier.active:
+                    for channel in self.channels:
+                        cid = int(channel['id'])
+                        def prepared(response, cid=cid):
+                            if response.get('status') == 'ok':
+                                rooms = response.get('rooms', [])
+                                self._rooms_cache[cid] = (rooms, bool(response.get('can_manage')))
+                                self.conversation.prefetch([(cid, r['id']) for r in rooms if r['kind'] == 'text'])
+                        self.conversation_request(dict(action='get_channel_rooms', channel_id=cid), prepared)
+
                 self._set_channel_list_state("list" if self.channels else "empty")
 
                 # keep active channel if still exists

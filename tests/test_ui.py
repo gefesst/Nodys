@@ -484,6 +484,27 @@ class UiTests(unittest.TestCase):
         voice.stop.assert_not_called()
         window._sync_release_call_state.assert_not_called()
 
+    def test_main_stays_hidden_until_initial_reads_and_retry_is_guarded(self):
+        from app_window import AppWindow
+        window = AppWindow()
+        self.addCleanup(window.close)
+        window.show_main()
+        first = window._startup_barrier
+        self.assertGreater(first.pending, 0)
+        self.assertIs(window.stack.currentWidget(), window.resume_page)
+        first._timeout()
+        self.assertIs(window.stack.currentWidget(), window.resume_page)
+        self.assertFalse(window.resume_page.retry_button.isHidden())
+        window.show_main()
+        second = window._startup_barrier
+        self.assertIsNot(first, second)
+        self.assertGreater(second.pending, 0)
+        first.ready.emit()
+        self.assertIs(window.stack.currentWidget(), window.resume_page)
+        window.show_auth()
+        second.ready.emit()
+        self.assertIs(window.stack.currentWidget(), window.auth_page)
+
     def test_resume_cancel_ignores_late_success(self):
         from app_window import AppWindow
         from config import save_config,load_config

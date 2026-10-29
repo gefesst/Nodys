@@ -47,6 +47,7 @@ class AppWindow(QWidget):
         self._resume_token = None
         self._resume_thread = None
         self._closing = False
+        self._startup_barrier = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -196,18 +197,57 @@ class AppWindow(QWidget):
             self.stack.addWidget(self.main_page)
 
     def show_auth(self):
+        if self._startup_barrier:
+            self._startup_barrier.cancel()
         self.stack.setCurrentWidget(self.auth_page)
 
     def show_register(self):
         self.stack.setCurrentWidget(self.register_page)
 
     def show_main(self):
+        from application.startup_barrier import StartupBarrier
+        from ui.design.startup import StartupPage
         self._resume_token = None
+        if self._startup_barrier:
+            self._startup_barrier.cancel()
+        if not hasattr(self, 'resume_page'):
+            self.resume_page = StartupPage(self._cancel_resume)
+            self.stack.addWidget(self.resume_page)
+        self.resume_page.set_status('Подготавливаем переписки и каналы…')
+        self.stack.setCurrentWidget(self.resume_page)
         self._ensure_main_page()
-        # Полный рефреш main-части под текущий UserContext
+        barrier = self._startup_barrier = StartupBarrier(self)
+        token = self.ctx.session_token
+        for page in (self.main_page.friends_page, self.main_page.chats_page,
+                     self.main_page.channels_page):
+            page.startup_barrier = barrier
+
+        def current():
+            return (not self._closing and self._startup_barrier is barrier
+                    and self.ctx.session_token == token
+                    and self.stack.currentWidget() is self.resume_page)
+
+        def ready():
+            if not current():
+                return
+            self.main_page.layout().activate()
+            self.stack.setCurrentWidget(self.main_page)
+            from application.qt_runtime import present_window
+            present_window(self)
+            print('noda startup: initial data ready; main presented', flush=True)
+
+        def failed(message):
+            if current():
+                self.resume_page.set_status(message, self.show_main)
+                print('noda startup: preparation failed; retry available', flush=True)
+
+        barrier.ready.connect(ready)
+        barrier.failed.connect(failed)
+        print('noda startup: preparing initial data', flush=True)
         self.main_page.reload_from_context(full_reset=True)
-        self.stack.setCurrentWidget(self.main_page)
         self.main_page.friends_page.ensure_initial_load()
+        self.main_page.channels_page.load_channel_invites(force=True)
+        barrier.seal()
 
     def logout_to_auth(self):
         # Вызывается из MainWindow/ProfilePage
@@ -215,6 +255,8 @@ class AppWindow(QWidget):
 
     def closeEvent(self, event):
         self._closing = True
+        if self._startup_barrier:
+            self._startup_barrier.cancel()
         self._resume_token = None
         if self._resume_thread:
             self._resume_thread.abort()

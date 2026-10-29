@@ -74,7 +74,7 @@ class StartupPage(QWidget):
         title.setStyleSheet('font-size:30px;font-weight:600;')
         layout.addWidget(title)
         layout.addSpacing(10)
-        status = QLabel('Подключаемся…')
+        self.status = status = QLabel('Подключаемся…')
         status.setAlignment(Qt.AlignCenter)
         status.setStyleSheet('font-size:13px;color:#9AA9BE;')
         layout.addWidget(status)
@@ -88,3 +88,14 @@ class StartupPage(QWidget):
         self.cancel_button.clicked.connect(cancel)
         layout.addWidget(self.cancel_button, 0, Qt.AlignHCenter)
         layout.addStretch()
+
+    def set_status(self, text, retry=None):
+        self.status.setText(text)
+        self.progress.setVisible(retry is None)
+        if not hasattr(self, 'retry_button'):
+            self.retry_button = Button('Повторить')
+            self.retry_button.setFixedSize(180, 40)
+            self.retry_button.clicked.connect(lambda: self._retry() if self._retry else None)
+            self.layout().insertWidget(self.layout().count()-2, self.retry_button, 0, Qt.AlignHCenter)
+        self.retry_button.setVisible(retry is not None)
+        self._retry = retry

@@ -5,7 +5,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from application.qt_runtime import prepare_platform_plugins, prepare_application_fonts
 import sys
 from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from app_window import AppWindow
 from style_manager import apply_app_styles
 
@@ -27,6 +27,8 @@ def main():
     w = AppWindow()
     watch(w)
     w.show()
+    from application.qt_runtime import present_window
+    QTimer.singleShot(0, lambda: present_window(w))
     sys.exit(app.exec())
 
 

@@ -35,6 +35,10 @@ class ThreadSafeMixin:
                 if "from_user" not in payload and login:
                     payload["from_user"] = login
 
+        barrier = getattr(self, "startup_barrier", None)
+        if barrier is not None:
+            callback = barrier.track(action, callback)
+
         session_at_start = getattr(ctx, "session_token", None)
         t = NetworkThread(host, port, payload)
         self._threads = [item for item in self._threads if item.isRunning()]

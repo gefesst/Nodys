@@ -32,3 +32,16 @@ def prepare_application_fonts(app):
         path = directory / name
         if path.is_file():
             QFontDatabase.addApplicationFont(str(path))
+
+
+def present_window(window):
+    """Activate a user-launched window once, never from a polling timer."""
+    window.raise_()
+    window.activateWindow()
+    if sys.platform == 'darwin':
+        try:
+            from AppKit import NSRunningApplication, NSApplicationActivateIgnoringOtherApps
+            NSRunningApplication.currentApplication().activateWithOptions_(
+                NSApplicationActivateIgnoringOtherApps)
+        except ImportError:
+            pass
