@@ -344,7 +344,7 @@ class DialogDelegate(QStyledItemDelegate):
             p.setBrush(QColor(ACC))
             p.drawRoundedRect(QRectF(r.left(), r.top() + 18, 3, 38), 1.5, 1.5)
         n = d.get("nickname", d["login"])
-        ini = "".join(s[0] for s in n.split()[:2])
+        ini = self._avatar_helper._initials(n)
         avatar(p, r.left() + 14, r.top() + 17, ini, 38, d.get("online", False))
         if d.get("avatar"):
             key = (d["avatar"], d["login"], bool(d.get("online")))

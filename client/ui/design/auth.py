@@ -131,7 +131,7 @@ def field(form, title, password=False):
             )
         )
     edit.setFixedHeight(46)
-    edit.setStyleSheet("min-height:22px;max-height:22px;")
+    edit.setStyleSheet("QLineEdit {min-height:22px;max-height:22px;}")
     form.addWidget(edit)
     form.addSpacing(17)
     return edit

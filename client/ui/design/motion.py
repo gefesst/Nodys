@@ -29,6 +29,9 @@ class FocusRing(QWidget):
     def __init__(self, parent):
         super().__init__(parent)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        # Parent field styles may constrain content height; the overlay follows
+        # the entire control, including its padding and border.
+        self.setStyleSheet("min-width:0;min-height:0;max-width:16777215;max-height:16777215;padding:0;border:0;background:transparent;")
         self._level = 0.0
         self.animation = QPropertyAnimation(self, b"level", self)
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
@@ -67,6 +70,8 @@ class MotionFilter(QObject):
         if not isinstance(widget, QWidget) or getattr(widget, '_nodus_motion_watched', False):
             return
         widget._nodus_motion_watched = True
+        if isinstance(widget, (QLineEdit, QPlainTextEdit)):
+            widget.setAttribute(Qt.WA_MacShowFocusRect, False)
         widget.installEventFilter(self)
         for child in widget.findChildren(QWidget):
             self.watch(child)

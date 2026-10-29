@@ -199,7 +199,8 @@ def build(page):
 
     def field(widget, layout, width):
         take(widget, layout, width, 46)
-        widget.setStyleSheet("min-height:22px;max-height:22px;padding:11px 14px;")
+        selector = "QLineEdit" if isinstance(widget, QLineEdit) else "QLabel"
+        widget.setStyleSheet(selector + " {min-height:22px;max-height:22px;padding:11px 14px;}")
 
     general = card("settings_general_card")
     avatar = QHBoxLayout()
