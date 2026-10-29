@@ -291,23 +291,38 @@ class RequestRouter:
                 return {"status": "error", "message": msg}
             return {"status": "ok", "channel": ch} if ch else {"status": "ok"}
 
+        if action in ('get_channel_rooms','create_channel_room','rename_channel_room'):
+            cid=int(data.get('channel_id') or 0)
+            try:
+                if action=='get_channel_rooms':return dict(status='ok',**self.channels.list_rooms(current_user,cid))
+                if action=='rename_channel_room' and 'room_id' not in data:raise ValueError('Не указан канал')
+                rid=self.channels.edit_room(current_user,cid,data.get('name'),data.get('kind'),data.get('room_id') if action=='rename_channel_room' else None)
+                return dict(status='ok',room_id=rid)
+            except ValueError as error:return dict(status='error',message=str(error))
+
         if action == "get_channel_messages":
+            room_id=int(data.get("room_id",0))
             channel_id = int(data.get("channel_id") or 0)
             if channel_id <= 0:
                 return {"status": "error", "message": "Не указан канал"}
             if not self.channels.is_channel_member(channel_id, current_user):
                 return {"status": "error", "message": "Нет доступа к каналу"}
+            if not self.channels.valid_room(channel_id,room_id,"text"):
+                return dict(status="error",message="Текстовый канал не найден")
             if data.get('paged'):
                 try:
-                    return dict(status='ok', **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id')))
+                    return dict(status='ok', **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
-            msgs = self.channels.get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200))
+            msgs = self.channels.get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200),room_id=room_id)
             return {"status": "ok", "messages": msgs}
 
         if action == "send_channel_message":
+            room_id=int(data.get("room_id",0))
             channel_id = int(data.get("channel_id") or 0)
             text_msg = (data.get("text") or data.get("message") or "").strip()
+            if not self.channels.valid_room(channel_id,room_id,"text"):
+                return dict(status="error",message="Текстовый канал не найден")
             if channel_id <= 0:
                 return {"status": "error", "message": "Не указан канал"}
             if not text_msg:
@@ -318,7 +333,7 @@ class RequestRouter:
                 if not self.channels._can_send_text(conn, channel_id, current_user):
                     return {"status": "error", "message": "У вас нет прав писать в этот канал"}
             try:
-                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'))
+                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'),room_id=room_id)
             except ValueError as error:
                 return dict(status='error', code='request_conflict', message=str(error))
             return {"status": "ok"} if ok else {"status": "error", "message": "Не удалось отправить сообщение"}
@@ -385,7 +400,7 @@ class RequestRouter:
             channel_id = int(data.get("channel_id") or 0)
             speaking = bool(data.get("speaking", False))
             joined = bool(data.get("joined", True))
-            ok, msg = self.channels.set_channel_voice_presence(current_user, channel_id, speaking=speaking, joined=joined, token=token, sequence=data.get("sequence"))
+            ok, msg = self.channels.set_channel_voice_presence(current_user, channel_id, speaking=speaking, joined=joined, token=token, sequence=data.get("sequence"),room_id=data.get("room_id",1))
             return {"status": "ok"} if ok else {"status": "error", "message": msg}
 
         if action == "leave_channel_voice":
@@ -395,7 +410,7 @@ class RequestRouter:
 
         if action == "get_channel_voice_participants":
             channel_id = int(data.get("channel_id") or 0)
-            ok, msg, participants = self.channels.get_channel_voice_participants(channel_id, current_user)
+            ok, msg, participants = self.channels.get_channel_voice_participants(channel_id, current_user,room_id=data.get("room_id",1))
             if not ok:
                 return {"status": "error", "message": msg}
             return {"status": "ok", "participants": participants}

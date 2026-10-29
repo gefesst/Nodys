@@ -189,9 +189,20 @@ def _message_history(connection):
     connection.execute('CREATE INDEX idx_channel_message_cursor ON channel_messages(channel_id,timestamp,id)')
 
 
+def _channel_rooms(c):
+    c.execute("CREATE TABLE channel_rooms(channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE, id INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('text','voice')), name TEXT NOT NULL, PRIMARY KEY(channel_id,id))")
+    c.execute("INSERT INTO channel_rooms SELECT id,0,'text','основной' FROM channels")
+    c.execute("INSERT INTO channel_rooms SELECT id,1,'voice','Общий' FROM channels")
+    c.execute("ALTER TABLE channel_voice_presence ADD COLUMN room_id INTEGER NOT NULL DEFAULT 1")
+
+def _room_messages(c):
+    c.execute('ALTER TABLE channel_messages ADD COLUMN room_id INTEGER NOT NULL DEFAULT 0')
+    c.execute('CREATE INDEX idx_room_history ON channel_messages(channel_id,room_id,timestamp,id)')
+
+
 MIGRATIONS = {
-    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup)],
-    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history)],
+    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup), ('channel_rooms', _channel_rooms)],
+    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages)],
 }
 
 

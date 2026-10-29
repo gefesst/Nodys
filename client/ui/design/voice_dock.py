@@ -11,7 +11,7 @@ class VoiceDock(QFrame):
         self.setFixedSize(314,140)
         self.divider=QFrame(self);self.divider.setGeometry(0,0,314,1)
         self.divider.setStyleSheet('background:#354152;border:0;')
-        card=QFrame(self);card.setObjectName('VoiceDock');card.setGeometry(0,20,314,112)
+        card=QFrame(self);self.card=card;card.setObjectName('VoiceDock');card.setGeometry(0,20,314,112)
         card.setStyleSheet('QFrame#VoiceDock {background:#233449;border:1px solid #405A7C;border-radius:12px;}')
         layout=QVBoxLayout(card);layout.setContentsMargins(14,9,14,10);layout.setSpacing(2)
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
@@ -90,5 +90,11 @@ class VoiceDock(QFrame):
             self.animation.setEndValue(float(visible));self.animation.start()
 
     def position(self):
-        self.move(102,max(42,self.main.height()-154)+round(12*(1-self._progress)))
+        narrow=hasattr(self.main,"stack") and self.main.stack.currentWidget() is self.main.channels_page
+        width=196 if narrow else 314
+        self.setFixedWidth(width)
+        self.divider.setFixedWidth(width)
+        self.card.setGeometry(0,20,width,112)
+        self.participants.setVisible(not narrow)
+        self.move(100 if narrow else 102,max(42,self.main.height()-154)+round(12*(1-self._progress)))
         self.raise_()

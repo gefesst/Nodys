@@ -61,3 +61,22 @@ class MigrationTests(unittest.TestCase):
         migrations.migrate(self.database,'chat')
         with connect(self.database) as connection:
             self.assertEqual(connection.execute('SELECT text,is_read FROM messages').fetchone(),('keep me',0))
+
+    def test_room_upgrade_preserves_existing_history_and_presence(self):
+        chat=Path(self.folder.name)/'chat.db'
+        steps={kind:items[:-1] for kind,items in migrations.MIGRATIONS.items()}
+        with patch.dict(migrations.MIGRATIONS,steps):
+            migrations.migrate(self.database,'users')
+            migrations.migrate(chat,'chat')
+        with connect(self.database) as c:
+            c.execute("INSERT INTO channels(id,code,name,owner_login) VALUES(1,'old','Space','alice')")
+            c.execute("INSERT INTO channel_voice_presence(channel_id,login) VALUES(1,'alice')")
+        with connect(chat) as c:
+            c.execute("INSERT INTO channel_messages(channel_id,from_user,text) VALUES(1,'alice','keep history')")
+        migrations.migrate(self.database,'users')
+        migrations.migrate(chat,'chat')
+        with connect(self.database) as c:
+            self.assertEqual(c.execute('SELECT id,kind FROM channel_rooms ORDER BY id').fetchall(),[(0,'text'),(1,'voice')])
+            self.assertEqual(c.execute('SELECT login,room_id FROM channel_voice_presence').fetchone(),('alice',1))
+        with connect(chat) as c:
+            self.assertEqual(c.execute('SELECT text,room_id FROM channel_messages').fetchone(),('keep history',0))

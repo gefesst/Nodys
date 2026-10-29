@@ -17,15 +17,29 @@ def session_valid(connection, login, token):
         return False
 
 
+def voice_scope(room):
+    raw=str(room).strip().lower().removeprefix('channel:')
+    parts=raw.split(':')
+    if len(parts) not in (1,2) or any(not p.isascii() or not p.isdigit() for p in parts):return None
+    cid=int(parts[0]);rid=int(parts[1]) if len(parts)==2 else 1
+    return (cid,rid) if cid>0 and rid>0 else None
+
 def channel_id(room):
-    raw = str(room).strip().lower().removeprefix('channel:')
-    return int(raw) if raw.isascii() and raw.isdigit() and int(raw) > 0 else None
+    scope=voice_scope(room)
+    return scope[0] if scope else None
+
+def canonical_room(room):
+    scope=voice_scope(room)
+    if not scope:return None
+    cid,rid=scope
+    return f'channel:{cid}' if rid==1 else f'channel:{cid}:{rid}'
 
 
 def channel_voice_allowed(connection, login, room):
-    cid = channel_id(room)
-    if cid is None:
-        return False
+    scope=voice_scope(room)
+    if scope is None:return False
+    cid,rid=scope
+    if not connection.execute("SELECT 1 FROM channel_rooms WHERE channel_id=? AND id=? AND kind='voice'",(cid,rid)).fetchone():return False
     row = connection.execute('''SELECT c.owner_login, c.voice_min_role, m.role
         FROM channels c LEFT JOIN channel_members m ON m.channel_id=c.id AND m.login=?
         WHERE c.id=?''', (login, cid)).fetchone()

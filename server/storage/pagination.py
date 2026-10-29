@@ -8,7 +8,7 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
         raise ValueError("Unknown message table")
     allowed_where = {
         "messages": "(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)",
-        "channel_messages": "channel_id=?",
+        "channel_messages": "channel_id=? AND room_id=?",
     }
     if where != allowed_where[table]:
         raise ValueError("Unknown conversation scope")

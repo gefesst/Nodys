@@ -27,6 +27,37 @@ class ChannelService:
         self.iso = iso
         self.online_seconds = online_seconds
 
+    def valid_room(self, channel_id, room_id, kind):
+        with database_connection(self.database) as conn:
+            return bool(conn.execute("SELECT 1 FROM channel_rooms WHERE channel_id=? AND id=? AND kind=?",(channel_id,room_id,kind)).fetchone())
+
+    def list_rooms(self, login, channel_id):
+        with database_connection(self.database) as conn:
+            conn.row_factory=sqlite3.Row
+            role=self._channel_member_role(conn,channel_id,login)
+            if not role:raise ValueError('Нет доступа к пространству')
+            self._cleanup_channel_voice_presence(conn,channel_id)
+            rows=[dict(r) for r in conn.execute("SELECT id,kind,name FROM channel_rooms WHERE channel_id=? ORDER BY id",(channel_id,))]
+            for room in rows:
+                room['participants']=[dict(r) for r in conn.execute("SELECT p.login,COALESCE(u.nickname,p.login) AS nickname,COALESCE(u.avatar,'') AS avatar,p.speaking FROM channel_voice_presence p LEFT JOIN users u ON u.login=p.login WHERE p.channel_id=? AND p.room_id=? ORDER BY p.login",(channel_id,room['id']))] if room['kind']=='voice' else []
+            return dict(rooms=rows,can_manage=role in ('owner','admin'))
+
+    def edit_room(self, login, channel_id, name, kind=None, room_id=None):
+        name=(name or '').strip()
+        if not name or len(name)>64 or any(ord(c)<32 for c in name):raise ValueError('Название: от 1 до 64 символов')
+        with database_connection(self.database) as conn:
+            if not conn.in_transaction:conn.execute('BEGIN IMMEDIATE')
+            if self._channel_member_role(conn,channel_id,login) not in ('owner','admin'):raise ValueError('Управлять каналами могут владелец и администраторы')
+            if room_id is None:
+                if kind not in ('text','voice'):raise ValueError('Выберите тип канала')
+                count,maximum=conn.execute('SELECT COUNT(*),MAX(id) FROM channel_rooms WHERE channel_id=?',(channel_id,)).fetchone()
+                if count>=100:raise ValueError('Не более 100 каналов в пространстве')
+                room_id=(maximum if maximum is not None else 1)+1
+                conn.execute('INSERT INTO channel_rooms(channel_id,id,kind,name) VALUES(?,?,?,?)',(channel_id,room_id,kind,name))
+            else:
+                if not conn.execute('UPDATE channel_rooms SET name=? WHERE channel_id=? AND id=?',(name,channel_id,room_id)).rowcount:raise ValueError('Канал не найден')
+            return room_id
+
     def _generate_channel_code(self, conn: sqlite3.Connection, length: int = 8) -> str:
         alphabet = string.ascii_uppercase + string.digits
         for _ in range(20):
@@ -51,6 +82,7 @@ class ChannelService:
                 (code, channel_name[:64], avatar or "", owner_login, "member", "member", self.iso(self.now())),
             )
             channel_id = int(cur.lastrowid)
+            conn.executemany("INSERT INTO channel_rooms(channel_id,id,kind,name) VALUES(?,?,?,?)",[(channel_id,0,"text","основной"),(channel_id,1,"voice","Общий")])
             cur.execute(
                 "INSERT OR IGNORE INTO channel_members(channel_id, login, joined_at, role) VALUES(?,?,?,?)",
                 (channel_id, owner_login, self.iso(self.now()), "admin"),
@@ -257,7 +289,7 @@ class ChannelService:
             conn.commit()
             return True, "ok", None
 
-    def get_channel_messages(self, channel_id: int, limit: int = 200) -> list:
+    def get_channel_messages(self, channel_id: int, limit: int = 200, room_id=0) -> list:
         lim = max(1, min(500, int(limit or 200)))
         with database_connection(self.chat_database, timeout=10) as conn:
             conn.row_factory = sqlite3.Row
@@ -265,36 +297,36 @@ class ChannelService:
                 """
                 SELECT id, channel_id, from_user, text, timestamp AS created_at
                 FROM channel_messages
-                WHERE channel_id=?
+                WHERE channel_id=? AND room_id=?
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (int(channel_id), lim),
+                (int(channel_id), int(room_id), lim),
             ).fetchall()
             # Возвращаем в хронологическом порядке для UI.
             return [dict(r) for r in reversed(rows)]
 
-    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None):
+    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None, room_id=0):
         msg = (text or "").strip()
         if not msg:
             return False
         with database_connection(self.chat_database, timeout=10) as conn:
             if client_message_id:
-                previous = conn.execute('SELECT id,channel_id,text FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                previous = conn.execute('SELECT id,channel_id,text,room_id FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
                 if previous:
-                    if previous[1:] != (int(channel_id),msg):
+                    if previous[1:] != (int(channel_id),msg,int(room_id)):
                         raise ValueError('Идентификатор сообщения уже использован')
                     return previous[0]
-            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id) VALUES(?,?,?,?)', (int(channel_id),from_user,msg,client_message_id))
+            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id) VALUES(?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id)))
             return cursor.lastrowid
 
-    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None):
+    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0):
         try:
             from ..storage.pagination import page
         except ImportError:
             from storage.pagination import page
         with database_connection(self.chat_database) as conn:
-            return page(conn, 'channel_messages', 'channel_id=?', (int(channel_id),), limit, before_id, after_id)
+            return page(conn, 'channel_messages', 'channel_id=? AND room_id=?', (int(channel_id),int(room_id)), limit, before_id, after_id)
 
     def _normalize_member_role(self, role: str) -> str:
         r = (role or "").strip().lower()
@@ -466,7 +498,7 @@ class ChannelService:
                 (int(channel_id), threshold),
             )
 
-    def set_channel_voice_presence(self, login: str, channel_id: int, speaking: bool = False, joined: bool = True, token: str = "", sequence=None) -> Tuple[bool, str]:
+    def set_channel_voice_presence(self, login: str, channel_id: int, speaking: bool = False, joined: bool = True, token: str = "", sequence=None, room_id=1) -> Tuple[bool, str]:
         cid = int(channel_id or 0)
         if cid <= 0:
             return False, "Не указан канал"
@@ -474,6 +506,8 @@ class ChannelService:
         with database_connection(self.database, timeout=10) as conn:
             if not self.is_channel_member(cid, login):
                 return False, "Нет доступа к каналу"
+            if not self.valid_room(cid,room_id,"voice"):
+                return False,"Голосовой канал не найден"
             if joined and not self._can_join_voice(conn, cid, login):
                 return False, "У вас нет прав для входа в голосовой канал"
     
@@ -491,13 +525,14 @@ class ChannelService:
     
             conn.execute(
                 """
-                INSERT INTO channel_voice_presence(channel_id, login, speaking, last_seen)
-                VALUES(?,?,?,?)
+                INSERT INTO channel_voice_presence(channel_id, login, speaking, last_seen, room_id)
+                VALUES(?,?,?,?,?)
                 ON CONFLICT(channel_id, login) DO UPDATE SET
+                    room_id=excluded.room_id,
                     speaking=excluded.speaking,
                     last_seen=excluded.last_seen
                 """,
-                (cid, login, 1 if bool(speaking) else 0, self.iso(self.now())),
+                (cid, login, 1 if bool(speaking) else 0, self.iso(self.now()),int(room_id)),
             )
             conn.commit()
         return True, "ok"
@@ -517,7 +552,7 @@ class ChannelService:
             conn.commit()
         return True, "ok"
 
-    def get_channel_voice_participants(self, channel_id: int, login: str) -> Tuple[bool, str, List[Dict[str, Any]]]:
+    def get_channel_voice_participants(self, channel_id: int, login: str, room_id=1) -> Tuple[bool, str, List[Dict[str, Any]]]:
         cid = int(channel_id or 0)
         if cid <= 0:
             return False, "Не указан канал", []
@@ -548,10 +583,10 @@ class ChannelService:
                 FROM channel_voice_presence p
                 LEFT JOIN users u ON u.login = p.login
                 LEFT JOIN channel_members m ON m.channel_id = p.channel_id AND m.login = p.login
-                WHERE p.channel_id=?
+                WHERE p.channel_id=? AND p.room_id=?
                 ORDER BY p.speaking DESC, LOWER(COALESCE(u.nickname, p.login)) ASC, LOWER(p.login) ASC
                 """,
-                (cid,),
+                (cid,int(room_id)),
             ).fetchall()
     
             online_map = self._channel_online_map(conn)
@@ -802,7 +837,8 @@ class ChannelService:
             conn.execute("DELETE FROM channel_invites WHERE channel_id=?", (cid,))
             conn.execute("INSERT OR IGNORE INTO channel_cleanup VALUES(?)", (cid,))
             conn.execute("DELETE FROM voice_presence_versions WHERE channel_id=?", (cid,))
-            conn.execute("DELETE FROM voice_tickets WHERE room=?", (f"channel:{cid}",))
+            conn.execute("DELETE FROM voice_tickets WHERE room=? OR room LIKE ?", (f"channel:{cid}",f"channel:{cid}:%"))
+            conn.execute("DELETE FROM channel_rooms WHERE channel_id=?", (cid,))
             conn.execute("DELETE FROM channels WHERE id=?", (cid,))
             conn.commit()
     

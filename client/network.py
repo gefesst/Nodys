@@ -18,6 +18,7 @@ from settings import get_api_endpoint
 
 # Actions that require a valid session token.
 AUTH_ACTIONS = {
+    "get_channel_rooms","create_channel_room","rename_channel_room",
     "logout",
     "update_profile",
     "status",
@@ -64,6 +65,7 @@ AUTH_ACTIONS = {
 # Действия без автоповтора при сетевых ошибках.
 # Для мутаций это предотвращает дубль side-effect на сервере.
 NO_RETRY_ACTIONS = {
+    "create_channel_room","rename_channel_room",
     "register",
     "login",
     "logout",
@@ -195,7 +197,7 @@ class NetworkThread(QObject):
         self.port = port
         self.data = dict(data)
         if self.data.get('action') in {
-            'delete_channel','update_profile','send_message','send_channel_message','create_channel','join_channel',
+            'create_channel_room','rename_channel_room','delete_channel','update_profile','send_message','send_channel_message','create_channel','join_channel',
             'send_channel_invite','respond_channel_invite','update_channel_settings',
             'regenerate_channel_code','set_channel_member_role','remove_channel_member',
             'leave_channel','send_friend_request','accept_friend_request','decline_friend_request'}:

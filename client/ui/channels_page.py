@@ -321,7 +321,10 @@ class ChannelInviteItem(QFrame):
 
 
 
-class ChannelsPage(QWidget, ThreadSafeMixin):
+from ui.design.channel_rooms import RoomNavigationMixin
+
+
+class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._main_window = parent
@@ -387,15 +390,14 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         # ===== Left: channels sidebar =====
         sidebar = QFrame()
         sidebar.setObjectName("ChannelsSidebarCard")
-        from ui.design.tokens import LIST_WIDTH
-        sidebar.setFixedWidth(LIST_WIDTH)
+        sidebar.setFixedWidth(220)
         sb_l = QVBoxLayout(sidebar)
         sb_l.setContentsMargins(12, 30, 12, 20)
         sb_l.setSpacing(10)
 
         eyebrow=QLabel('ПРОСТРАНСТВА');eyebrow.setObjectName('Eyebrow');eyebrow.setContentsMargins(10,0,0,0);sb_l.addWidget(eyebrow)
-        heading=QLabel('Каналы');heading.setObjectName('PageTitle');heading.setContentsMargins(10,0,0,0);sb_l.addWidget(heading);sb_l.addSpacing(12)
-        actions_row = QHBoxLayout()
+        heading=QLabel('Пространства');heading.setObjectName('PageTitle');heading.setStyleSheet('font-size:23px;');heading.setContentsMargins(10,0,0,0);sb_l.addWidget(heading);sb_l.addSpacing(12)
+        actions_row = QVBoxLayout()
         actions_row.setContentsMargins(10,0,10,0)
         actions_row.setSpacing(10)
 
@@ -769,7 +771,12 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         nav_l.removeWidget(self.text_tab_btn);nav_l.insertWidget(0,self.text_tab_btn)
         self.text_tab_btn.setFixedSize(158,40);self.voice_tab_btn.setFixedSize(158,40)
         nav_l.addStretch()
-        ch_root.addWidget(nav)
+        nav.setParent(self.channel_page)
+        nav.hide()
+        self.room_title=QLabel("# основной")
+        self.room_title.setStyleSheet("font-size:15px;font-weight:600;padding:0 12px 12px 12px;")
+        ch_root.addWidget(self.room_title)
+        middle.addWidget(self.build_room_navigation())
 
         self.channel_inner_stack = QStackedWidget()
 
@@ -868,7 +875,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return super().start_request(data, callback, host, port)
         def identity():
             return (self.ctx.session_token, self._active_channel_id(),
-                    getattr(self, "_voice_epoch", 0) if action == "get_channel_voice_participants" else 0)
+                    (getattr(self, "_voice_epoch", 0),getattr(self,"voice_room_id",1)) if action == "get_channel_voice_participants" else 0)
         ticket = self._request_scope.capture(action, identity())
         def guarded(response):
             if self._request_scope.accepts(ticket, identity()):
@@ -952,6 +959,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._channels_signature = None
         self._invites_signature = None
         self._channels_loaded_once = False
+        if hasattr(self,"_rooms_cache"):
+            self._rooms_cache.clear();self._rooms=[];self._rooms_loading=False;self._rooms_revision+=1
+            self.text_room_id=0;self.voice_room_id=1
 
         self._create_avatar_path = ""
         self._settings_avatar_path = ""
@@ -1278,7 +1288,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
     def _voice_room_id(self) -> str:
         cid = self._active_channel_id()
-        return f"channel:{cid}" if cid > 0 else ""
+        return (f"channel:{cid}" if self.voice_room_id==1 else f"channel:{cid}:{self.voice_room_id}") if cid > 0 else ""
 
     def _apply_channel_header(self):
         name = (self.active_channel or {}).get("name", "Канал")
@@ -1523,7 +1533,13 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
 
         self._apply_channel_header()
         self.main_stack.setCurrentWidget(self.channel_page)
+        if new_id!=old_id:
+            self.text_room_id=0;self.voice_room_id=1
+        self._rooms,self._rooms_manage=self._rooms_cache.get(new_id,([dict(id=0,kind="text",name="основной",participants=[]),dict(id=1,kind="voice",name="Общий",participants=[])],False))
+        self._rooms_loading=False
         self.switch_to_text_tab()
+        self.render_rooms()
+        self.load_rooms(force=True)
         self.render_channels()
         self.load_channel_messages(force=True)
         self.load_channel_details(silent=True)
@@ -1656,8 +1672,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                 available={int(channel['id']) for channel in self.channels}
                 for cache in (self.conversation.prefetched,self.conversation.history_cache):
                     for identity in list(cache):
-                        if identity not in available:cache.pop(identity,None)
-                self.conversation.prefetch([int(channel['id']) for channel in self.channels])
+                        if (identity[0] if isinstance(identity,tuple) else identity) not in available:cache.pop(identity,None)
+                self.conversation.prefetch([(int(channel['id']),0) for channel in self.channels])
                 self._set_channel_list_state("list" if self.channels else "empty")
 
                 # keep active channel if still exists
@@ -1726,6 +1742,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.text_tab_btn.setChecked(True)
             self.voice_tab_btn.setChecked(False)
         self.channel_inner_stack.setCurrentIndex(0)
+        if hasattr(self,"rooms_panel"):self.render_rooms()
         self._apply_channel_permissions_ui()
         self.load_channel_messages(force=True)
 
@@ -1737,6 +1754,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.text_tab_btn.setChecked(False)
             self.voice_tab_btn.setChecked(True)
         self.channel_inner_stack.setCurrentIndex(1)
+        if hasattr(self,"rooms_panel"):self.render_rooms()
         self._apply_channel_permissions_ui()
         self._apply_voice_local_controls()
 
@@ -1755,8 +1773,9 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             return
         channel_id = self._active_channel_id()
         allowed = bool((self._settings_permissions or {}).get('can_send_text', True))
-        if self.conversation.identity != channel_id:
-            self.conversation.select(channel_id, self.active_channel.get('name',''), allowed)
+        identity=(channel_id,getattr(self,"text_room_id",0))
+        if self.conversation.identity != identity:
+            self.conversation.select(identity, self.active_channel.get('name',''), allowed)
         else:
             self.conversation.can_send = allowed
             self.conversation.update_controls()
@@ -1813,6 +1832,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         payload = {
             "action": "get_channel_voice_participants",
             "channel_id": channel_id,
+            "room_id":self.voice_room_id,
         }
 
         def cb(resp):
@@ -1861,6 +1881,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         payload = {
             "action": "set_channel_voice_presence",
             "channel_id": channel_id,
+            "room_id":self.voice_room_id,
             "speaking": bool(speaking),
             "joined": bool(joined),
             "sequence": voice_sequence.next(),
@@ -2441,8 +2462,8 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.voice_deafen_btn.setEnabled(joined)
 
         from ui.design.widgets import set_voice_button_state
-        set_voice_button_state(self.voice_mute_btn,"mic",not self._voice_muted,"Микрофон")
-        set_voice_button_state(self.voice_deafen_btn,"headphones",not self._voice_deafened,"Звук")
+        set_voice_button_state(self.voice_mute_btn,"mic",not self._voice_muted,"")
+        set_voice_button_state(self.voice_deafen_btn,"headphones",not self._voice_deafened,"")
         self.voice_join_btn.icon_name="end" if joined else "phone"
         main=getattr(self,"_main_window",None)
         if main is not None and hasattr(main,"voice_dock"):

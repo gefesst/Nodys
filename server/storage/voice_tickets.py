@@ -2,9 +2,9 @@
 import secrets
 import time
 try:
-    from ..domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
+    from ..domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id, canonical_room
 except ImportError:
-    from domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id
+    from domain.authorization import session_valid, channel_voice_allowed, private_call_allowed, channel_id, canonical_room
 
 LIFETIME = 3600
 
@@ -32,7 +32,7 @@ def issue(connection, login, token, room=None, peer=None):
     if room and cid is None:
         raise ValueError('Некорректный канал')
     ticket = dict(id=secrets.token_bytes(16), login=login, token=token,
-                  room=f'channel:{cid}' if cid else None, peer=peer,
+                  room=canonical_room(room) if cid else None, peer=peer,
                   client_key=secrets.token_bytes(32), server_key=secrets.token_bytes(32),
                   expires=time.time()+LIFETIME)
     if not allowed(connection, ticket):

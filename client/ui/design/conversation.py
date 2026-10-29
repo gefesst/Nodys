@@ -184,7 +184,8 @@ class Conversation(QWidget):
                     while len(self.prefetched)>20:self.prefetched.popitem(last=False)
                 self._drain_prefetch()
             data=dict(action="get_channel_messages" if self.channel else "get_messages",paged=True,limit=self.PAGE)
-            data["channel_id" if self.channel else "to_user"]=peer
+            if self.channel and isinstance(peer,tuple):data.update(channel_id=peer[0],room_id=peer[1])
+            else:data["channel_id" if self.channel else "to_user"]=peer
             self.request(data,done)
 
     def select(self, identity, name="", can_send=True):
@@ -254,6 +255,7 @@ class Conversation(QWidget):
 
     def payload(self, action):
         if self.channel:
+            if isinstance(self.identity,tuple):return dict(action=action,channel_id=self.identity[0],room_id=self.identity[1])
             return dict(action=action, channel_id=self.identity)
         return dict(action=action, to_user=self.identity)
 
