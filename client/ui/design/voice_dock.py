@@ -1,6 +1,6 @@
 """Persistent voice controls in the secondary sidebar, without shrinking chat history."""
-from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpacityEffect
-from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve
+from PySide6.QtWidgets import QFrame,QVBoxLayout,QHBoxLayout,QLabel,QGraphicsOpacityEffect,QApplication
+from PySide6.QtCore import Property,QPropertyAnimation,QEasingCurve,Qt
 from .motion import reduced
 from .widgets import Button, set_voice_button_state
 
@@ -75,6 +75,12 @@ class VoiceDock(QFrame):
         if visible==self._present:
             return
         self._present=visible
+        if not visible:
+            focused=QApplication.focusWidget()
+            if focused is not None and (focused is self or self.isAncestorOf(focused)):
+                # Move focus before hiding/removing controls from the tab chain.
+                # Qt otherwise chooses the first focusable control in the window.
+                self.main.stack.currentWidget().setFocus(Qt.OtherFocusReason)
         self.animation.stop()
         if visible:self.show()
         if reduced():

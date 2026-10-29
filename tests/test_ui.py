@@ -32,6 +32,44 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_navigation_requests_data_even_when_window_is_inactive(self):
+        from ui.main_window import MainWindow
+        from unittest.mock import Mock
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow();self.addCleanup(window.prepare_to_close_app);self.addCleanup(window.deleteLater)
+            window._window_is_active_for_polling=lambda:False
+            chats=window.chats_page;channels=window.channels_page
+            for name in ('load_unread_counts','load_friends','load_messages'):
+                setattr(chats,name,Mock())
+            window.show_chats()
+            for name in ('load_unread_counts','load_friends','load_messages'):
+                getattr(chats,name).assert_called_with(force=True)
+            channels._loading_channels=False
+            channels.load_channels=Mock();channels.load_channel_invites=Mock();channels.load_channel_messages=Mock()
+            window.show_channels()
+            channels.load_channels.assert_called_with(force_refresh=True)
+            channels.load_channel_invites.assert_called_with(force=True)
+            channels._set_invites_dropdown_open(True)
+            channels.load_channel_invites.assert_called_with(force=True)
+            channels.switch_to_text_tab()
+            channels.load_channel_messages.assert_called_with(force=True)
+
+    def test_hiding_voice_dock_preserves_selected_page_and_focus(self):
+        from ui.main_window import MainWindow
+        from PySide6.QtCore import Qt
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow();self.addCleanup(window.prepare_to_close_app);self.addCleanup(window.deleteLater)
+            window.show();window.show_chats();self.app.processEvents()
+            dock=window.voice_dock
+            dock.set_present(True);dock.animation.setCurrentTime(180)
+            dock.controls['end'].setFocus(Qt.OtherFocusReason);self.app.processEvents()
+            self.assertTrue(dock.controls['end'].hasFocus())
+            window.end_voice_surface()
+            dock.animation.setCurrentTime(180);self.app.processEvents()
+            self.assertIs(window.stack.currentWidget(),window.chats_page)
+            self.assertTrue(window.chats_page.hasFocus())
+            self.assertTrue(dock.isHidden())
+
     def test_forms_survive_empty_poll(self):
         p = self.page
         p.start_request = lambda data, callback, **kw: callback({'status':'ok','channels':[]})
@@ -259,7 +297,7 @@ class UiTests(unittest.TestCase):
         from unittest.mock import Mock
         from ui.main_window import MainWindow
         voice=Mock()
-        window=SimpleNamespace(btn_friends=object(),friends_page=object(),stack=Mock(),
+        window=SimpleNamespace(btn_friends=object(),friends_page=Mock(),stack=Mock(),
             set_active_nav=Mock(),_apply_polling_policy=Mock(),voice_client=voice,
             _sync_release_call_state=Mock(),_close_call_window=Mock(),_current_call_peer=lambda:'bob')
         MainWindow.show_friends(window)

@@ -589,6 +589,7 @@ class MainWindow(QWidget):
     def show_friends(self):
         self.set_active_nav(self.btn_friends)
         self.stack.setCurrentWidget(self.friends_page)
+        self.friends_page.ensure_initial_load()
 
         self._apply_polling_policy(force=True)
 
@@ -596,6 +597,9 @@ class MainWindow(QWidget):
     def show_chats(self):
         self.set_active_nav(self.btn_chats)
         self.stack.setCurrentWidget(self.chats_page)
+        self.chats_page.load_unread_counts(force=True)
+        self.chats_page.load_friends(force=True)
+        self.chats_page.load_messages(force=True)
         self._apply_polling_policy(force=True)
 
     def show_channels(self):
@@ -605,6 +609,8 @@ class MainWindow(QWidget):
         # Explicit navigation must load once even before the OS reports focus.
         if not self.channels_page._loading_channels:
             self.channels_page.load_channels(force_refresh=True)
+        self.channels_page.load_channel_invites(force=True)
+        self.channels_page.load_channel_messages(force=True)
 
 
     def show_profile(self):

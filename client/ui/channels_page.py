@@ -1059,6 +1059,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.invites_dropdown.setVisible(True)
         if opened:
             self.main_stack.setCurrentWidget(self.invites_page)
+            self.load_channel_invites(force=True)
         elif self.main_stack.currentWidget() == self.invites_page:
             self.main_stack.setCurrentWidget(self.placeholder_page)
 
@@ -1698,6 +1699,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
             self.voice_tab_btn.setChecked(False)
         self.channel_inner_stack.setCurrentIndex(0)
         self._apply_channel_permissions_ui()
+        self.load_channel_messages(force=True)
 
         if self.active_channel and self.main_stack.currentWidget() == self.channel_page and not self.messages_timer.isActive():
             self.messages_timer.start()

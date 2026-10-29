@@ -126,7 +126,7 @@ class OverlayDialog(QDialog):
         self.shade.hide()
         if self.previous_focus is not None:
             try:
-                self.previous_focus.setFocus(Qt.OtherFocusReason)
+                self.previous_focus.setFocus(Qt.OtherFocusReason) if self.previous_focus.isVisible() and self.previous_focus.isEnabled() else None
             except RuntimeError:
                 pass
 

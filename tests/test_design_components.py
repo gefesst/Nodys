@@ -107,6 +107,20 @@ class DesignGeometryTests(unittest.TestCase):
             for x,y in [(500,20),(10,300),(100,300),(500,300)]:
                 self.assertEqual(image.pixelColor(x,y).alpha(),expected)
 
+    def test_page_transition_fades_without_translating_snapshot(self):
+        from ui.design.motion import PageOverlay
+        from PySide6.QtWidgets import QWidget
+        from PySide6.QtGui import QPixmap
+        from unittest.mock import patch
+        host=QWidget();host.resize(200,100);self.addCleanup(host.close)
+        overlay=PageOverlay(host,QPixmap(200,100));overlay.animation.stop()
+        for progress in (0.0,0.5,1.0):
+            overlay.set_progress(progress)
+            with patch('ui.design.motion.QPainter') as painter:
+                overlay.paintEvent(None)
+                self.assertEqual(painter.return_value.drawPixmap.call_args.args[:2],(0,0))
+                painter.return_value.setOpacity.assert_called_with(1-progress)
+
     def test_first_friends_load_runs_with_polling_disabled_without_restarting_timer(self):
         from unittest.mock import patch
         from ui.friends_page import FriendsPage

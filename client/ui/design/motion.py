@@ -115,7 +115,7 @@ class PageOverlay(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setOpacity(1 - self._progress)
-        painter.drawPixmap(int(-8 * self._progress), 0, self.pixmap)
+        painter.drawPixmap(0, 0, self.pixmap)
 
 
 from PySide6.QtWidgets import QStackedWidget

@@ -103,7 +103,7 @@ class ActionMenu(QFrame):
     def closeEvent(self,event):
         QApplication.instance().removeEventFilter(self)
         try:
-            if self.previous_focus is not None:self.previous_focus.setFocus(Qt.OtherFocusReason)
+            if self.previous_focus is not None:self.previous_focus.setFocus(Qt.OtherFocusReason) if self.previous_focus.isVisible() and self.previous_focus.isEnabled() else None
         except RuntimeError:
             pass
         super().closeEvent(event)
