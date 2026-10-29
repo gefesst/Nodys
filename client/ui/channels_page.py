@@ -2586,7 +2586,6 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             self.voice_presence_timer.start()
             self._apply_channel_permissions_ui()
             self.sync_voice_presence(force_pull=True)
-            self.show_toast("Подключено к голосовому каналу")
 
         def failed(message):
             if self._voice_client is not voice:
@@ -2641,8 +2640,6 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self._apply_channel_permissions_ui()
         self._apply_voice_local_controls()
 
-        if show_toast:
-            self.show_toast("Вы вышли из голосового канала")
 
     def update_voice_status(self):
         if not self._voice_joined or self._voice_client is None:

@@ -544,6 +544,10 @@ class Conversation(QWidget):
         self.pending[identity] = message_id
         data = self.payload("send_channel_message" if self.channel else "send_message")
         data.update(text=text, client_message_id=message_id, request_id=message_id)
+        # Disabling a focused send button lets Qt advance to an unrelated control.
+        # Return focus as part of the user action, never from a delayed reply.
+        if self.editor.isVisible():
+            self.editor.setFocus(Qt.OtherFocusReason)
         self.update_controls()
 
         def done(response):
@@ -570,15 +574,11 @@ class Conversation(QWidget):
                     ):
                         self.editor.clear()
                     self.load("latest")
-            message = (
-                "Сообщение отправлено"
-                if success
-                else response.get(
-                    "message",
-                    "Не удалось отправить. Текст сохранён — повторите отправку.",
-                )
+            message = response.get(
+                "message", "Не удалось отправить. Текст сохранён — повторите отправку."
             )
-            self.notice.emit(message)
+            if not success:
+                self.notice.emit(message)
             self.update_controls()
             if not success and self.identity == identity:
                 if response.get('code') == 'network_error':

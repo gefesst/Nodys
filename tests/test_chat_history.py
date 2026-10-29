@@ -331,6 +331,42 @@ class ConversationTests(unittest.TestCase):
         self.assertFalse(self.chat.loading)
         self.assertFalse(self.chat.history_error)
 
+    def test_send_keeps_editor_focus_and_late_ack_does_not_steal_it(self):
+        from PySide6.QtWidgets import QVBoxLayout,QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        layout=QVBoxLayout(self.owner);layout.addWidget(self.chat)
+        other=QPushButton('+');layout.addWidget(other)
+        self.owner.show();self.owner.activateWindow();self.app.processEvents()
+        notices=[];self.chat.notice.connect(notices.append)
+        for channel in (False,True):
+            self.chat.channel=channel
+            self.chat.select((1,0) if channel else 'bob','Test')
+            self.requests[-1][1](self.response())
+            self.chat.editor.setPlainText('send by button')
+            self.chat.send_button.setFocus();self.app.processEvents()
+            self.chat.send_button.click()
+            self.assertTrue(self.chat.editor.hasFocus())
+            callback=self.requests[-1][1]
+            callback(dict(status='ok'))
+            self.requests[-1][1](self.response())
+            self.app.processEvents()
+            self.assertTrue(self.chat.editor.hasFocus())
+            self.assertEqual(notices,[])
+            self.chat.editor.setPlainText('send by enter')
+            QTest.keyClick(self.chat.editor,Qt.Key_Return)
+            callback=self.requests[-1][1]
+            self.assertTrue(self.chat.editor.hasFocus())
+            other.setFocus();self.app.processEvents()
+            callback(dict(status='ok'))
+            self.requests[-1][1](self.response())
+            self.app.processEvents()
+            self.assertTrue(other.hasFocus())
+            self.assertEqual(notices,[])
+            # Polling must preserve an intentionally chosen focus as well.
+            self.chat.load('poll');self.requests[-1][1](self.response())
+            self.assertTrue(other.hasFocus())
+
     def test_failed_send_retains_draft_and_reuses_identity(self):
         self.select("bob")
         self.chat.editor.setPlainText("first\nsecond")
