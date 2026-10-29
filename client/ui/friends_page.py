@@ -324,7 +324,16 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
     def showEvent(self, event):
         super().showEvent(event)
-        QTimer.singleShot(0, self.refresh)
+        QTimer.singleShot(0, self.ensure_initial_load)
+
+    def ensure_initial_load(self):
+        """Initial authenticated data is independent of background polling policy."""
+        if not self._alive or not self.ctx.login:
+            return
+        if not self._has_loaded_friends_once:
+            self.load_friends()
+        if not self._has_loaded_requests_once:
+            self.load_requests()
 
     def closeEvent(self, event):
         self._alive = False

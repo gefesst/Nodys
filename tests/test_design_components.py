@@ -107,6 +107,24 @@ class DesignGeometryTests(unittest.TestCase):
             for x,y in [(500,20),(10,300),(100,300),(500,300)]:
                 self.assertEqual(image.pixelColor(x,y).alpha(),expected)
 
+    def test_first_friends_load_runs_with_polling_disabled_without_restarting_timer(self):
+        from unittest.mock import patch
+        from ui.friends_page import FriendsPage
+        with patch.object(FriendsPage,"start_request") as request:
+            page=FriendsPage();self.addCleanup(page.close)
+            page.ctx=SimpleNamespace(login="alice")
+            page.set_polling_enabled(False)
+            page.ensure_initial_load()
+            self.assertEqual([call.args[0]["action"] for call in request.call_args_list],
+                             ["get_friends","get_friend_requests"])
+            self.assertFalse(page.timer.isActive())
+            page.ensure_initial_load()
+            self.assertEqual(request.call_count,2)
+            request.call_args_list[0].args[1]({"status":"ok","friends":[{"login":"bob","nickname":"Bob"}]})
+            self.assertFalse(page._skeleton_visible)
+            page.ensure_initial_load()
+            self.assertEqual(request.call_count,2)
+
     def test_friends_render_without_waiting_for_requests(self):
         from unittest.mock import patch
         from ui.friends_page import FriendsPage, FriendItem

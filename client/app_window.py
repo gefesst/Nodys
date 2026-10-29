@@ -196,6 +196,7 @@ class AppWindow(QWidget):
         # Полный рефреш main-части под текущий UserContext
         self.main_page.reload_from_context(full_reset=True)
         self.stack.setCurrentWidget(self.main_page)
+        self.main_page.friends_page.ensure_initial_load()
 
     def logout_to_auth(self):
         # Вызывается из MainWindow/ProfilePage
