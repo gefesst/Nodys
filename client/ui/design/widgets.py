@@ -282,7 +282,9 @@ class Button(QPushButton):
             color = "#7C8A9D"
         p.setFont(self.font())
         width = p.fontMetrics().horizontalAdvance(self.text())
-        total = width + (26 if self.icon_name else 0)
+        # The 8 px gap belongs between an icon and its label. Reserving it
+        # for icon-only buttons shifts every symbol 4 px left of its centre.
+        total = width + ((18 + (8 if self.text() else 0)) if self.icon_name else 0)
         x = 12 if self.property("align_left") else (self.width() - total) / 2
         if self.icon_name:
             symbol_color = ACC if self.icon_name == "phone" and self.isEnabled() and not self.primary and not self.property("danger") else color

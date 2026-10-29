@@ -63,6 +63,23 @@ class DesignGeometryTests(unittest.TestCase):
         label.resize(900,30);self.app.processEvents()
         self.assertEqual(label.text(),label.full_text)
 
+    def test_icon_only_buttons_paint_at_their_actual_center(self):
+        from unittest.mock import patch
+        from ui.design.widgets import Button
+        for symbol, width, height in (
+            ('n', 44, 44), ('keyboard', 40, 40), ('settings', 40, 40),
+            ('info', 32, 40), ('send', 38, 38),
+        ):
+            with self.subTest(symbol=symbol):
+                button = Button('', symbol)
+                button.setFixedSize(width, height)
+                with patch('ui.design.widgets.icon') as paint_icon:
+                    button.grab()
+                rect = paint_icon.call_args.args[2]
+                self.assertEqual(rect.center().x(), width / 2)
+                self.assertEqual(rect.center().y(), height / 2)
+                button.close()
+
     def test_dialog_poll_preserves_search_selection_and_accessibility_index(self):
         from PySide6.QtWidgets import QListView
         from PySide6.QtCore import QPersistentModelIndex
