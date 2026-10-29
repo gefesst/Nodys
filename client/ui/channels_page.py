@@ -2469,6 +2469,10 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             self.voice_status_lbl.setText("Вы подключены к другой комнате" if self._voice_joined else "Вы не в голосовом канале")
             self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#EDF2FA;")
 
+        self.voice_meter.setVisible(joined)
+        if not joined or self._voice_muted:
+            self.voice_meter.samples=[0]*10
+            self.voice_meter.setValue(0)
         self.voice_mute_btn.setVisible(joined)
         self.voice_deafen_btn.setVisible(joined)
         self.voice_quality_lbl.setVisible(False)
@@ -2675,10 +2679,11 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
 
             reconnecting=quality == "Переподключение"
             elapsed=max(0,int(time.monotonic()-getattr(self,'_voice_started_at',time.monotonic())))
-            state="Восстанавливаем соединение…" if reconnecting else f"Вы подключены · {elapsed//60:02}:{elapsed%60:02}"
+            state="Восстанавливаем соединение…" if reconnecting else f"{elapsed//60:02}:{elapsed%60:02}"
             if not self.viewing_connected_room():
                 self.render_rooms()
                 return
+            self.voice_meter.setAudioLevel(0 if self._voice_muted or reconnecting else float(activity.get("mic_level",0)))
             self.voice_status_lbl.setText(state)
             self.voice_status_lbl.setStyleSheet('font-size:16px;font-weight:600;color:'+('#EAC184' if reconnecting else '#67D5AD')+';')
             self.voice_quality_lbl.setVisible(latency > 150 or jitter > 60)

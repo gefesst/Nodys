@@ -250,24 +250,20 @@ class SettingsPage(QWidget):
                 self.saved_status.setText('Проверка останавливается. Повторите через секунду.')
                 return
             previous.deleteLater()
-        channels=self.main.channels_page
-        if channels.active_channel:
-            self.main.show_channels()
-            channels.close_channel_settings()
-            channels.switch_to_voice_tab()
-            self.microphone_check=MicrophoneCheck(channels.voice_microphone_host)
-            channels.voice_content.setMinimumHeight(560)
-            self.microphone_check.closed.connect(lambda:channels.voice_content.setMinimumHeight(0))
-            self.microphone_check.closed.connect(channels.voice_microphone_host.hide)
-            channels.voice_microphone_layout.addWidget(self.microphone_check)
-            channels.voice_microphone_host.show()
-        else:
-            self.microphone_check=MicrophoneCheck(self.microphone_host)
-            self.microphone_layout.addWidget(self.microphone_check)
-            self.microphone_host.show()
-        self.microphone_check.show()
-        if not channels.active_channel:
-            QTimer.singleShot(0,lambda:self.scroll.ensureWidgetVisible(self.microphone_check))
+        self.microphone_check=MicrophoneCheck(self.microphone_host)
+        self.microphone_check.setMaximumWidth(860)
+        panel=self.microphone_check
+        def closed():
+            from PySide6.QtWidgets import QApplication
+            focused=QApplication.focusWidget()
+            if focused is panel or (focused is not None and panel.isAncestorOf(focused)):
+                self.microphone_button.setFocus(Qt.MouseFocusReason)
+            self.microphone_host.hide()
+        panel.closed.connect(closed)
+        self.microphone_layout.addWidget(panel)
+        self.microphone_host.show()
+        panel.show()
+        QTimer.singleShot(0,lambda:self.scroll.ensureWidgetVisible(panel))
 
     def set_reduced_motion(self, value):
         from PySide6.QtWidgets import QApplication

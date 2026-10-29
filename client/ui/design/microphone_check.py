@@ -11,9 +11,9 @@ from PySide6.QtGui import QPainter, QColor
 
 class MicrophoneMeter(QWidget):
     """Ten sample bars, matching the approved microphone-check indicator."""
-    def __init__(self):
+    def __init__(self, width=160, height=52):
         super().__init__()
-        self.setFixedSize(160,52)
+        self.setFixedSize(width,height)
         self.samples=[0]*10
         self.setAccessibleName('Уровень микрофона')
 
@@ -23,13 +23,19 @@ class MicrophoneMeter(QWidget):
         self.setAccessibleDescription(str(level)+'%')
         self.update()
 
+    def setAudioLevel(self, rms):
+        # A perceptual scale keeps quiet speech visible without amplifying audio.
+        import math
+        level=0 if rms <= 0 else (20*math.log10(rms)+60)/45*100
+        self.setValue(level)
+
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for index,level in enumerate(self.samples):
-            height=max(4,26*level/100)
+            height=max(3,(self.height()-4)*level/100)
             painter.setBrush(QColor('#67D5AD' if level>1 else '#3C4E66'))
-            painter.drawRoundedRect(QRectF(index*17,29-height,6,height),3,3)
+            painter.drawRoundedRect(QRectF(index*(self.width()-6)/9,(self.height()-height)/2,6,height),3,3)
 
 
 class MeterSignals(QObject):
@@ -46,6 +52,7 @@ class MicrophoneCheck(QFrame):
         self.setWindowTitle("Проверка микрофона")
         self.setObjectName("MicrophoneCheck")
         self.setMinimumHeight(105)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("QFrame#MicrophoneCheck {background:#202D3D;border:1px solid #354152;border-radius:12px;}")
         self.stop_event = threading.Event()
         self.level = 0
@@ -57,7 +64,7 @@ class MicrophoneCheck(QFrame):
         self.signals.finished.connect(self.completed)
         self.signals.ready.connect(self.listening)
         root = QHBoxLayout(self)
-        root.setContentsMargins(22,16,112,16)
+        root.setContentsMargins(18,16,18,16)
         root.setSpacing(16)
         symbol=QSvgWidget();symbol.load(QByteArray((ASSETS/"mic.svg").read_bytes().replace(b"#ACB9CC",b"#91ADFF")));symbol.setFixedSize(22,22)
         symbol_column=QVBoxLayout();symbol_column.setContentsMargins(0,7,0,0)
@@ -79,18 +86,21 @@ class MicrophoneCheck(QFrame):
         self.start_button.clicked.connect(self.start)
         root.addWidget(self.start_button)
         stop=Button('', 'close');stop.setFixedSize(28,28);stop.setAccessibleName('Остановить проверку микрофона')
-        stop.clicked.connect(self.close);stop.setParent(self);self.stop_button=stop
+        stop.setFocusPolicy(Qt.NoFocus)
+        stop.clicked.connect(self.close);self.stop_button=stop
+        root.addWidget(stop,0,Qt.AlignVCenter)
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_meter)
 
-    def resizeEvent(self,event):
-        super().resizeEvent(event)
-        self.stop_button.move(self.width()-46,(self.height()-28)//2)
+    def _hide_start_button(self):
+        if self.start_button.hasFocus():
+            self.setFocus(Qt.MouseFocusReason)
+        self.start_button.hide()
 
     def listening(self):
         self.failed_state = False
-        self.start_button.hide()
+        self._hide_start_button()
         self.meter.show()
         self.last_signal = time.monotonic()
         self.title.setText("Проверка микрофона")
@@ -99,7 +109,7 @@ class MicrophoneCheck(QFrame):
     def update_meter(self):
         self.meter.setValue(self.level)
         if self.level > 1:
-            self.start_button.hide()
+            self._hide_start_button()
             self.last_signal = time.monotonic()
             self.title.setText("Проверка микрофона")
             self.status.setText("Скажите несколько слов — индикатор покажет уровень.")

@@ -714,6 +714,32 @@ class DesignGeometryTests(unittest.TestCase):
         panel.resize(900,600);self.app.processEvents()
         self.assertEqual(panel.layout().contentsMargins().top(),158)
 
+    def test_microphone_panel_keeps_focus_off_close_and_meter_within_bounds(self):
+        from ui.design.microphone_check import MicrophoneCheck, MicrophoneMeter
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QWidget, QVBoxLayout
+        host=QWidget();layout=QVBoxLayout(host);panel=MicrophoneCheck(host);layout.addWidget(panel)
+        host.resize(640,180);host.show();host.activateWindow()
+        self.addCleanup(host.close);self.app.processEvents()
+        panel.start_button.setFocus(Qt.TabFocusReason)
+        panel.listening();self.app.processEvents()
+        self.assertFalse(panel.stop_button.hasFocus())
+        self.assertTrue(panel.hasFocus())
+        self.assertEqual(panel.stop_button.focusPolicy(),Qt.NoFocus)
+        for width in (520,640,860):
+            host.resize(width,180);self.app.processEvents()
+            self.assertLess(panel.meter.geometry().right(),panel.stop_button.geometry().left())
+            self.assertLessEqual(panel.stop_button.geometry().right(),panel.width()-16)
+        meter=MicrophoneMeter(130,20)
+        meter.setValue(50)
+        self.assertEqual(meter.samples[-1],50)
+        meter.setAudioLevel(.015)
+        self.assertGreater(meter.samples[-1],40)
+        meter.setAudioLevel(0)
+        self.assertEqual(meter.samples[-1],0)
+        self.assertEqual(meter.size().width(),130)
+        meter.close()
+
     def test_microphone_silence_recovers_and_permission_error_survives_completion(self):
         from ui.design.microphone_check import MicrophoneCheck
         from unittest.mock import patch
