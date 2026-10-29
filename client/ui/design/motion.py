@@ -70,7 +70,7 @@ class MotionFilter(QObject):
         if not isinstance(widget, QWidget) or getattr(widget, '_nodus_motion_watched', False):
             return
         widget._nodus_motion_watched = True
-        if isinstance(widget, (QLineEdit, QPlainTextEdit)):
+        if isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit)):
             widget.setAttribute(Qt.WA_MacShowFocusRect, False)
         widget.installEventFilter(self)
         for child in widget.findChildren(QWidget):
@@ -85,7 +85,7 @@ class MotionFilter(QObject):
                         QEvent.FocusOut, QEvent.Resize, QEvent.Show):
             return False
         if (not hasattr(widget,"_keyboard_focus") and not widget.property("no_focus_ring")
-            and isinstance(widget, (QPushButton, QLineEdit, QPlainTextEdit))) and kind in (
+            and isinstance(widget, (QLineEdit, QPlainTextEdit))) and kind in (
             QEvent.Enter,
             QEvent.Leave,
             QEvent.FocusIn,

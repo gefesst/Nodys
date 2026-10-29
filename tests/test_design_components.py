@@ -147,6 +147,29 @@ class DesignGeometryTests(unittest.TestCase):
             self.assertEqual(button.size().toTuple(),(52,52))
             self.assertEqual(button.sizeHint().toTuple(),(52,52))
 
+    def test_buttons_do_not_acquire_a_second_hover_or_focus_outline(self):
+        from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout
+        from PySide6.QtCore import QEvent, Qt
+        from PySide6.QtGui import QFocusEvent
+        from ui.design.motion import MotionFilter, FocusRing
+        from ui.design.widgets import Button, RoundCallButton
+        from ui.design.shell import NavButton
+        from ui.design.action_menu import MenuButton
+        host=QWidget();layout=QVBoxLayout(host)
+        controls=[QPushButton('Подключиться'),QPushButton('Создать'),
+                  Button('Сохранить'),Button('', 'send', True),
+                  RoundCallButton('Микрофон','mic'),NavButton('Друзья','users'),
+                  MenuButton('Копировать')]
+        for button in controls:layout.addWidget(button)
+        controller=MotionFilter(host);controller.watch(host)
+        host.show();self.app.processEvents();self.addCleanup(host.close)
+        for button in controls:
+            for event in (QEvent(QEvent.Enter),QFocusEvent(QEvent.FocusIn,Qt.TabFocusReason),
+                          QEvent(QEvent.Leave),QFocusEvent(QEvent.FocusOut)):
+                self.app.sendEvent(button,event)
+                self.assertFalse(button.findChildren(FocusRing),type(button).__name__)
+            self.assertFalse(button.testAttribute(Qt.WA_MacShowFocusRect))
+
     def test_dialog_poll_preserves_search_selection_and_accessibility_index(self):
         from PySide6.QtWidgets import QListView
         from PySide6.QtCore import QPersistentModelIndex

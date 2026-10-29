@@ -270,9 +270,15 @@ class Button(QPushButton):
             bg = QColor("#252E3A")
         if self.property("flat") and not self._hover and not self.isDown():
             bg.setAlpha(0)
-        p.setPen(Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
+        keyboard_focus = self.hasFocus() and self._keyboard_focus
+        # Paint one contour in every state. A second inset focus rectangle
+        # produces mismatched corners when the ordinary border is still drawn.
+        p.setPen(QPen(QColor(ACC), 2) if keyboard_focus else
+                 Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
         p.setBrush(bg)
-        p.drawRoundedRect(QRectF(0.5, 0.5, self.width() - 1, self.height() - 1), 9, 9)
+        inset = 1.0 if keyboard_focus else 0.5
+        p.drawRoundedRect(QRectF(inset, inset, self.width() - 2*inset, self.height() - 2*inset),
+                          9.5-inset, 9.5-inset)
         color = ACC if self.primary and self.property("flat") else "#142039" if self.primary else SUB if self.property("flat") else FG
         if self.property("danger"):
             color = RED
@@ -292,10 +298,6 @@ class Button(QPushButton):
             x += 26
         p.setPen(QColor(color))
         p.drawText(QRectF(x, 0, width + 3, self.height()), Qt.AlignVCenter, self.text())
-        if self.hasFocus() and self._keyboard_focus:
-            p.setBrush(Qt.NoBrush)
-            p.setPen(QPen(QColor(ACC), 2))
-            p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 11, 11)
 
 
 class RoundCallButton(Button):
