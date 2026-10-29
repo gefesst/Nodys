@@ -57,6 +57,12 @@ class EmptyState(QFrame):
         layout.addStretch()
 
 
+    def set_centered(self):
+        self.centered=True
+        self.layout().setContentsMargins(0,0,0,0)
+        self.layout().insertStretch(0,1)
+        self.layout().setStretch(self.layout().count()-1,1)
+
     def set_top_offset(self, top):
         self.preferred_top=top
         margins=self.layout().contentsMargins()
@@ -66,6 +72,8 @@ class EmptyState(QFrame):
         return QSize(240,self.body_height+12)
 
     def resizeEvent(self,event):
+        if getattr(self,"centered",False):
+            return super().resizeEvent(event)
         margins=self.layout().contentsMargins()
         top=min(self.preferred_top,max(12,self.height()-self.body_height))
         self.layout().setContentsMargins(margins.left(),top,margins.right(),margins.bottom())

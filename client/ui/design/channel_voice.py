@@ -36,7 +36,7 @@ def build(page):
     outer.addWidget(scroll,1)
     layout=QVBoxLayout(tab)
     page.voice_tab_layout=layout
-    layout.setContentsMargins(16,12,24,20)
+    layout.setContentsMargins(16,12,16,12)
     layout.setSpacing(0)
     title=QLabel('Участники голосового')
     title.setStyleSheet('font-size:20px;font-weight:600;')
@@ -57,7 +57,6 @@ def build(page):
     page.voice_members_layout.setAlignment(Qt.AlignTop)
     page.voice_members_scroll.setWidget(page.voice_members_container)
     layout.addWidget(page.voice_members_scroll,1)
-    layout.addSpacing(20)
     controls=QFrame()
     controls.setObjectName('VoiceControls')
     controls.setFixedHeight(108)

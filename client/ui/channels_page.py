@@ -1792,14 +1792,13 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         self._clear_voice_members_list()
 
         participants = sorted(self._voice_participants or [],key=lambda p:(p.get("login")==self.ctx.login,(p.get("nickname") or p.get("login","")).casefold()))
-        self.voice_members_layout.setAlignment(Qt.AlignTop | (Qt.AlignLeft if participants else Qt.AlignmentFlag(0)))
+        self.voice_members_layout.setAlignment((Qt.AlignTop | Qt.AlignLeft) if participants else Qt.AlignmentFlag(0))
         count=len(participants)
         self.voice_members_count.setText('Нет участников' if not count else participants_text(count))
         if not participants:
             from ui.design.state_surfaces import EmptyState
             empty=EmptyState('Пока тихо','Подключитесь к голосовому первым.')
-            empty.layout().setContentsMargins(0,0,20,0)
-            empty.set_top_offset(0)
+            empty.set_centered()
             empty.setMinimumHeight(174)
             self.voice_members_layout.addWidget(empty,0,0,1,3)
             return

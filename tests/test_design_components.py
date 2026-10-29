@@ -846,6 +846,26 @@ class DesignGeometryTests(unittest.TestCase):
         page._voice_participants=[];page._render_voice_participants()
         self.assertNotIn((1,'speaker'),page._room_avatars)
 
+    def test_empty_voice_body_stays_centered_when_resized(self):
+        from ui.channels_page import ChannelsPage
+        from ui.design.state_surfaces import StateIcon
+        from PySide6.QtCore import QPoint
+        from PySide6.QtWidgets import QLabel
+        page=ChannelsPage();self.addCleanup(page.close)
+        page.main_stack.setCurrentWidget(page.channel_page)
+        page.channel_inner_stack.setCurrentIndex(1)
+        page._voice_participants=[];page._render_voice_participants();page.show()
+        for width,height in ((1032,578),(1192,662),(1352,858)):
+            page.resize(width,height);self.app.processEvents()
+            empty=page.voice_members_layout.itemAt(0).widget()
+            icon=empty.findChild(StateIcon)
+            labels=empty.findChildren(QLabel)
+            first=icon.mapTo(empty,QPoint()).y()
+            last=max(label.mapTo(empty,QPoint()).y()+label.height() for label in labels)
+            self.assertLessEqual(abs((first+last)/2-empty.height()/2),2)
+            self.assertLessEqual(abs(icon.mapTo(empty,QPoint()).x()+icon.width()/2-empty.width()/2),2)
+            self.assertGreaterEqual(empty.height(),174)
+
     def test_voice_tiles_reflow_and_clear_all_participants(self):
         from ui.channels_page import ChannelsPage
         page=ChannelsPage()
