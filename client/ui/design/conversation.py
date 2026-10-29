@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QAbstractItemView,
     QStackedWidget,
+    QFileDialog,
 )
 from application.request_scope import RequestScope
 from .models import Message, MessageModel
@@ -50,6 +51,9 @@ class Conversation(QWidget):
         self.older = self.newer = False
         self.at_latest = True
         self.drafts = {}
+        self.attachment_drafts = {}
+        self.transfers = set()
+        self.download_transfer = None
         self.draft_versions = {}
         self._restoring = False
         self.pending = {}
@@ -120,6 +124,36 @@ class Conversation(QWidget):
         self.send_error = InlineNote()
         self.send_error.set_tone("error")
         root.addWidget(self.send_error)
+        self.download_strip = QWidget()
+        download_layout = QHBoxLayout(self.download_strip)
+        download_layout.setContentsMargins(0, 0, 0, 0)
+        self.download_label = QLabel()
+        download_layout.addWidget(self.download_label, 1)
+        cancel_download = Button('Отменить')
+        cancel_download.clicked.connect(self.cancel_download)
+        download_layout.addWidget(cancel_download)
+        root.addWidget(self.download_strip)
+        self.download_strip.hide()
+        self.attachment_strip = QFrame()
+        self.attachment_strip.setObjectName('AttachmentDraft')
+        self.attachment_strip.setStyleSheet('QFrame#AttachmentDraft {background:#203448;border:1px solid #354D65;border-radius:10px;}')
+        attachment_layout = QHBoxLayout(self.attachment_strip)
+        attachment_layout.setContentsMargins(12, 8, 8, 8)
+        self.attachment_label = QLabel()
+        self.attachment_label.setWordWrap(True)
+        self.attachment_preview = QLabel()
+        self.attachment_preview.setFixedSize(44, 44)
+        self.attachment_preview.hide()
+        attachment_layout.addWidget(self.attachment_preview)
+        attachment_layout.addWidget(self.attachment_label, 1)
+        self.remove_attachment_button = Button('', 'close')
+        self.remove_attachment_button.setAccessibleName('Убрать вложение')
+        self.remove_attachment_button.setFixedSize(30, 30)
+        self.remove_attachment_button.clicked.connect(self.remove_attachment)
+        attachment_layout.addWidget(self.remove_attachment_button)
+        root.addWidget(self.attachment_strip)
+        self.attachment_strip.hide()
+        self.view.clicked.connect(self.download_attachment)
         compose_frame = QFrame()
         self.compose_frame = compose_frame
         compose_frame.setObjectName("ComposerFrame")
@@ -136,6 +170,12 @@ class Conversation(QWidget):
         self.send_button.setFocusPolicy(Qt.NoFocus)
         self.send_button.setFixedSize(38, 38)
         self.send_button.clicked.connect(self.send)
+        self.attach_button = Button('', 'attach')
+        self.attach_button.setAccessibleName('Прикрепить файл')
+        self.attach_button.setFocusPolicy(Qt.NoFocus)
+        self.attach_button.setFixedSize(38, 38)
+        self.attach_button.clicked.connect(self.choose_attachment)
+        compose.addWidget(self.attach_button, 0, Qt.AlignVCenter)
         compose.addWidget(self.editor, 1)
         compose.addWidget(self.send_button, 0, Qt.AlignVCenter)
         root.addWidget(compose_frame)
@@ -250,6 +290,12 @@ class Conversation(QWidget):
 
     def reset(self):
         self.epoch += 1
+        for transfer in self.transfers:
+            transfer.cancel()
+        self.transfers.clear()
+        self.download_transfer = None
+        self.download_strip.hide()
+        self.attachment_drafts.clear()
         self.drafts.clear()
         self.draft_versions.clear()
         self.pending.clear()
@@ -261,11 +307,12 @@ class Conversation(QWidget):
         self.prefetch_queue.clear()
         self.select(None)
 
-    def payload(self, action):
+    def payload(self, action, identity=None):
+        identity = self.identity if identity is None else identity
         if self.channel:
-            if isinstance(self.identity,tuple):return dict(action=action,channel_id=self.identity[0],room_id=self.identity[1])
-            return dict(action=action, channel_id=self.identity)
-        return dict(action=action, to_user=self.identity)
+            if isinstance(identity,tuple):return dict(action=action,channel_id=identity[0],room_id=identity[1])
+            return dict(action=action, channel_id=identity)
+        return dict(action=action, to_user=identity)
 
     def load(self, direction="poll"):
         if self.identity is None or self.loading:
@@ -446,7 +493,7 @@ class Conversation(QWidget):
                     row["id"],
                     author,
                     name,
-                    row["text"],
+                    self.message_display_text(row),
                     (row.get("created_at") or "")[11:16],
                     bool(row.get("is_read")),
                     author != previous_author or date != previous_date or row["id"] == self.unread_boundary,
@@ -454,6 +501,7 @@ class Conversation(QWidget):
                     date != previous_date,
                     self.unread_count if row["id"] == self.unread_boundary else 0,
                     getattr(self.owner.ctx, "avatar", "") if own else person.get("avatar") or row.get("avatar", ""),
+                    row.get("attachment"),
                 )
             )
             previous_author, previous_date = author, date
@@ -489,6 +537,79 @@ class Conversation(QWidget):
         elif value >= bar.maximum() - 20 and self.newer:
             QTimer.singleShot(0, lambda: self.load("newer"))
 
+    @staticmethod
+    def message_display_text(row):
+        from shared.attachments import size_label
+        attachment = row.get('attachment')
+        if not attachment:
+            return row['text']
+        label = f"📎 {attachment['name']} · {size_label(attachment['size'])}\n↓ Скачать файл"
+        return (row['text'] + '\n\n' if row['text'] else '') + label
+
+    def choose_attachment(self):
+        if self.identity is None or not self.can_send or self.identity in self.pending:
+            return
+        from pathlib import Path
+        from shared.attachments import MAX_FILE_SIZE
+        path, _ = QFileDialog.getOpenFileName(self, 'Прикрепить файл', '', 'Все файлы (*)')
+        if not path:
+            return
+        try:
+            file = Path(path)
+            size = file.stat().st_size
+            if not file.is_file() or not 0 < size <= MAX_FILE_SIZE:
+                raise ValueError('Выберите файл от 1 байта до 10 МБ')
+            self.attachment_drafts[self.identity] = dict(path=path, name=file.name, size=size)
+            self.update_controls()
+            self.editor.setFocus(Qt.OtherFocusReason)
+        except (OSError, ValueError) as error:
+            self.send_error.setText(str(error))
+
+    def remove_attachment(self):
+        if self.identity not in self.pending:
+            self.attachment_drafts.pop(self.identity, None)
+            self.update_controls()
+            self.editor.setFocus(Qt.OtherFocusReason)
+
+    def cancel_download(self):
+        if self.download_transfer is not None:
+            self.download_transfer.cancel()
+            self.transfers.discard(self.download_transfer)
+            self.download_transfer = None
+        self.download_strip.hide()
+
+    def download_attachment(self, index):
+        if self.download_transfer is not None:
+            return
+        message = index.data(Qt.UserRole)
+        meta = getattr(message, 'attachment', None)
+        if not meta:
+            return
+        from pathlib import Path
+        from application.attachment_transfer import AttachmentTransfer
+        # Never accept directories supplied by a remote filename.
+        name = Path(meta['name'].replace('\\', '/')).name
+        path, _ = QFileDialog.getSaveFileName(self, 'Сохранить файл', name, 'Все файлы (*)')
+        if not path:
+            return
+        epoch = self.epoch
+        transfer = AttachmentTransfer(self.owner.ctx.session_token, {}, path, meta)
+        self.download_transfer = transfer
+        self.download_label.setText('Скачивание · 0%')
+        self.download_strip.show()
+        transfer.progress.connect(lambda value: self.download_label.setText(f'Скачивание · {value}%')
+            if self.download_transfer is transfer else None)
+        self.transfers.add(transfer)
+        def done(result):
+            self.transfers.discard(transfer)
+            if self.download_transfer is transfer:
+                self.download_transfer = None
+                self.download_strip.hide()
+            if epoch == self.epoch and result.get('status') != 'ok':
+                self.send_error.setText(result.get('message', 'Не удалось скачать файл'))
+        transfer.finished.connect(done)
+        transfer.start()
+
     def update_controls(self, keep_hint=False):
         self._update_new_messages()
         surface = self.view if self.rows else (
@@ -505,6 +626,30 @@ class Conversation(QWidget):
             self.identity is not None
             and self.can_send
         )
+        self.attach_button.setEnabled(self.identity is not None and self.can_send and self.identity not in self.pending)
+        draft = self.attachment_drafts.get(self.identity)
+        self.attachment_strip.setVisible(bool(draft))
+        path = draft.get('path') if draft else None
+        if getattr(self, '_preview_path', None) != path:
+            self._preview_path = path
+            self.attachment_preview.clear()
+            self.attachment_preview.hide()
+            if path:
+                from PySide6.QtGui import QImageReader, QPixmap
+                from PySide6.QtCore import QSize
+                reader = QImageReader(path)
+                dimensions = reader.size()
+                if reader.format().data() in (b'png', b'jpeg', b'webp', b'gif') and 0 < dimensions.width()*dimensions.height() <= 20000000:
+                    reader.setScaledSize(dimensions.scaled(QSize(44, 44), Qt.KeepAspectRatio))
+                    image = reader.read()
+                    if not image.isNull():
+                        self.attachment_preview.setPixmap(QPixmap.fromImage(image))
+                        self.attachment_preview.show()
+        self.remove_attachment_button.setEnabled(self.identity not in self.pending)
+        if draft:
+            from shared.attachments import size_label
+            self.attachment_label.setText(draft['name'] + ' · ' + size_label(draft['size']) +
+                (f" · Отправка {draft['progress']}%" if 'progress' in draft else ''))
         self.editor.setReadOnly(not self.can_send or self.identity is None)
         self.editor.setPlaceholderText(
             "Недостаточно прав для отправки" if not self.can_send
@@ -544,7 +689,7 @@ class Conversation(QWidget):
     def send(self):
         text = self.editor.toPlainText().strip()
         if (
-            not text
+            (not text and self.identity not in self.attachment_drafts)
             or self.identity is None
             or not self.can_send
             or self.identity in self.pending
@@ -555,15 +700,52 @@ class Conversation(QWidget):
             return
         identity, epoch = self.identity, self.epoch
         revision = self.draft_versions.get(identity, 0)
-        key = (identity, text)
+        attachment = self.attachment_drafts.get(identity)
+        if attachment and not attachment.get('id'):
+            from application.attachment_transfer import AttachmentTransfer
+            scope = self.payload('begin_attachment')
+            scope.pop('action')
+            transfer = AttachmentTransfer(self.owner.ctx.session_token, scope, attachment['path'],
+                upload_id=attachment.setdefault('upload_id', uuid.uuid4().hex))
+            self.transfers.add(transfer)
+            self.pending[identity] = 'upload'
+            attachment['progress'] = 0
+            self.update_controls()
+            def progress(value):
+                if epoch == self.epoch:
+                    attachment['progress'] = value
+                    if self.identity == identity:
+                        self.update_controls()
+            def uploaded(result):
+                self.transfers.discard(transfer)
+                if epoch != self.epoch:
+                    return
+                self.pending.pop(identity, None)
+                attachment.pop('progress', None)
+                if result.get('status') == 'ok':
+                    attachment.update(result['attachment'])
+                    self._submit(identity, text, attachment, epoch, revision, restore_focus=False)
+                else:
+                    self.send_error.setText(result.get('message', 'Не удалось загрузить файл'))
+                    self.update_controls()
+            transfer.progress.connect(progress)
+            transfer.finished.connect(uploaded)
+            transfer.start()
+            return
+        self._submit(identity, text, attachment, epoch, revision)
+
+    def _submit(self, identity, text, attachment, epoch, revision, restore_focus=True):
+        key = (identity, text, attachment.get('id') if attachment else None)
         message_id = self.retries.setdefault(key, str(uuid.uuid4()))
         self.send_error.clear()
         self.pending[identity] = message_id
-        data = self.payload("send_channel_message" if self.channel else "send_message")
+        data = self.payload("send_channel_message" if self.channel else "send_message", identity)
         data.update(text=text, client_message_id=message_id, request_id=message_id)
+        if attachment:
+            data["attachment_id"] = attachment["id"]
         # Disabling a focused send button lets Qt advance to an unrelated control.
         # Return focus as part of the user action, never from a delayed reply.
-        if self.editor.isVisible():
+        if restore_focus and self.identity == identity and self.editor.isVisible():
             self.editor.setFocus(Qt.OtherFocusReason)
         self.update_controls()
 
@@ -574,10 +756,12 @@ class Conversation(QWidget):
             success = response.get("status") == "ok"
             if success:
                 self.retries.pop(key, None)
+                if attachment and self.attachment_drafts.get(identity) is attachment:
+                    self.attachment_drafts.pop(identity, None)
                 if not self.channel:
                     sent_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
                     update_summary=getattr(self.owner,"message_sent",None)
-                    if update_summary is not None:update_summary(identity,text,sent_at)
+                    if update_summary is not None:update_summary(identity,text or ('📎 ' + attachment['name'] if attachment else ''),sent_at)
                 if (
                     self.draft_versions.get(identity, 0) == revision
                     and self.drafts.get(identity, "").strip() == text
@@ -616,6 +800,8 @@ class Conversation(QWidget):
         text = index.data()
         from .action_menu import ActionMenu
         menu = ActionMenu(self)
+        if getattr(index.data(Qt.UserRole), 'attachment', None):
+            menu.addAction('Скачать файл', lambda: self.download_attachment(index))
         menu.addAction(
             "Копировать текст", lambda: QApplication.clipboard().setText(text)
         )

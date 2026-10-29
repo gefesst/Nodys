@@ -9,15 +9,17 @@ class MessageRepository:
     def __init__(self, database):
         self.database = database
 
-    def save_message(self, from_user: str, to_user: str, text: str, client_message_id=None):
+    def save_message(self, from_user: str, to_user: str, text: str, client_message_id=None, attachment_id=None):
         with database_connection(self.database) as conn:
             if client_message_id:
-                previous = conn.execute('SELECT id,to_user,text FROM messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                previous = conn.execute('SELECT id,to_user,text,attachment_id FROM messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
                 if previous:
-                    if previous[1:] != (to_user,text):
+                    if previous[1:] != (to_user,text,attachment_id):
                         raise ValueError('Идентификатор сообщения уже использован')
                     return previous[0]
-            cursor = conn.execute('INSERT INTO messages(from_user,to_user,text,is_read,client_message_id) VALUES(?,?,?,0,?)', (from_user,to_user,text,client_message_id))
+            from .attachments import bind
+            bind(conn, attachment_id, from_user, peer=to_user)
+            cursor = conn.execute('INSERT INTO messages(from_user,to_user,text,is_read,client_message_id,attachment_id) VALUES(?,?,?,0,?,?)', (from_user,to_user,text,client_message_id,attachment_id))
             return cursor.lastrowid
 
     def get_page(self, user_a, user_b, limit=80, before_id=None, after_id=None):
@@ -33,7 +35,7 @@ class MessageRepository:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute(
-                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read
+                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read, attachment_id
                    FROM messages
                    WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)
                    ORDER BY timestamp DESC, id DESC
@@ -42,7 +44,8 @@ class MessageRepository:
             )
             # Клиенту по-прежнему отдаём в хронологическом порядке (старые -> новые).
             rows = cur.fetchall()
-            return [dict(r) for r in reversed(rows)]
+            from .attachments import enrich
+            return enrich(conn, [dict(r) for r in reversed(rows)])
 
     def mark_chat_read(self, current_user: str, friend: str, through_id=None) -> None:
         with database_connection(self.database) as conn:
@@ -73,7 +76,7 @@ class MessageRepository:
                        UNION ALL
                        SELECT from_user AS peer, id FROM messages WHERE to_user=?
                    ), latest AS (SELECT peer, MAX(id) AS id FROM owned GROUP BY peer)
-                   SELECT latest.peer, m.from_user, substr(m.text,1,160), m.timestamp
+                   SELECT latest.peer, m.from_user, CASE WHEN m.text='' AND m.attachment_id IS NOT NULL THEN '📎 ' || COALESCE((SELECT name FROM attachments WHERE id=m.attachment_id),'Файл') ELSE substr(m.text,1,160) END, m.timestamp
                    FROM latest JOIN messages m ON m.id=latest.id""",
                 (current_user, current_user),
             )

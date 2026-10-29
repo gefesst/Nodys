@@ -142,6 +142,57 @@ class ConversationTests(unittest.TestCase):
         self.chat.select(peer, peer.title())
         self.requests[-1][1](self.response(peer))
 
+    def test_picked_image_preview_and_remove_are_scoped_to_dialog(self):
+        import tempfile
+        from unittest.mock import patch
+        from PySide6.QtGui import QImage, QColor
+        self.select('bob')
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory)/'preview.png')
+            image = QImage(80, 60, QImage.Format_RGB32)
+            image.fill(QColor('#89AAFF'))
+            self.assertTrue(image.save(path))
+            with patch('ui.design.conversation.QFileDialog.getOpenFileName', return_value=(path, '')):
+                self.chat.choose_attachment()
+            self.assertFalse(self.chat.attachment_strip.isHidden())
+            self.assertFalse(self.chat.attachment_preview.pixmap().isNull())
+            self.select('carol')
+            self.assertTrue(self.chat.attachment_strip.isHidden())
+            self.select('bob')
+            self.assertFalse(self.chat.attachment_strip.isHidden())
+            self.chat.remove_attachment()
+            self.assertTrue(self.chat.attachment_strip.isHidden())
+
+    def test_attachment_only_send_keeps_target_and_draft_on_failure(self):
+        self.select('bob')
+        self.chat.attachment_drafts['bob'] = dict(id='a'*32, name='test.png', size=3)
+        self.chat.send()
+        request, done = self.requests[-1]
+        self.assertEqual(request['to_user'], 'bob')
+        self.assertEqual(request['attachment_id'], 'a'*32)
+        self.assertEqual(request['text'], '')
+        self.select('carol')
+        done(dict(status='error', message='offline'))
+        self.assertIn('bob', self.chat.attachment_drafts)
+        self.select('bob')
+        self.chat.send()
+        retry, done = self.requests[-1]
+        self.assertEqual(request['client_message_id'], retry['client_message_id'])
+        done(dict(status='ok', message_id=99))
+        self.assertNotIn('bob', self.chat.attachment_drafts)
+
+    def test_attachment_metadata_survives_render_and_permission_disables_picker(self):
+        self.chat.select('bob', 'Bob')
+        response = self.response()
+        response['messages'][0]['text'] = ''
+        response['messages'][0]['attachment'] = dict(id='b'*32, name='image.png', size=200, sha256='c'*64)
+        self.requests[-1][1](response)
+        self.assertEqual(self.chat.model.rows[0].attachment['name'], 'image.png')
+        self.assertIn('Скачать файл', self.chat.model.rows[0].text)
+        self.chat.can_send = False
+        self.chat.update_controls()
+        self.assertFalse(self.chat.attach_button.isEnabled())
+
     def test_network_recovery_preserves_draft_and_is_scoped_to_dialog(self):
         self.select('bob')
         self.chat.editor.setPlainText('unsent draft')

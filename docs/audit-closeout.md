@@ -238,3 +238,11 @@ UI-сценарий с синтетическим аудио и реальным
 - Native rerun with CGEvent motion only (no click or test-side activation): Python frontmost, ApplicationActive, key window true; Button/NavButton underMouse true and hover 1.0. Real visible Friends screen contained loaded rows. Probe removed from the final running launch.
 - Validation: 264 tests pass, including chained-read readiness, failure, timeout, cancellation and AppWindow retry/stale-completion regression. Undefined-name lint and diff whitespace checks pass. Clean preview log: preparing initial data -> initial data ready; main presented.
 - Evidence logs: /tmp/noda-start-hover-input.log (reproduction), /tmp/noda-start-hover-fixed.log (native retest), /tmp/noda-startup-complete-check.log (suite), /tmp/noda-startup-ready-preview.log (clean launch). Windows native focus behavior was not manually exercised on this Mac.
+
+## 2026-10-30 — file attachments
+- Added composer paperclip, per-dialog attachment drafts, image thumbnail before sending, upload progress, file-only messages, download/save and cancellation in DMs and text rooms.
+- Added migration and authenticated chunk storage with sender/target binding, current channel ACL, hash verification, idempotent blocks, bounded sizes/quota and stale upload cleanup.
+- Binary upload/download over an actual TCP listener with sender/recipient sessions and GUI timer activity passed; saved bytes match the source and temporary files are removed.
+- Regressions cover unpublished/unauthorized downloads, channel leave, wrong sender, incomplete/corrupt blocks, quotas/unsafe names, retry identity, dialog switching, permission-disabled picker, metadata rendering and image selection/removal.
+- Complete suite: 271 passed before final image-preview regression/download progress strip. Final affected conversation/attachment suite: 30 passed. Undefined-name lint and diff checks passed.
+- Native macOS inspection confirmed paperclip in conversation accessibility and text-room screenshot. No user-owned files sent during testing. See docs/attachments.md.

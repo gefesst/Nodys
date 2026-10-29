@@ -18,6 +18,7 @@ from settings import get_api_endpoint
 
 # Actions that require a valid session token.
 AUTH_ACTIONS = {
+    "begin_attachment", "upload_attachment_chunk", "download_attachment_chunk",
     "get_channel_rooms","create_channel_room","rename_channel_room",
     "logout",
     "update_profile",

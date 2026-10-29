@@ -51,4 +51,6 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
             ).fetchone()
             is not None
         )
+    from .attachments import enrich
+    enrich(connection, rows)
     return dict(messages=rows, has_older=older, has_newer=newer)

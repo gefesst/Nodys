@@ -17,6 +17,7 @@ class Message:
     divider: bool = False
     unread_count: int = 0
     avatar: str = ""
+    attachment: object = None
 
 
 class MessageModel(QAbstractListModel):

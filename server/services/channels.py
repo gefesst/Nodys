@@ -295,7 +295,7 @@ class ChannelService:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
-                SELECT id, channel_id, from_user, text, timestamp AS created_at
+                SELECT id, channel_id, from_user, text, timestamp AS created_at, attachment_id
                 FROM channel_messages
                 WHERE channel_id=? AND room_id=?
                 ORDER BY id DESC
@@ -304,20 +304,29 @@ class ChannelService:
                 (int(channel_id), int(room_id), lim),
             ).fetchall()
             # Возвращаем в хронологическом порядке для UI.
-            return [dict(r) for r in reversed(rows)]
+            try:
+                from ..storage.attachments import enrich
+            except ImportError:
+                from storage.attachments import enrich
+            return enrich(conn, [dict(r) for r in reversed(rows)])
 
-    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None, room_id=0):
+    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None, room_id=0, attachment_id=None):
         msg = (text or "").strip()
-        if not msg:
+        if not msg and not attachment_id:
             return False
         with database_connection(self.chat_database, timeout=10) as conn:
             if client_message_id:
-                previous = conn.execute('SELECT id,channel_id,text,room_id FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                previous = conn.execute('SELECT id,channel_id,text,room_id,attachment_id FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
                 if previous:
-                    if previous[1:] != (int(channel_id),msg,int(room_id)):
+                    if previous[1:] != (int(channel_id),msg,int(room_id),attachment_id):
                         raise ValueError('Идентификатор сообщения уже использован')
                     return previous[0]
-            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id) VALUES(?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id)))
+            try:
+                from ..storage.attachments import bind
+            except ImportError:
+                from storage.attachments import bind
+            bind(conn, attachment_id, from_user, cid=int(channel_id), room=int(room_id))
+            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id,attachment_id) VALUES(?,?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id),attachment_id))
             return cursor.lastrowid
 
     def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0):

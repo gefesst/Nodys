@@ -94,6 +94,16 @@ class RequestRouter:
         if err:
             return err
 
+        if action in {'begin_attachment', 'upload_attachment_chunk', 'download_attachment_chunk'}:
+            try:
+                from ..storage.attachments import dispatch
+            except ImportError:
+                from storage.attachments import dispatch
+            try:
+                return dispatch(self, current_user, data)
+            except ValueError as error:
+                return dict(status='error', message=str(error))
+
         if action == "voice_ticket":
             try:
                 with database_connection(self.database, timeout=5) as connection:
@@ -204,12 +214,12 @@ class RequestRouter:
         if action == "send_message":
             to_user = (data.get("to_user") or "").strip()
             text = (data.get("text") or data.get("message") or "").strip()
-            if not to_user or not text:
+            if not to_user or (not text and not data.get('attachment_id')):
                 return {"status": "error", "message": "Пустое сообщение"}
             if not self.friends.are_friends(current_user, to_user):
                 return {"status":"error", "message":"Отправлять сообщения можно только друзьям"}
             try:
-                identity = self.messages.save_message(current_user, to_user, text, data.get('client_message_id'))
+                identity = self.messages.save_message(current_user, to_user, text, data.get('client_message_id'), data.get('attachment_id'))
             except ValueError as error:
                 return {'status':'error','code':'request_conflict','message':str(error)}
             return {"status": "ok", "message_id": identity}
@@ -325,7 +335,7 @@ class RequestRouter:
                 return dict(status="error",message="Текстовый канал не найден")
             if channel_id <= 0:
                 return {"status": "error", "message": "Не указан канал"}
-            if not text_msg:
+            if not text_msg and not data.get('attachment_id'):
                 return {"status": "error", "message": "Пустое сообщение"}
             with database_connection(self.database, timeout=10) as conn:
                 if not self.channels.is_channel_member(channel_id, current_user):
@@ -333,7 +343,7 @@ class RequestRouter:
                 if not self.channels._can_send_text(conn, channel_id, current_user):
                     return {"status": "error", "message": "У вас нет прав писать в этот канал"}
             try:
-                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'),room_id=room_id)
+                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'),room_id=room_id, attachment_id=data.get('attachment_id'))
             except ValueError as error:
                 return dict(status='error', code='request_conflict', message=str(error))
             return {"status": "ok"} if ok else {"status": "error", "message": "Не удалось отправить сообщение"}
