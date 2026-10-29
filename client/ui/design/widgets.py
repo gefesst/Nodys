@@ -440,7 +440,7 @@ class DialogDelegate(QStyledItemDelegate):
     def sizeHint(self, o, i):
         view=self.parent()
         height=view.viewport().height() if view is not None else 410
-        return QSize(300, max(64, height//5))
+        return QSize(300, min(76, max(64, height//5)))
 
     def paint(self, p, o, index):
         d = index.data(Qt.UserRole)

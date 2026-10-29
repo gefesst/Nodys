@@ -2,12 +2,42 @@
 
 from PySide6.QtCore import Qt, QRectF, QSize
 from PySide6.QtGui import QPainter, QColor, QPen
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton, QApplication
 from .widgets import Button, icon, font
 from .tokens import FG, ACC, SUB
 
 
-class WindowDot(QPushButton):
+class WindowControlDragGuard:
+    """A drag near window controls must never become a minimize/close click."""
+    def mousePressEvent(self, event):
+        self._press_origin = event.globalPosition().toPoint()
+        self._drag_cancelled = False
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        origin = getattr(self, '_press_origin', None)
+        if origin is not None and (event.globalPosition().toPoint()-origin).manhattanLength() >= QApplication.startDragDistance():
+            self._drag_cancelled = True
+            self.setDown(False)
+        if getattr(self, '_drag_cancelled', False):
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._press_origin = None
+        if getattr(self, '_drag_cancelled', False):
+            self.setDown(False)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+
+class WindowControl(WindowControlDragGuard, Button):
+    pass
+
+
+class WindowDot(WindowControlDragGuard, QPushButton):
     def __init__(self, color, parent):
         super().__init__(parent)
         self.color=color
@@ -48,7 +78,7 @@ class TitleBar(QWidget):
             row.addWidget(BrandMark(24))
             logo=QLabel('noda');logo.setObjectName('WindowBrand');row.addWidget(logo);row.addStretch()
             for text, tip, callback in [('—','Свернуть',parent.showMinimized),('□','Развернуть',self.maximize),('×','Закрыть',parent.close)]:
-                button=Button(text);button.setProperty('flat',True);button.setFixedSize(36,32)
+                button=WindowControl(text);button.setProperty('flat',True);button.setFixedSize(36,32)
                 button.setToolTip(tip);button.setAccessibleName(tip);button.clicked.connect(callback);row.addWidget(button)
 
     def resizeEvent(self, event):
@@ -119,6 +149,11 @@ class ResizeHandle(QWidget):
                 self.drag_geometry = self.window().geometry()
             event.accept()
 
+    def mouseDoubleClickEvent(self, event):
+        # Consume rapid repeated edge grabs; never bubble into title maximization.
+        self.mousePressEvent(event)
+        event.accept()
+
     def mouseMoveEvent(self, event):
         if self.drag_origin is None:
             return
@@ -153,8 +188,8 @@ def create_resize_handles(window):
 
 
 def position_resize_handles(window):
-    w, h, d = window.width(), window.height(), 5
-    corner = 14  # Reach the visible arc; a 5px square is outside the rounded mask.
+    w, h, d = window.width(), window.height(), 8
+    corner = 18  # Reach the visible rounded arc without touching title controls.
     geometries = ((0,d,d,h-2*d), (w-d,d,d,h-2*d),
                   (d,0,w-2*d,d), (d,h-d,w-2*d,d),
                   (0,0,corner,corner), (w-corner,0,corner,corner),

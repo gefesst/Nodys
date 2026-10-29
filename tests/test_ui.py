@@ -120,6 +120,16 @@ class UiTests(unittest.TestCase):
         self.assertEqual(p.create_channel_btn.pos(),before)
         self.assertFalse(p.invites_toggle_btn.isChecked())
 
+    def test_repeated_invitation_close_never_inserts_hidden_panel(self):
+        p=self.page;p.resize(1120,700);p.show();self.app.processEvents()
+        p.close_invites();self.app.processEvents()
+        original=p.sidebar_actions_separator.pos()
+        for _ in range(4):
+            p._set_invites_dropdown_open(False)
+            self.assertTrue(p.invites_dropdown.isHidden())
+            self.app.processEvents()
+            self.assertEqual(p.sidebar_actions_separator.pos(),original)
+
     def test_forms_survive_empty_poll(self):
         p = self.page
         p.start_request = lambda data, callback, **kw: callback({'status':'ok','channels':[]})

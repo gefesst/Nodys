@@ -1053,6 +1053,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         pass
 
     def _set_invites_dropdown_open(self, opened: bool):
+        # Repeated close requests must not show a zero-height widget: even that
+        # inserts layout spacing for one frame and shifts the footer divider.
+        if not opened and self.invites_dropdown.isHidden():
+            self.close_invites()
+            return
         with QSignalBlocker(self.invites_toggle_btn):
             self.invites_toggle_btn.setChecked(bool(opened))
         from ui.design.motion import reduced

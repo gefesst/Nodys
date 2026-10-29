@@ -60,7 +60,7 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertLessEqual(editor.height(),130)
         editor.clear();self.app.processEvents();self.assertEqual(editor.height(),44)
 
-    def test_five_dialogs_fit_and_sixth_scrolls_at_available_heights(self):
+    def test_dialogs_stay_compact_and_five_fit_at_available_heights(self):
         from ui.design.widgets import DialogDelegate
         from ui.design.models import DialogModel
         from PySide6.QtWidgets import QListView
@@ -74,7 +74,9 @@ class DesignGeometryTests(unittest.TestCase):
             self.assertEqual(view.verticalScrollBar().maximum(),0)
             self.assertLess(view.visualRect(model.index(4)).bottom(),view.viewport().height())
             model.replace(rows);self.app.processEvents();view.doItemsLayout()
-            self.assertGreater(view.verticalScrollBar().maximum(),0)
+            self.assertLessEqual(view.itemDelegate().sizeHint(None,model.index(0)).height(),76)
+            if view.viewport().height()<6*76:
+                self.assertGreater(view.verticalScrollBar().maximum(),0)
 
     def test_voice_dock_controls_follow_channel_and_private_call_state(self):
         from PySide6.QtWidgets import QWidget
@@ -689,6 +691,25 @@ class DesignGeometryTests(unittest.TestCase):
             center = handle.geometry().center()
             self.assertTrue(region.contains(QPoint(center)))
         window.close()
+
+    def test_drag_over_window_control_never_activates_it(self):
+        from ui.design.shell import WindowDot, WindowControl
+        from PySide6.QtCore import Qt, QEvent, QPointF
+        from PySide6.QtGui import QMouseEvent
+        from PySide6.QtWidgets import QWidget, QApplication
+        host=QWidget();self.addCleanup(host.close)
+        for button in (WindowDot('#E8BC64',host),WindowControl('—',parent=host)):
+            clicks=[];button.clicked.connect(lambda:clicks.append(True))
+            def event(kind,x,buttons):
+                return QMouseEvent(kind,QPointF(x,5),QPointF(x,5),Qt.LeftButton if kind!=QEvent.MouseMove else Qt.NoButton,buttons,Qt.NoModifier)
+            QApplication.sendEvent(button,event(QEvent.MouseButtonPress,5,Qt.LeftButton))
+            QApplication.sendEvent(button,event(QEvent.MouseMove,50,Qt.LeftButton))
+            QApplication.sendEvent(button,event(QEvent.MouseMove,5,Qt.LeftButton))
+            QApplication.sendEvent(button,event(QEvent.MouseButtonRelease,5,Qt.NoButton))
+            self.assertFalse(clicks)
+            QApplication.sendEvent(button,event(QEvent.MouseButtonPress,5,Qt.LeftButton))
+            QApplication.sendEvent(button,event(QEvent.MouseButtonRelease,5,Qt.NoButton))
+            self.assertEqual(clicks,[True])
 
     def test_resize_fallback_preserves_minimum_and_opposite_corner(self):
         from PySide6.QtCore import Qt, QPoint, QPointF
