@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QSizeGrip
-from PySide6.QtCore import Qt, Slot, QTimer, QEvent
+from PySide6.QtCore import Qt, Slot, QTimer, QEvent, QPoint, QRect
 from network import NetworkThread
 from PySide6.QtGui import QIcon, QPainter, QColor
 from ui.design.shell import TitleBar, create_resize_handles, position_resize_handles
@@ -118,6 +118,19 @@ class AppWindow(QWidget):
         color = QColor(BACKGROUND)
         color.setAlpha(BACKGROUND_ALPHA if self.property('translucent_background') is not False else 255)
         painter.fillRect(self.rect(), color)
+        # Each structural surface replaces the base, rather than stacking alpha
+        # over it (96% over 96% is effectively opaque).
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        colors = {"Sidebar": "#19222D", "SectionSidebar": "#202B36",
+                  "ChannelsSidebarCard": "#202B36"}
+        for child in self.findChildren(QWidget):
+            shade = colors.get(child.objectName())
+            if isinstance(child, TitleBar):
+                shade = "#1B2430"
+            if shade and child.isVisibleTo(self):
+                panel = QColor(shade)
+                panel.setAlpha(color.alpha())
+                painter.fillRect(QRect(child.mapTo(self, QPoint()), child.size()), panel)
 
     def resizeEvent(self, event):
         if hasattr(self, 'grip'):

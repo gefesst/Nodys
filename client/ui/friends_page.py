@@ -322,6 +322,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.hide_inline_delete_confirm()
         self._show_skeleton(count=6)
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self.refresh)
+
     def closeEvent(self, event):
         self._alive = False
         if self.timer.isActive():
@@ -345,7 +349,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         app = QApplication.instance()
         if app is not None:
             try:
-                if app.applicationState() != Qt.ApplicationActive:
+                if self._has_loaded_friends_once and app.applicationState() != Qt.ApplicationActive:
                     return False
             except Exception:
                 pass
@@ -419,6 +423,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
     def _show_skeleton(self, count: int = 6):
         from ui.design.state_surfaces import LoadingState
         self._skeleton_visible = True
+        self._render_key = None
         self.clear_list()
         self.list_layout.insertWidget(self.list_layout.count()-1,LoadingState())
 
@@ -437,7 +442,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
 
     def _render_if_needed(self, force: bool = False):
         self._update_heading()
-        if not self._has_loaded_friends_once or not self._has_loaded_requests_once:
+        loaded = self._has_loaded_requests_once if self.view_mode == "requests" else self._has_loaded_friends_once
+        if not loaded:
+            if not self._skeleton_visible:
+                self._show_skeleton()
             return
         error=getattr(self,"_requests_error",False) if self.view_mode=="requests" else getattr(self,"_friends_error",False)
         key=(self._state_key(),self.view_mode,self.filter_input.text(),error)
@@ -475,10 +483,11 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         if not self._is_poll_allowed():
             return
         # Не очищаем UI заранее — только обновляем кэш и перерисовываем при изменениях
-        if not self._has_loaded_friends_once or not self._has_loaded_requests_once:
+        loaded = self._has_loaded_requests_once if self.view_mode == "requests" else self._has_loaded_friends_once
+        if not loaded and not self._skeleton_visible:
             self._show_skeleton(count=6)
-        self.load_requests()
         self.load_friends()
+        self.load_requests()
 
     # ==================================================
     # requests

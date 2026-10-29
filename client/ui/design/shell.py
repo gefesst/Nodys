@@ -65,8 +65,7 @@ class TitleBar(QWidget):
         self.maximize()
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#1B2430"))
+        pass  # The window paints the title surface once, at the chosen alpha.
 
 
 class NavButton(Button):

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QListView,
     QAbstractItemView,
     QComboBox,
+    QProxyStyle,
 )
 from PySide6.QtSvg import QSvgRenderer
 from .motion import reduced
@@ -49,8 +50,71 @@ COMBO_ARROW_STYLE = (
 ICONS = {}
 
 
+class SelectorStyle(QProxyStyle):
+    def styleHint(self, hint, option=None, widget=None, returnData=None):
+        if hint == QStyle.SH_ComboBox_Popup:
+            return 0
+        return super().styleHint(hint, option, widget, returnData)
+
+
+class SelectorDelegate(QStyledItemDelegate):
+    def sizeHint(self, option, index):
+        return QSize(super().sizeHint(option, index).width() + 44, 40)
+
+    def paint(self, painter, option, index):
+        painter.save()
+        rect = QRectF(option.rect).adjusted(4, 2, -4, -2)
+        selected = index.row() == self.parent().currentIndex()
+        active = bool(option.state & (QStyle.State_Selected | QStyle.State_MouseOver))
+        enabled = bool(index.flags() & Qt.ItemIsEnabled)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        if active and enabled:
+            painter.setBrush(QColor("#3A4D67"))
+            painter.drawRoundedRect(rect, 7, 7)
+        elif selected:
+            painter.setBrush(QColor("#2B3B51"))
+            painter.drawRoundedRect(rect, 7, 7)
+        painter.setPen(QColor(FG if enabled else MUT))
+        painter.setFont(option.font)
+        text_rect = rect.adjusted(12, 0, -34, 0)
+        text = option.fontMetrics.elidedText(str(index.data() or ""), Qt.ElideRight, int(text_rect.width()))
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
+        if selected:
+            painter.setPen(QPen(QColor(ACC), 1.7, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            x, y = rect.right() - 19, rect.center().y()
+            path = QPainterPath(); path.moveTo(x-4, y); path.lineTo(x-1, y+3); path.lineTo(x+5, y-4)
+            painter.drawPath(path)
+        painter.restore()
+
+
 class ScrollSafeComboBox(QComboBox):
-    """A closed selector never changes settings while scrolling its page."""
+    """Shared selector with consistent rows and no accidental wheel changes."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._selector_style = SelectorStyle("Fusion")
+        self._selector_style.setParent(self)
+        self.setStyle(self._selector_style)
+        view = QListView(self)
+        view.setMouseTracking(True)
+        view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        view.setStyleSheet("QListView {background:#253142;border:1px solid #485B76;border-radius:10px;padding:6px;outline:0;} ")
+        self.setView(view)
+        self.setItemDelegate(SelectorDelegate(self))
+        self.setMaxVisibleItems(7)
+        self.setAttribute(Qt.WA_MacShowFocusRect, False)
+        self.setStyleSheet("QComboBox {min-height:24px;max-height:24px;padding:10px 40px 10px 14px;background:#17212D;border:1px solid #354458;border-radius:10px;} QComboBox:hover {border-color:#536D92;} QComboBox:focus,QComboBox:on {border-color:#91ADFF;} QComboBox::drop-down {border:0;width:32px;}" + COMBO_ARROW_STYLE)
+
+    def showPopup(self):
+        super().showPopup()
+        popup = self.view().window()
+        # Clip the popup itself; rounded QSS alone leaves square native corners.
+        from PySide6.QtGui import QRegion
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(popup.rect()), 10, 10)
+        popup.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
     def wheelEvent(self, event):
         if self.view().isVisible():
             super().wheelEvent(event)

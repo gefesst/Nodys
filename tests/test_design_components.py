@@ -41,6 +41,71 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_structural_surfaces_keep_one_alpha_layer(self):
+        from app_window import AppWindow
+        from ui.design.shell import TitleBar
+        from PySide6.QtWidgets import QWidget, QFrame
+        from PySide6.QtCore import Qt, QPoint
+        from PySide6.QtGui import QImage, QPainter
+        from style_manager import load_styles
+        class Surface(QWidget):
+            paintEvent = AppWindow.paintEvent
+        window = Surface()
+        window.resize(600,400)
+        window.setAttribute(Qt.WA_TranslucentBackground)
+        window.setStyleSheet(load_styles())
+        title = TitleBar(window); title.setGeometry(0,0,600,42)
+        rail = QWidget(window); rail.setObjectName("Sidebar"); rail.setGeometry(0,42,88,358)
+        sidebar = QFrame(window); sidebar.setObjectName("SectionSidebar"); sidebar.setGeometry(88,42,200,358)
+        window.show(); self.addCleanup(window.close); self.app.processEvents()
+        for enabled, expected in [(True,245),(False,255)]:
+            window.setProperty("translucent_background",enabled)
+            image=QImage(window.size(),QImage.Format_ARGB32_Premultiplied); image.fill(Qt.transparent)
+            painter=QPainter(image)
+            window.render(painter,QPoint(),renderFlags=QWidget.DrawChildren)
+            painter.end()
+            for x,y in [(500,20),(10,300),(100,300),(500,300)]:
+                self.assertEqual(image.pixelColor(x,y).alpha(),expected)
+
+    def test_friends_render_without_waiting_for_requests(self):
+        from unittest.mock import patch
+        from ui.friends_page import FriendsPage, FriendItem
+        with patch.object(FriendsPage, "start_request"):
+            page = FriendsPage()
+            self.addCleanup(page.close)
+            page.timer.stop()
+            page.handle_friends({"status":"ok", "friends":[{"login":"alice","nickname":"Alice"}]})
+            self.assertFalse(page._has_loaded_requests_once)
+            self.assertFalse(page._skeleton_visible)
+            self.assertEqual(len(page.findChildren(FriendItem)), 1)
+            page.set_view("requests")
+            self.assertTrue(page._skeleton_visible)
+            page.set_view("all")
+            self.assertFalse(page._skeleton_visible)
+            page.set_view("requests")
+            page.handle_requests({"status":"ok", "requests":[]})
+            self.assertFalse(page._skeleton_visible)
+
+    def test_selector_popup_keyboard_selection_and_cancel(self):
+        from ui.design.widgets import ScrollSafeComboBox
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        combo = ScrollSafeComboBox()
+        combo.addItems([f"Device {i}" for i in range(20)])
+        combo.resize(320,46); combo.show()
+        self.addCleanup(combo.close)
+        combo.showPopup(); self.app.processEvents()
+        self.assertTrue(combo.view().isVisible())
+        self.assertEqual(combo.view().sizeHintForRow(0),40)
+        QTest.keyClick(combo.view(), Qt.Key_Down)
+        QTest.keyClick(combo.view(), Qt.Key_Return)
+        self.assertEqual(combo.currentIndex(),1)
+        combo.showPopup(); self.app.processEvents()
+        QTest.keyClick(combo.view(), Qt.Key_Down)
+        QTest.keyClick(combo.view(), Qt.Key_Escape)
+        self.assertEqual(combo.currentIndex(),1)
+        self.assertFalse(combo.view().isVisible())
+
     def test_image_plugins_load_svg_controls_and_avatar_formats(self):
         from PySide6.QtGui import QImageReader, QImage
         from ui.design.widgets import ASSETS

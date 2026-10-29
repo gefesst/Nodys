@@ -1,7 +1,7 @@
 /* Nodus 3.3. Palette values are supplied only by ui.design.tokens. */
 QWidget { color: @FG@; font-family: Arial; font-size:14px; background:transparent; }
 QLabel { background:transparent; border:0; }
-QFrame#SectionSidebar,QFrame#ChannelsSidebarCard { background:@SIDEBAR@; border:0; border-right:1px solid @EDGE@; border-radius:0; }
+QFrame#SectionSidebar,QFrame#ChannelsSidebarCard { background:transparent; border:0; border-right:1px solid @EDGE@; border-radius:0; }
 QFrame#Divider,QFrame#ChannelsSidebarSeparator { background:@EDGE@; border:0; }
 QLabel#PageTitle,QLabel#FriendsTitle,QLabel#ChannelOpenTitle,QLabel#ProfileTitle {font-size:25px;font-weight:600;}
 QLabel#Eyebrow {color:@ACC@;font-size:10px;font-weight:600;}
@@ -64,7 +64,7 @@ QLabel#ChannelFormTitle,QLabel#ChannelSettingsSectionTitle,QLabel#CallTitle {fon
 QLabel#ChannelFormHint,QLabel#ChannelOpenCode,QLabel#CallPeerLogin,QLabel#CallQuality {color:@SUB@;font-size:12px;}
 QLabel#ChannelsListHeader {color:@MUT@;font-size:10px;padding-top:12px;}
 QFrame#ChannelVoiceMemberRow {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
-QWidget#Sidebar {background:#19222D;}
+QWidget#Sidebar {background:transparent;}
 
 QFrame#IncomingCallInlineCard,QFrame#CallInlineNoticeCard,QFrame#ChannelInlineConfirm {background:@SURFACE@;border:1px solid #536D92;border-radius:14px;}
 QLabel#IncomingCallInlineTitle {font-size:20px;font-weight:600;}
