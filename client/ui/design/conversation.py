@@ -133,6 +133,7 @@ class Conversation(QWidget):
         root.addWidget(compose_frame)
         self.send_status = QLabel("Enter — отправить · Shift + Enter — новая строка")
         self.send_status.setObjectName("Muted")
+        self.send_status.setStyleSheet("QLabel {font-size:11px;}")
         self.send_status.setWordWrap(True)
         root.addWidget(self.send_status)
         self.update_controls()

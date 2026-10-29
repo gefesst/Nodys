@@ -23,7 +23,7 @@ from .overlay import OverlayDialog
 
 class QuickDelegate(QStyledItemDelegate):
     def sizeHint(self, option, index):
-        return QSize(722, 87)
+        return QSize(0, 87)
 
     def paint(self, painter, option, index):
         row = index.data(Qt.UserRole)
@@ -88,6 +88,7 @@ class QuickSwitch(OverlayDialog):
         heading.setFixedHeight(30)
         root.addWidget(heading)
         self.list = QListView()
+        self.list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.model = QStandardItemModel(self)
         self.list.setModel(self.model)
         self.list.setItemDelegate(QuickDelegate(self.list))
@@ -116,7 +117,12 @@ class QuickSwitch(OverlayDialog):
     def filter(self, text):
         self.targets = []
         labels = []
-        contacts = getattr(self.main.friends_page, "_friends_data", [])
+        friends_page = self.main.friends_page
+        contacts = getattr(friends_page, "_friends_data", [])
+        chats_page = getattr(self.main, "chats_page", None)
+        if (getattr(chats_page, "_friends_received_at", 0)
+                > getattr(friends_page, "_friends_received_at", 0)):
+            contacts = chats_page.dialog_model.all_rows
         channels = self.main.channels_page.channels
         for kind, rows in [("chat", contacts), ("channel", channels)]:
             for row in rows:

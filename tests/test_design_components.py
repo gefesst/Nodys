@@ -63,6 +63,31 @@ class DesignGeometryTests(unittest.TestCase):
         label.resize(900,30);self.app.processEvents()
         self.assertEqual(label.text(),label.full_text)
 
+    def test_dialog_poll_preserves_search_selection_and_accessibility_index(self):
+        from PySide6.QtWidgets import QListView
+        from PySide6.QtCore import QPersistentModelIndex
+        from PySide6.QtTest import QSignalSpy
+        from ui.design.models import DialogModel
+        model = DialogModel()
+        view = QListView(); view.setModel(model)
+        self.addCleanup(view.close)
+        rows = [{"login": "anna", "nickname": "Анна", "online": True},
+                {"login": "alexey", "nickname": "Алексей", "online": True}]
+        model.replace(rows); model.filter("anna")
+        view.setCurrentIndex(model.index(0))
+        index = QPersistentModelIndex(view.currentIndex())
+        resets = QSignalSpy(model.modelReset)
+        changes = QSignalSpy(model.dataChanged)
+        model.replace([dict(rows[0], online=False), rows[1]])
+        self.assertEqual(resets.count(), 0)
+        self.assertEqual(changes.count(), 1)
+        self.assertTrue(index.isValid())
+        self.assertEqual(view.currentIndex().row(), 0)
+        self.assertEqual(model.rowCount(), 1)
+        self.assertEqual(model.rows[0]["login"], "anna")
+        model.replace([dict(rows[0], online=False), rows[1]])
+        self.assertEqual(changes.count(), 1)
+
     def test_dialog_order_uses_last_message_not_presence(self):
         from ui.chats_page import ChatsPage
         from ui.design.models import DialogModel
@@ -155,7 +180,14 @@ class DesignGeometryTests(unittest.TestCase):
         host=QWidget();host.resize(1440,900)
         host.friends_page=SimpleNamespace(_friends_data=[{'login':'alice'},{'login':'bob'}])
         host.channels_page=SimpleNamespace(channels=[])
+        host.chats_page=SimpleNamespace(_friends_received_at=2, dialog_model=SimpleNamespace(
+            all_rows=[{'login':'alice','online':False},{'login':'bob','online':False}]))
         panel=QuickSwitch(host)
+        host.show();panel.show();self.app.processEvents()
+        self.assertFalse(panel.targets[0][1]['online'])
+        self.assertFalse(panel.list.horizontalScrollBar().isVisible())
+        self.assertLessEqual(panel.list.visualRect(panel.model.index(0,0)).right(),
+                             panel.list.viewport().rect().right())
         QTest.keyClick(panel.query,Qt.Key_Down)
         self.assertEqual(panel.list.currentIndex().row(),1)
         QTest.keyClick(panel.query,Qt.Key_Up)

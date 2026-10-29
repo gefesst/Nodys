@@ -159,6 +159,9 @@ def main():
             self.visual_fixtures.append('43j-chat-uploaded-avatar: generated PNG saved through real update_profile; no user profile changed')
             long_name='Александра Константинопольская-Рождественская'
             assert lab.request(peer,'update_profile',nickname=long_name,avatar='')['status']=='ok'
+            # A timer may already be fetching the old profile. Wait for that
+            # request before explicitly fetching the new server state.
+            self.wait(predicate=lambda:not page._loading_friends);yield
             page.load_friends(force=True);self.wait(predicate=lambda:not page._loading_friends);yield
             assert page.chat_header.toolTip()==long_name, (page.chat_header.toolTip(),page.active_friend)
             text='Длинное сообщение: '+('Проверяем перенос строк, ширину пузыря и прокрутку. '*30)+'\n'+('https://example.test/very-long-path-'*15)

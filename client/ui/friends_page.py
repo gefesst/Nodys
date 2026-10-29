@@ -1,3 +1,4 @@
+import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit,
@@ -553,6 +554,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self._friends_error = resp.get("status") != "ok"
         if resp.get("status") == "ok":
             self._friends_data = list(resp.get("friends", []) or [])
+            self._friends_received_at = time.monotonic()
         else:
             self._friends_data = []
         self._has_loaded_friends_once = True

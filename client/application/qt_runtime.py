@@ -16,6 +16,10 @@ def prepare_platform_plugins():
         flags = path.stat().st_flags
         if flags & stat.UF_HIDDEN:
             os.chflags(path, flags & ~stat.UF_HIDDEN)
+    # Populate the image factory while all plugins are visible, before SVG
+    # rendering can trigger a partial first scan of that same factory.
+    from PySide6.QtGui import QImageReader
+    QImageReader.supportedImageFormats()
 
 
 def prepare_application_fonts(app):

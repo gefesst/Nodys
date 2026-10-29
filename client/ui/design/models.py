@@ -83,6 +83,7 @@ class DialogModel(QAbstractListModel):
         super().__init__(parent)
         self.rows = []
         self.all_rows = []
+        self.query = ""
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.rows)
@@ -98,13 +99,22 @@ class DialogModel(QAbstractListModel):
 
     def replace(self, rows):
         self.all_rows = list(rows)
-        self.filter("")
+        self.filter(self.query)
 
     def filter(self, q):
-        self.beginResetModel()
-        self.rows = [
-            r
-            for r in self.all_rows
+        self.query = q
+        rows = [
+            r for r in self.all_rows
             if q.casefold() in (r.get("nickname", "") + " " + r["login"]).casefold()
         ]
+        # Polling normally updates previews/presence, not row identities. Avoid
+        # invalidating focus, accessibility indexes and scroll position.
+        if [r["login"] for r in rows] == [r["login"] for r in self.rows]:
+            for index, row in enumerate(rows):
+                if row != self.rows[index]:
+                    self.rows[index] = row
+                    self.dataChanged.emit(self.index(index), self.index(index))
+            return
+        self.beginResetModel()
+        self.rows = rows
         self.endResetModel()

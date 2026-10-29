@@ -1,4 +1,5 @@
 """Private conversations: real data, scoped requests and shared Nodus components."""
+import time
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListView, QFrame, QStackedWidget,QSizePolicy
@@ -46,7 +47,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         left.addWidget(title)
         self.search = QLineEdit()
         self.search.setFixedHeight(40)
-        self.search.setStyleSheet('min-height:16px;max-height:16px;')
+        self.search.setStyleSheet('QLineEdit {min-height:16px;max-height:16px;}')
         self.search.setPlaceholderText('Найти диалог')
         self.search.addAction(QIcon(str(ASSETS/'search.svg')),QLineEdit.LeadingPosition)
         self.search.textChanged.connect(self.filter_friends)
@@ -66,6 +67,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.list_status = QLabel('Загрузка диалогов…')
         self.list_status.setWordWrap(True)
         self.list_status.setObjectName('Muted')
+        self.list_status.setStyleSheet('QLabel {font-size:11px;}')
         self.list_status.setContentsMargins(10,0,10,0)
         self.voice_dock_space=QWidget()
         self.voice_dock_space.setFixedHeight(170)
@@ -184,6 +186,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         if response.get('status') != 'ok':
             self.list_status.setText(response.get('message', 'Не удалось загрузить диалоги'))
             return  # A transient failure must not remove the selected friend/draft.
+        self._friends_received_at = time.monotonic()
         rows = sorted(response.get('friends', []), key=lambda r: r.get('nickname', r['login']).casefold())
         for row in rows:
             row['unread_count'] = self.unread_counts.get(row['login'], 0)
@@ -209,7 +212,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         noun='диалог' if count%10==1 and count%100!=11 else 'диалога' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'диалогов'
         self.list_status.setText((f'Найдено: {count} {noun}' if text else
             f'{count} {noun} · {sum(bool(row.get("online")) for row in self.dialog_model.rows)} в сети') if count or text else 'Добавьте друзей, чтобы начать общение')
-        if self.active_friend:
+        if self.active_friend and not self.dialogs.currentIndex().isValid():
             for i, row in enumerate(self.dialog_model.rows):
                 if row['login'] == self.active_friend['login']:
                     self.dialogs.setCurrentIndex(self.dialog_model.index(i))
@@ -235,6 +238,10 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.update_header()
         self.conversation.select(friend['login'], friend.get('nickname', friend['login']))
         self.filter_friends(self.search.text())
+        for i, row in enumerate(self.dialog_model.rows):
+            if row['login'] == friend['login']:
+                self.dialogs.setCurrentIndex(self.dialog_model.index(i))
+                break
 
     def load_messages(self, force=False):
         if force or self._is_poll_allowed():

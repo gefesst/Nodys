@@ -382,7 +382,9 @@ class DialogDelegate(QStyledItemDelegate):
                     if date.date() == datetime.now().date() - timedelta(days=1)
                     else date.strftime("%d.%m")
                 )
-                draw_text(p, r.right() - 45, r.top() + 27, stamp, 10, SUB)
+                p.setFont(font(11))
+                stamp_width = p.fontMetrics().horizontalAdvance(stamp)
+                draw_text(p, r.right() - 18 - stamp_width, r.top() + 27, stamp, 11, MUT)
             except (ValueError, TypeError):
                 pass
         count = int(d.get("unread_count", 0) or 0)
@@ -545,10 +547,7 @@ class MessageDelegate(QStyledItemDelegate):
             draw_text(p, center-label_width/2, o.rect.y()+unread_offset+26, m.date, 11, MUT)
         if m.group:
             display_name = self.own_name() if own else m.name
-            parts = display_name.split()
-            initials = (
-                "".join(s[0] for s in parts[:2]) if len(parts) > 1 else display_name[:2]
-            )
+            initials = self._avatar_helper._initials(display_name)
             avatar(
                 p,
                 o.rect.x() + 10,
