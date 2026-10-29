@@ -197,10 +197,14 @@ class Conversation(QWidget):
                 older=self.older, newer=self.newer, at_latest=self.at_latest,
                 unread_boundary=self.unread_boundary, unread_count=self.unread_count,
                 unread_initialized=self.unread_initialized,
-                scroll=self.view.verticalScrollBar().value())
+                scroll=self.view.verticalScrollBar().value(),
+                anchor=self.anchor(),
+                bottom=self.view.verticalScrollBar().maximum()-self.view.verticalScrollBar().value()<20)
             self.history_cache.move_to_end(self.identity)
             while len(self.history_cache)>20:
                 self.history_cache.popitem(last=False)
+        self.view.reflow.stop()
+        self._applying = True
         warmed=self.prefetched.pop(identity,None)
         cached=self.history_cache.pop(identity,None)
         if cached is not None:self.history_cache[identity]=cached
@@ -237,7 +241,10 @@ class Conversation(QWidget):
             self.apply(warmed.get("messages",[]),"latest",warmed)
         self.update_controls()
         if cached is not None:
-            self.view.verticalScrollBar().setValue(cached["scroll"])
+            self.layout().activate()
+            self.view.doItemsLayout()
+            self.restore_position(cached["anchor"], cached["bottom"], cached["scroll"])
+        self._applying = False
         if identity is not None:
             self.load("poll" if cached is not None or warmed is not None else "latest")
 
@@ -336,6 +343,22 @@ class Conversation(QWidget):
         if index.isValid() and index.row() < len(self.rows):
             return self.rows[index.row()]["id"], self.view.visualRect(index).top()
         return None
+
+    def restore_position(self, anchor, bottom=False, fallback=None):
+        # A delayed resize anchor belongs to the previous layout/conversation.
+        self.view.reflow.stop()
+        bar = self.view.verticalScrollBar()
+        if bottom:
+            self.view.scrollToBottom()
+        elif anchor:
+            row = next((i for i, item in enumerate(self.rows) if item["id"] == anchor[0]), None)
+            if row is not None:
+                self.view.scrollTo(self.model.index(row), QAbstractItemView.PositionAtTop)
+                bar.setValue(bar.value() - anchor[1])
+            elif fallback is not None:
+                bar.setValue(fallback)
+        elif fallback is not None:
+            bar.setValue(fallback)
 
     def apply(self, incoming, direction, response):
         anchor = self.anchor()
@@ -440,20 +463,16 @@ class Conversation(QWidget):
             return
         old_count = self.model.rowCount()
         self.model.sync(rendered)
+        self.update_controls()
+        self.layout().activate()
         self.view.doItemsLayout()
+        self.view.reflow.stop()
         if direction == "latest" or (
             direction in ("poll", "newer") and near_bottom and self.at_latest
         ):
             self.view.scrollToBottom()
         elif anchor:
-            row = next(
-                (i for i, r in enumerate(self.rows) if r["id"] == anchor[0]), None
-            )
-            if row is not None:
-                self.view.scrollTo(
-                    self.model.index(row), QAbstractItemView.PositionAtTop
-                )
-                bar.setValue(bar.value() - anchor[1])
+            self.restore_position(anchor)
         if direction == "poll" and len(rendered) > old_count and rendered:
             self.delegate.animate_row(len(rendered) - 1)
         self._applying = False

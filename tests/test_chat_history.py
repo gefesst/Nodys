@@ -232,6 +232,53 @@ class ConversationTests(unittest.TestCase):
         self.assertFalse(self.chat.history_cache)
         self.assertFalse(self.chat.model.rows)
 
+    def test_reopen_preserves_reading_position_after_layout_and_background_reply(self):
+        from PySide6.QtTest import QTest
+        self.chat.resize(800, 560)
+        self.owner.show()
+        self.chat.show()
+        self.chat.select("bob")
+        self.requests[-1][1](self.response(count=80))
+        QTest.qWait(150)
+        bar = self.chat.view.verticalScrollBar()
+        bar.setValue(bar.maximum() // 2)
+        saved = self.chat.anchor()
+        self.assertIsNotNone(saved)
+        self.chat.select("carol")
+        self.requests[-1][1](self.response("carol", count=80))
+        # Queue the resize restoration belonging to the other conversation.
+        self.chat.resize(760, 560)
+        self.app.processEvents()
+        self.chat.select("bob")
+        self.requests[-1][1](self.response(count=1, start=81))
+        QTest.qWait(150)
+        self.assertEqual(self.chat.anchor(), saved)
+
+    def test_first_open_and_reopened_tail_stay_at_latest_after_resize_timer(self):
+        from PySide6.QtTest import QTest
+        self.chat.resize(800, 560)
+        self.owner.show()
+        self.chat.show()
+        self.chat.select("bob")
+        self.requests[-1][1](self.response(count=80))
+        QTest.qWait(150)
+        bar = self.chat.view.verticalScrollBar()
+        self.assertGreater(bar.maximum(), 0)
+        self.assertEqual(bar.value(), bar.maximum())
+        self.chat.select("carol")
+        self.requests[-1][1](self.response("carol", count=0))
+        self.chat.select("bob")
+        self.requests[-1][1](self.response(count=1, start=81))
+        QTest.qWait(150)
+        self.assertEqual(bar.value(), bar.maximum())
+        # Closing and reopening without a reply must also retain the position.
+        bar.setValue(bar.maximum() // 3)
+        saved = self.chat.anchor()
+        self.chat.select(None)
+        self.chat.select("bob")
+        QTest.qWait(150)
+        self.assertEqual(self.chat.anchor(), saved)
+
     def test_history_cache_is_bounded_and_remembers_empty_chats(self):
         for i in range(25):
             self.chat.select(str(i))
