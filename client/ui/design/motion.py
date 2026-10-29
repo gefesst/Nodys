@@ -67,9 +67,9 @@ class MotionFilter(QObject):
         if kind == QEvent.ChildPolished:
             self.watch(event.child())
             return False
-        if kind in (QEvent.Enter,QEvent.MouseMove,QEvent.HoverMove,QEvent.EnabledChange):
+        if kind == QEvent.EnabledChange:
             shape=interactive_cursor(widget)
-            if shape is not None:
+            if shape is not None and widget.cursor().shape() != shape:
                 # Keep Cocoa/Qt cursor ownership on the actual field/button under the
                 # pointer, including editor viewports and labels inside controls.
                 widget.setCursor(shape)

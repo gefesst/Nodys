@@ -41,33 +41,6 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
-    def test_native_cursor_completion_respects_inactive_app_and_other_cursors(self):
-        from application.cursor_runtime import DesktopApplication
-        from PySide6.QtWidgets import QLineEdit
-        from PySide6.QtCore import Qt
-        from unittest.mock import Mock, patch
-
-        field = QLineEdit()
-        self.addCleanup(field.close)
-        native = Mock()
-        bridge = SimpleNamespace(NSCursor=SimpleNamespace(
-            IBeamCursor=lambda: native, pointingHandCursor=lambda: native,
-            arrowCursor=lambda: native,
-        ))
-        app = SimpleNamespace(applicationState=lambda: Qt.ApplicationActive,
-                              overrideCursor=lambda: None, widgetAt=lambda p: field)
-        with patch.dict(sys.modules, {'AppKit': bridge}):
-            DesktopApplication._finish_mouse_move(app)
-            native.set.assert_called_once()
-            native.reset_mock()
-            app.applicationState = lambda: Qt.ApplicationInactive
-            DesktopApplication._finish_mouse_move(app)
-            native.set.assert_not_called()
-            app.applicationState = lambda: Qt.ApplicationActive
-            app.overrideCursor = lambda: object()
-            DesktopApplication._finish_mouse_move(app)
-            native.set.assert_not_called()
-
     def test_button_mouse_moves_do_not_reach_arrow_cursor_parent(self):
         from ui.design.motion import MotionFilter
         from PySide6.QtWidgets import QWidget, QPushButton, QVBoxLayout
@@ -111,7 +84,6 @@ class DesignGeometryTests(unittest.TestCase):
         host.show();self.addCleanup(host.close);self.app.processEvents()
         for _ in range(3):
             for control,shape in ((field,Qt.IBeamCursor),(editor,Qt.IBeamCursor),(editor.viewport(),Qt.IBeamCursor),(button,Qt.PointingHandCursor),(child,Qt.PointingHandCursor)):
-                control.setCursor(Qt.ArrowCursor)
                 self.app.sendEvent(control,QEnterEvent(control.rect().center(),control.rect().center(),control.rect().center()))
                 self.assertEqual(control.cursor().shape(),shape)
                 control.style().unpolish(control);control.style().polish(control)
@@ -120,6 +92,9 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertEqual(editor.verticalScrollBar().cursor().shape(),Qt.ArrowCursor)
         button.setEnabled(False);self.app.processEvents()
         self.assertEqual(button.cursor().shape(),Qt.ArrowCursor)
+        button.setEnabled(True);self.app.processEvents()
+        self.assertEqual(button.cursor().shape(),Qt.PointingHandCursor)
+        self.assertEqual(child.cursor().shape(),Qt.PointingHandCursor)
         self.assertIsNone(self.app.overrideCursor())
 
     def test_tooltips_blocked_for_dynamic_widgets_without_losing_accessibility(self):

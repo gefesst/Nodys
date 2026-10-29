@@ -4,14 +4,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from application.qt_runtime import prepare_platform_plugins, prepare_application_fonts
 import sys
-from application.cursor_runtime import DesktopApplication
+from PySide6.QtWidgets import QApplication
 from app_window import AppWindow
 from style_manager import apply_app_styles
 
 
 def main():
     prepare_platform_plugins()
-    app = DesktopApplication(sys.argv)
+    app = QApplication(sys.argv)
     app.setApplicationName("noda")
     app.setApplicationDisplayName("noda")
     from application.gui_gc import install as install_gui_gc
