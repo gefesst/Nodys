@@ -70,6 +70,26 @@ class UiTests(unittest.TestCase):
             self.assertTrue(window.chats_page.hasFocus())
             self.assertTrue(dock.isHidden())
 
+    def test_invites_expand_above_footer_without_changing_screen(self):
+        p=self.page
+        p.resize(1040,620);p.show();self.app.processEvents()
+        p.load_channel_invites=lambda **kwargs:None
+        p.open_create_page();current=p.main_stack.currentWidget()
+        p._invites=[{'invite_id':7,'channel_name':'Новый канал','from_nickname':'Друг'}]
+        p._render_invites(force=True)
+        p._set_invites_dropdown_open(True)
+        p.invites_animation.setCurrentTime(180);self.app.processEvents()
+        self.assertIs(p.main_stack.currentWidget(),current)
+        self.assertFalse(p.invites_dropdown.isHidden())
+        self.assertEqual(p.invites_badge.text(),'1')
+        self.assertGreater(p.invites_dropdown.height(),100)
+        from PySide6.QtCore import QPoint
+        self.assertLess(p.invites_dropdown.mapTo(p,QPoint()).y(),p.invites_toggle_btn.mapTo(p,QPoint()).y())
+        p._set_invites_dropdown_open(False)
+        p.invites_animation.setCurrentTime(180);self.app.processEvents()
+        self.assertTrue(p.invites_dropdown.isHidden())
+        self.assertIs(p.main_stack.currentWidget(),current)
+
     def test_forms_survive_empty_poll(self):
         p = self.page
         p.start_request = lambda data, callback, **kw: callback({'status':'ok','channels':[]})

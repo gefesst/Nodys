@@ -1,14 +1,13 @@
 """Private conversations: real data, scoped requests and shared Nodus components."""
 import time
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListView, QFrame, QStackedWidget,QSizePolicy
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QListView, QFrame, QStackedWidget,QSizePolicy
 from application.request_scope import RequestScope
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
 from ui.design.tokens import LIST_WIDTH
-from ui.design.widgets import Button, DialogDelegate, Toast, ASSETS, ElidedLabel
+from ui.design.widgets import Button, DialogDelegate, Toast, ElidedLabel, SearchField
 from ui.design.models import DialogModel
 from ui.design.conversation import Conversation
 
@@ -48,11 +47,10 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         title.setObjectName('PageTitle')
         title.setContentsMargins(10,0,10,0)
         left.addWidget(title)
-        self.search = QLineEdit()
+        self.search = SearchField()
         self.search.setFixedHeight(40)
         self.search.setStyleSheet('QLineEdit {min-height:16px;max-height:16px;}')
         self.search.setPlaceholderText('Найти диалог')
-        self.search.addAction(QIcon(str(ASSETS/'search.svg')),QLineEdit.LeadingPosition)
         self.search.textChanged.connect(self.filter_friends)
         search_row=QHBoxLayout();search_row.setContentsMargins(10,2,10,0)
         search_row.addWidget(self.search);left.addLayout(search_row)

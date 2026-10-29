@@ -41,6 +41,25 @@ class DesignGeometryTests(unittest.TestCase):
 
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_tooltips_blocked_for_dynamic_widgets_without_losing_accessibility(self):
+        from ui.design.motion import TooltipBlocker
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QPushButton
+        button=QPushButton();button.setToolTip('Подсказка');button.setAccessibleName('Микрофон')
+        blocker=TooltipBlocker()
+        self.assertTrue(blocker.eventFilter(button,QEvent(QEvent.ToolTip)))
+        self.assertFalse(blocker.eventFilter(button,QEvent(QEvent.Enter)))
+        self.assertEqual(button.accessibleName(),'Микрофон')
+
+    def test_composer_expands_and_returns_to_single_line_height(self):
+        from ui.design.widgets import Composer
+        editor=Composer();editor.resize(400,44);editor.show();self.addCleanup(editor.close)
+        self.app.processEvents();self.assertEqual(editor.height(),44)
+        editor.setPlainText('Первая строка\nВторая строка\nТретья строка')
+        self.app.processEvents();self.assertGreater(editor.height(),44)
+        self.assertLessEqual(editor.height(),130)
+        editor.clear();self.app.processEvents();self.assertEqual(editor.height(),44)
+
     def test_voice_dock_controls_follow_channel_and_private_call_state(self):
         from PySide6.QtWidgets import QWidget
         from ui.design.voice_dock import VoiceDock

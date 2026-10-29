@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PySide6.QtCore import Qt, QTimer, QSignalBlocker
+from PySide6.QtCore import Qt, QTimer, QSignalBlocker, QPropertyAnimation, QEasingCurve
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -302,19 +302,21 @@ class ChannelInviteItem(QFrame):
         self.setObjectName("ChannelInviteItem")
 
         from ui.design.widgets import Button
-        self.setFixedHeight(121)
-        lay=QHBoxLayout(self);lay.setContentsMargins(22,20,16,20);lay.setSpacing(24)
+        self.setMinimumHeight(126)
+        lay=QVBoxLayout(self);lay.setContentsMargins(12,12,12,12);lay.setSpacing(12)
         channel_name=self.invite.get('channel_name') or 'Приглашение в канал'
-        avatar=AvatarLabel(52);avatar.set_avatar(self.invite.get('avatar',''),nickname=channel_name);lay.addWidget(avatar)
-        names=QVBoxLayout();names.setSpacing(8)
-        title=QLabel(channel_name);title.setStyleSheet('font-size:19px;font-weight:600;');title.setWordWrap(True);names.addWidget(title)
+        heading=QHBoxLayout();heading.setSpacing(10)
+        avatar=AvatarLabel(32);avatar.set_avatar(self.invite.get('avatar',''),nickname=channel_name);heading.addWidget(avatar)
+        names=QVBoxLayout();names.setSpacing(3)
+        title=QLabel(channel_name);title.setStyleSheet('font-size:14px;font-weight:600;');title.setWordWrap(True);names.addWidget(title)
         sender=self.invite.get('from_nickname') or self.invite.get('from_user') or 'пользователь'
-        subtitle=QLabel(f'Пригласил: {sender}');subtitle.setObjectName('Muted');subtitle.setWordWrap(True);names.addWidget(subtitle)
-        lay.addLayout(names,1)
-        for label,width,callback,primary in [('Принять',130,on_accept,True),('Отклонить',136,on_decline,False)]:
-            button=Button(label,primary=primary);button.setFixedSize(width,40)
+        subtitle=QLabel(f'От {sender}');subtitle.setObjectName('Muted');subtitle.setWordWrap(True);names.addWidget(subtitle)
+        heading.addLayout(names,1);lay.addLayout(heading)
+        actions=QHBoxLayout();actions.setSpacing(8);lay.addLayout(actions)
+        for label,callback,primary in [('Принять',on_accept,True),('Отклонить',on_decline,False)]:
+            button=Button(label,primary=primary);button.setFixedHeight(36);button.setMinimumWidth(0)
             button.clicked.connect(lambda checked=False,cb=callback:cb(int(self.invite.get('invite_id') or 0)))
-            lay.addWidget(button)
+            actions.addWidget(button,1)
 
 
 
@@ -424,7 +426,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         invites_header = QFrame()
         invites_header.setObjectName("ChannelsInvitesHeader")
         invites_header_l = QHBoxLayout(invites_header)
-        invites_header_l.setContentsMargins(10, 0, 10, 0)
+        invites_header_l.setContentsMargins(0, 0, 0, 0)
         invites_header_l.setSpacing(6)
 
         self.invites_toggle_btn = QPushButton("Приглашения")
@@ -439,7 +441,11 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.invites_badge.setObjectName("ChannelsInviteBadge")
         self.invites_badge.setVisible(False)
         self.invites_badge.setAlignment(Qt.AlignCenter)
-        invites_header_l.addWidget(self.invites_badge, 0, Qt.AlignRight)
+        self.invites_badge.setParent(self.invites_toggle_btn)
+        badge_layout=QHBoxLayout(self.invites_toggle_btn)
+        badge_layout.setContentsMargins(12,0,12,0)
+        badge_layout.addStretch()
+        badge_layout.addWidget(self.invites_badge,0,Qt.AlignVCenter)
 
         sb_l.addWidget(invites_header)
 
@@ -454,7 +460,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self.invites_scroll = QScrollArea()
         self.invites_scroll.setObjectName("ChannelsInvitesScroll")
         self.invites_scroll.setWidgetResizable(True)
-        self.invites_scroll.setMinimumHeight(120)
+        self.invites_scroll.setMinimumHeight(0)
         self.invites_scroll.setMaximumHeight(230)
 
         self.invites_container = QWidget()
@@ -498,9 +504,15 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         sb_l.addWidget(self.voice_dock_space)
         sb_l.removeWidget(self.sidebar_actions_separator)
         sb_l.addWidget(self.sidebar_actions_separator)
-        sb_l.removeWidget(invites_header);sb_l.addWidget(invites_header)
         sb_l.removeWidget(self.invites_dropdown);sb_l.addWidget(self.invites_dropdown)
-        sb_l.addStretch()
+        sb_l.removeWidget(invites_header);sb_l.addWidget(invites_header)
+        sb_l.removeWidget(self.voice_dock_space);sb_l.addWidget(self.voice_dock_space)
+        self.invites_dropdown.setMaximumHeight(0)
+        self.invites_animation=QPropertyAnimation(self.invites_dropdown,b"maximumHeight",self)
+        self.invites_animation.setDuration(180)
+        self.invites_animation.valueChanged.connect(lambda value:self.invites_dropdown.setMinimumHeight(int(value)))
+        self.invites_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.invites_animation.finished.connect(self._finish_invites_animation)
 
         root.addWidget(sidebar, 1)
 
@@ -530,20 +542,6 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._set_channel_list_state('empty')
         self.main_stack.addWidget(self.placeholder_page)
 
-        self.invites_page=QWidget()
-        ip=QVBoxLayout(self.invites_page);ip.setContentsMargins(16,8,24,0);ip.setSpacing(0)
-        title=QLabel('Приглашения');title.setObjectName('FriendsTitle');title.setFixedHeight(34);ip.addWidget(title)
-        ip.addSpacing(8)
-        subtitle=QLabel('Вас ждут в новых пространствах');subtitle.setObjectName('FriendsSubtitle');subtitle.setFixedHeight(17);ip.addWidget(subtitle)
-        ip.addSpacing(18)
-        divider=QFrame();divider.setObjectName('Divider');divider.setFixedHeight(1);ip.addWidget(divider)
-        ip.addSpacing(52)
-        sb_l.removeWidget(self.invites_dropdown)
-        self.invites_dropdown.setObjectName("ChannelInvitesPageBody")
-        self.invites_scroll.setMaximumHeight(16777215)
-        self.invites_layout.setSpacing(24)
-        ip.addWidget(self.invites_dropdown,1)
-        self.main_stack.addWidget(self.invites_page)
         # Create channel page
         self.create_page = QWidget()
         cp_root = QVBoxLayout(self.create_page)
@@ -1056,12 +1054,22 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
     def _set_invites_dropdown_open(self, opened: bool):
         with QSignalBlocker(self.invites_toggle_btn):
             self.invites_toggle_btn.setChecked(bool(opened))
-        self.invites_dropdown.setVisible(True)
+        from ui.design.motion import reduced
+        self.invites_animation.stop()
+        self.invites_dropdown.show()
+        target=min(230, max(120, self.height()//3)) if opened else 0
+        if reduced():
+            self.invites_dropdown.setFixedHeight(target)
+            self._finish_invites_animation()
+        else:
+            self.invites_animation.setStartValue(self.invites_dropdown.maximumHeight())
+            self.invites_animation.setEndValue(target)
+            self.invites_animation.start()
         if opened:
-            self.main_stack.setCurrentWidget(self.invites_page)
             self.load_channel_invites(force=True)
-        elif self.main_stack.currentWidget() == self.invites_page:
-            self.main_stack.setCurrentWidget(self.placeholder_page)
+
+    def _finish_invites_animation(self):
+        self.invites_dropdown.setVisible(self.invites_toggle_btn.isChecked())
 
     def _toggle_invites_dropdown(self, checked: bool):
         self._set_invites_dropdown_open(bool(checked))
@@ -1146,9 +1154,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
         self._update_invites_indicator(len(invites))
 
         if not invites:
-            from ui.design.state_surfaces import EmptyState
-            empty=EmptyState('Нет новых приглашений','Когда вас пригласят в канал, приглашение появится здесь.')
-            empty.set_top_offset(134)
+            empty=QLabel('Новых приглашений пока нет.\nЗдесь появятся приглашения в каналы.');empty.setWordWrap(True);empty.setObjectName('Muted');empty.setContentsMargins(12,18,12,18)
             self.invites_layout.insertWidget(0,empty)
             return
 
@@ -1663,7 +1669,7 @@ class ChannelsPage(QWidget, ThreadSafeMixin):
                     self._voice_participants_signature = ""
                     self._clear_voice_members_list()
                     self.hide_settings_confirm()
-                    if self.main_stack.currentWidget() not in (self.create_page, self.join_page, self.invites_page):
+                    if self.main_stack.currentWidget() not in (self.create_page, self.join_page):
                         self.main_stack.setCurrentWidget(self.placeholder_page)
                     if self.messages_timer.isActive():
                         self.messages_timer.stop()

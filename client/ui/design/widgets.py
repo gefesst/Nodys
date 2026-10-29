@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QStyledItemDelegate,
     QStyle,
     QPlainTextEdit,
+    QLineEdit,
     QListView,
     QAbstractItemView,
     QComboBox,
@@ -48,6 +49,18 @@ COMBO_ARROW_STYLE = (
     + '");width:14px;height:14px;}'
 )
 ICONS = {}
+
+
+class SearchField(QLineEdit):
+    """Identical optical inset on every search field, independent of Qt actions."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setTextMargins(28, 0, 0, 0)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        icon(painter, "search", QRectF(16, (self.height()-18)/2, 18, 18), SUB)
 
 
 class SelectorStyle(QProxyStyle):
@@ -712,14 +725,15 @@ class Composer(QPlainTextEdit):
         super().__init__(parent)
         self.setFont(font(15))
         self.setPlaceholderText("Сообщение…")
-        self.setMinimumHeight(59)
+        self.document().setDocumentMargin(0)
+        self.setFixedHeight(44)
         self.setMaximumHeight(130)
         self.setTabChangesFocus(True)
         self.textChanged.connect(self.adjust_height)
 
     def adjust_height(self):
         lines = max(1, int(self.document().documentLayout().documentSize().height()))
-        self.setFixedHeight(59 if lines == 1 else min(130, lines * 23 + 53))
+        self.setFixedHeight(min(130, max(44, lines * self.fontMetrics().lineSpacing() + 24)))
 
     def keyPressEvent(self, e):
         if (

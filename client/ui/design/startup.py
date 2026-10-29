@@ -1,28 +1,18 @@
 """Quiet session-restoration screen; animation follows actual visibility."""
 import math
 from PySide6.QtCore import Qt, QRectF, Property, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QPainter, QColor, QLinearGradient
+from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
-from .widgets import Button, icon
+from .widgets import Button
 from .motion import reduced
 from .tokens import ACC
 
 
-class StartupMark(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setFixedSize(84, 84)
+from .brand import BrandMark
 
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        gradient = QLinearGradient(0, 0, 84, 84)
-        gradient.setColorAt(0, QColor('#30476A'))
-        gradient.setColorAt(1, QColor('#202E42'))
-        p.setPen(Qt.NoPen)
-        p.setBrush(gradient)
-        p.drawRoundedRect(QRectF(0, 0, 84, 84), 24, 24)
-        icon(p, 'n', QRectF(22, 22, 40, 40), ACC)
+class StartupMark(BrandMark):
+    def __init__(self):
+        super().__init__(84)
 
 
 class StartupProgress(QWidget):

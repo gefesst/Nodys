@@ -12,6 +12,7 @@ from utils.thread_safe_mixin import ThreadSafeMixin
 from ui.avatar_widget import AvatarLabel
 from ui.micro_interactions import install_opacity_feedback
 from ui.toast import InlineToast
+from ui.design.widgets import SearchField
 
 
 class FriendItem(QFrame):
@@ -176,7 +177,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         self.add_btn.setObjectName("AddFriendButton")
         self.add_btn.clicked.connect(self.toggle_add_friend_panel)
         self.add_btn.hide()
-        self.filter_input=QLineEdit();self.filter_input.setPlaceholderText('Найти друга');self.filter_input.setMaximumWidth(260)
+        self.filter_input=SearchField();self.filter_input.setPlaceholderText('Найти друга');self.filter_input.setMaximumWidth(260)
         self.filter_input.textChanged.connect(lambda:self._render_if_needed(force=True));head.addWidget(self.filter_input)
         install_opacity_feedback(self.add_btn, hover_opacity=0.99, pressed_opacity=0.94, duration_ms=85)
 

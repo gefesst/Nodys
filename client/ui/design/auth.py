@@ -47,7 +47,7 @@ def build_auth_layout(page, title, subtitle):
     form = QVBoxLayout(card)
     form.setContentsMargins(41, 39, 41, 56)
     form.setSpacing(0)
-    brand = QSvgWidget(str(ASSETS / "n.svg"))
+    brand = QSvgWidget(str(ASSETS / "logo.svg"))
     brand.setFixedSize(30, 30)
     form.addWidget(brand)
     form.addSpacing(20)

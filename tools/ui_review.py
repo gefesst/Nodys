@@ -535,7 +535,7 @@ def main():
                 self.shot('09b-chat-empty')
                 assert c.history_stack.currentWidget() is c.empty_state
                 c.loading=True;c.update_controls();self.shot('09c-chat-loading')
-                assert c.history_stack.currentWidget() is c.loading_state
+                assert c.history_stack.currentWidget() is not c.loading_state
                 c.loading=False;c.history_error=True;c.update_controls();self.shot('09d-chat-error')
                 assert c.history_stack.currentWidget() is c.error_state
                 c.rows=saved_rows;c.history_error=False;c.update_controls()

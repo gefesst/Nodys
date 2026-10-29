@@ -68,11 +68,22 @@ class MotionFilter(QObject):
         return False
 
 
+class TooltipBlocker(QObject):
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.ToolTip:
+            from PySide6.QtWidgets import QToolTip
+            QToolTip.hideText()
+            return True
+        return False
+
+
 def install(app):
     from config import load_config
 
     app.setProperty("reduce_motion", bool(load_config().get("reduce_motion", False)))
     app._nodus_motion = MotionFilter(app)
+    app._nodus_tooltips = TooltipBlocker(app)
+    app.installEventFilter(app._nodus_tooltips)
     # Only watch finished application widgets. An application-wide filter also
     # wraps Qt's internal objects while they are being constructed/destroyed.
 
