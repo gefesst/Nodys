@@ -348,6 +348,23 @@ class UiTests(unittest.TestCase):
         self.addCleanup(widget.close)
         self.assertFalse(widget._load_pixmap(payload,'remote').isNull())
 
+    def test_pending_call_card_survives_ack_until_next_surface(self):
+        from ui.main_window import MainWindow
+        with patch('ui.main_window.submit_session_cleanup'):
+            window=MainWindow();self.addCleanup(window.prepare_to_close_app);self.addCleanup(window.deleteLater)
+            window.resize(1120,620);window.show()
+            window._show_pending_call('bob');self.app.processEvents()
+            panel=window.pending_call_window
+            window._show_pending_call(None);self.app.processEvents()
+            self.assertIs(window.pending_call_window,panel)
+            self.assertTrue(panel.isVisible())
+            window._show_call_result(dict(peer='bob',title='Нет ответа'))
+            self.app.processEvents()
+            self.assertIsNone(window.pending_call_window)
+            self.assertTrue(window.call_result_window.isVisible())
+            self.assertEqual(window.windowOpacity(),1.0)
+            self.assertFalse(hasattr(window.call_result_window,'_appearance_animation'))
+
     def test_call_snapshot_does_not_restart_audio(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -355,7 +372,7 @@ class UiTests(unittest.TestCase):
         window = SimpleNamespace(ctx=SimpleNamespace(session_token='test'),current_call_user=None,ui_sounds=Mock(),
             voice_client=None,call_window=None,_hide_incoming_inline=Mock(),
             _show_incoming_inline=Mock(),_start_voice_for_peer=Mock(),_open_call_window=Mock(),
-            _close_call_window=Mock(),_close_call_result=Mock())
+            _close_call_window=Mock(),_close_call_result=Mock(),_clear_pending_call=Mock())
         state={'peer':'bob','status':'active','incoming':False,'call_id':'1'}
         MainWindow._reconcile_call_state(window,state)
         MainWindow._reconcile_call_state(window,state)

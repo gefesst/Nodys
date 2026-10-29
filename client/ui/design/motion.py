@@ -83,18 +83,6 @@ class MotionFilter(QObject):
                 frame.style().unpolish(frame)
                 frame.style().polish(frame)
                 frame.update()
-        if (
-            isinstance(widget, (QDialog, QMenu))
-            and kind == QEvent.Show
-            and not reduced()
-            and QApplication.platformName() not in ("offscreen", "minimal")
-        ):
-            animation = QPropertyAnimation(widget, b"windowOpacity", widget)
-            animation.setDuration(150)
-            animation.setStartValue(0.85)
-            animation.setEndValue(1.0)
-            widget._appearance_animation = animation
-            animation.start()
         return False
 
 

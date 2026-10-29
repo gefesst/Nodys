@@ -181,6 +181,38 @@ class DesignGeometryTests(unittest.TestCase):
             if view.viewport().height()<6*76:
                 self.assertGreater(view.verticalScrollBar().maximum(),0)
 
+    def test_cancelling_call_keeps_surface_until_server_confirmation(self):
+        from PySide6.QtWidgets import QWidget
+        from ui.call_window import OutgoingCallWindow, ActiveCallWindow
+        host=QWidget();host.resize(1120,620);host.friends_page=SimpleNamespace(_friends_data=[])
+        host.show();self.addCleanup(host.close)
+        calls=[]
+        outgoing=OutgoingCallWindow('bob',lambda:calls.append('cancel'),host)
+        outgoing.show();self.app.processEvents();outgoing.close()
+        self.assertTrue(outgoing.isVisible())
+        self.assertEqual(calls,['cancel'])
+        outgoing.finished_by_server=True;outgoing.close()
+        self.assertFalse(outgoing.isVisible())
+        active=ActiveCallWindow('alice','bob',on_end=lambda:calls.append('end'),parent=host)
+        active.show();active._end_clicked()
+        self.assertTrue(active.isVisible())
+        self.assertEqual(calls,['cancel','end'])
+        active._ending=True;active.close()
+        self.assertFalse(active.isVisible())
+
+    def test_dialog_show_does_not_animate_window_opacity_on_native_platform(self):
+        from unittest.mock import patch
+        from PySide6.QtWidgets import QWidget
+        from PySide6.QtCore import QEvent
+        from ui.design.overlay import OverlayDialog
+        from ui.design.motion import MotionFilter
+        host=QWidget();host.resize(1120,620);self.addCleanup(host.close)
+        dialog=OverlayDialog(host)
+        with patch('ui.design.motion.QApplication.platformName',return_value='cocoa'):
+            MotionFilter().eventFilter(dialog,QEvent(QEvent.Show))
+        self.assertFalse(hasattr(dialog,'_appearance_animation'))
+        self.assertEqual(host.windowOpacity(),1.0)
+
     def test_voice_dock_controls_follow_channel_and_private_call_state(self):
         from PySide6.QtWidgets import QWidget
         from ui.design.voice_dock import VoiceDock

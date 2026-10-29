@@ -416,6 +416,10 @@ class MainWindow(QWidget):
         self._respond_incoming_inline(False)
 
     def _show_pending_call(self, peer):
+        # Keep the connecting card until the authoritative state/result arrives.
+        # Clearing it at the HTTP acknowledgement flashes the uncovered page.
+        if peer is None:
+            return
         previous=getattr(self,'pending_call_window',None)
         if previous is not None:
             previous.finished_by_server=True
@@ -425,6 +429,7 @@ class MainWindow(QWidget):
             from ui.call_window import OutgoingCallWindow
             self._close_call_result()
             panel=OutgoingCallWindow(peer,lambda:self.calls.cancel_start(peer),self)
+            panel.close_on_cancel=True
             panel.heading.setText('Подключение…')
             panel.status_label.setText('Аудиозвонок')
             self.pending_call_window=panel
@@ -758,11 +763,19 @@ class MainWindow(QWidget):
             panel.deleteLater()
             self.call_result_window = None
 
+    def _clear_pending_call(self):
+        panel=getattr(self,"pending_call_window",None)
+        if panel is not None:
+            panel.finished_by_server=True
+            panel.close();panel.deleteLater()
+            self.pending_call_window=None
+
     def _show_call_result(self, result):
         self._close_call_result()
         from ui.call_window import CallResultWindow
         self.call_result_window = CallResultWindow(result, self)
         self.call_result_window.show()
+        self._clear_pending_call()
 
     def _reconcile_call_state(self, state):
         """The snapshot heals missed/expired events and avoids duplicate audio starts."""
@@ -779,6 +792,7 @@ class MainWindow(QWidget):
             outgoing.deleteLater()
             self.outgoing_window = None
         if state is None:
+            self._clear_pending_call()
             self._hide_incoming_inline()
             if self.current_call_user or self.voice_client or self.call_window:
                 self.current_call_user = None
@@ -801,6 +815,7 @@ class MainWindow(QWidget):
             call_id = state['call_id']
             self.outgoing_window = OutgoingCallWindow(peer, lambda: (self.ui_sounds.stop_ringing(), self.calls.end_call(call_id, peer)), self)
             self.outgoing_window.show()
+        self._clear_pending_call()
 
     def _start_voice_for_peer(self, peer_login: str):
         if self.current_call_user != peer_login:
@@ -1092,6 +1107,7 @@ class MainWindow(QWidget):
     def _stop_background_work(self):
         """One nonblocking cleanup path for logout and application close."""
         self.ui_sounds.shutdown()
+        self._clear_pending_call()
         self.calls.reset()
         outgoing = getattr(self, 'outgoing_window', None)
         if outgoing is not None:

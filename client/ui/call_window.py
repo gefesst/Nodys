@@ -234,10 +234,10 @@ class ActiveCallWindow(CallPanel):
         self.avatar.update()
 
     def _end_clicked(self):
-        self._ending = True
-        if self.on_end:
-            self.on_end()
-        self.close()
+        if getattr(self,"_end_requested",False):return
+        self._end_requested=True
+        if self.on_end:self.on_end()
+        QTimer.singleShot(1000,lambda:setattr(self,"_end_requested",False))
 
     def _mic_clicked(self):
         self.mic_enabled = not self.mic_enabled
@@ -266,6 +266,10 @@ class ActiveCallWindow(CallPanel):
             self.avatar_wrap.update()
 
     def closeEvent(self, event):
+        if not self._ending:
+            self._end_clicked()
+            event.ignore()
+            return
         try:
             self._tick_timer.stop()
             self._activity_timer.stop()
@@ -340,7 +344,14 @@ class OutgoingCallWindow(CallPanel):
 
     def closeEvent(self, event):
         if not self.finished_by_server:
-            self.cancel()
+            if not getattr(self,"_cancel_requested",False):
+                self._cancel_requested=True
+                self.cancel()
+                QTimer.singleShot(1000,lambda:setattr(self,"_cancel_requested",False))
+            if not getattr(self,"close_on_cancel",False):
+                self.status_label.setText("Отменяем вызов…")
+                event.ignore()
+                return
         event.accept()
 
 

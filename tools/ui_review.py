@@ -69,10 +69,10 @@ def main():
             self.timer.timeout.connect(self.advance)
             self.timer.start()
 
-        def wait(self, seconds=0.4, predicate=None):
+        def wait(self, seconds=0.4, predicate=None, timeout=15):
             self.until = time.monotonic() + seconds
             self.predicate = predicate
-            self.wait_deadline=time.monotonic()+max(15,seconds+2)
+            self.wait_deadline=time.monotonic()+max(timeout,seconds+2)
 
         def advance(self):
             if getattr(self,"capturing",False):
@@ -81,7 +81,7 @@ def main():
                 if time.monotonic() > self.deadline:
                     raise TimeoutError("Review timed out")
                 if self.predicate and time.monotonic()>self.wait_deadline:
-                    raise TimeoutError("UI state did not settle within 15 seconds")
+                    raise TimeoutError("UI state did not settle before its deadline")
                 if time.monotonic() < self.until or (
                     self.predicate and not self.predicate()
                 ):
@@ -207,7 +207,7 @@ def main():
             # and response races are exercised by CallController regression tests.
             m._show_pending_call(peer)
             self.shot('41-call-connecting')
-            m._show_pending_call(None)
+            m._clear_pending_call()
             self.visual_fixtures.append('41-call-connecting: pending presentation held without a network request')
             server.send_friend_request(peer,other);server.accept_friend_request(peer,other)
             assert lab.request(peer,'heartbeat')['status']=='ok'
@@ -226,7 +226,7 @@ def main():
             assert m.calls.state, 'Call did not start: '+m.call_result_window.heading.text()
             print('Awaiting actual ringing expiry',flush=True)
             # Stop peer heartbeats; the real server expires its ringing call.
-            self.wait(predicate=lambda:m.calls.state is None and bool(getattr(m,'call_result_window',None)));yield
+            self.wait(predicate=lambda:m.calls.state is None and bool(getattr(m,'call_result_window',None)),timeout=40);yield
             assert m.call_result_window.heading.text()=='Нет ответа'
             self.shot('41c-call-timeout');m._close_call_result()
             self.wait(predicate=lambda:'action' not in m.calls.requests);yield

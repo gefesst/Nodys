@@ -133,6 +133,7 @@ class Conversation(QWidget):
         self.editor.textChanged.connect(self.edited)
         self.send_button = Button("", "send", True)
         self.send_button.setAccessibleName("Отправить сообщение")
+        self.send_button.setFocusPolicy(Qt.NoFocus)
         self.send_button.setFixedSize(38, 38)
         self.send_button.clicked.connect(self.send)
         compose.addWidget(self.editor, 1)
@@ -484,7 +485,6 @@ class Conversation(QWidget):
         self.send_button.setEnabled(
             self.identity is not None
             and self.can_send
-            and self.identity not in self.pending
         )
         self.editor.setReadOnly(not self.can_send or self.identity is None)
         self.editor.setPlaceholderText(

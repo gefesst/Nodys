@@ -124,6 +124,9 @@ class OverlayDialog(QDialog):
 
     def _finished(self, result):
         self.shade.hide()
+        if any(isinstance(child,OverlayDialog) and child is not self and child.isVisible()
+               for child in self.host.findChildren(QDialog,options=Qt.FindDirectChildrenOnly)):
+            return
         if self.previous_focus is not None:
             try:
                 self.previous_focus.setFocus(Qt.OtherFocusReason) if self.previous_focus.isVisible() and self.previous_focus.isEnabled() else None
