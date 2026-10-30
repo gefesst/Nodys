@@ -194,28 +194,13 @@ class MessageList(QListView):
         self.verticalScrollBar().actionTriggered.connect(lambda _:self.reflow.stop())
         self.verticalScrollBar().sliderPressed.connect(self.reflow.stop)
         self.verticalScrollBar().setSingleStep(24)
-        self.scroll_animation = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
-        self.scroll_animation.setDuration(140)
-        self.scroll_animation.setEasingCurve(QEasingCurve.OutCubic)
-        self.verticalScrollBar().sliderPressed.connect(self.scroll_animation.stop)
-        self.verticalScrollBar().actionTriggered.connect(self.scroll_animation.stop)
+        from .scrolling import controller
+        self.scroll_animation = controller(self).animation
 
-    def wheelEvent(self,event):
-        self.reflow.stop()
-        bar = self.verticalScrollBar()
-        if not event.pixelDelta().isNull() or reduced() or not event.angleDelta().y():
-            self.scroll_animation.stop()
+    def wheelEvent(self, event):
+        from .scrolling import controller
+        if not controller(self).wheel(event):
             super().wheelEvent(event)
-            return
-        target = (self.scroll_animation.endValue()
-                  if self.scroll_animation.state() == QPropertyAnimation.Running else bar.value())
-        target = max(bar.minimum(), min(bar.maximum(),
-                     int(target - event.angleDelta().y() / 120 * bar.singleStep() * QApplication.wheelScrollLines())))
-        self.scroll_animation.stop()
-        self.scroll_animation.setStartValue(bar.value())
-        self.scroll_animation.setEndValue(target)
-        self.scroll_animation.start()
-        event.accept()
 
     def resizeEvent(self, event):
         from PySide6.QtCore import QPoint

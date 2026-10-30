@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QTextEdit,
     QComboBox,
+    QScrollArea,
+    QListView,
 )
 
 
@@ -65,6 +67,21 @@ class MotionFilter(QObject):
         if kind == QEvent.ChildPolished:
             self.watch(event.child())
             return False
+        if kind == QEvent.Wheel:
+            area = widget
+            while isinstance(area, QWidget):
+                if isinstance(area, (QScrollArea, QListView)):
+                    # Combo popup navigation remains native.
+                    ancestor = area.parentWidget()
+                    while ancestor is not None:
+                        if isinstance(ancestor, QComboBox):
+                            return False
+                        ancestor = ancestor.parentWidget()
+                    from .scrolling import controller
+                    return controller(area).wheel(event)
+                area = area.parentWidget()
+        if kind == QEvent.Hide and hasattr(widget, '_smooth_scroll'):
+            widget._smooth_scroll.animation.stop()
         if kind == QEvent.EnabledChange:
             shape=interactive_cursor(widget)
             if shape is not None and widget.cursor().shape() != shape:

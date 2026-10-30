@@ -341,6 +341,32 @@ class DesignGeometryTests(unittest.TestCase):
         QTest.mouseRelease(bar,Qt.LeftButton,Qt.NoModifier,point+QPoint(0,40))
         self.assertGreater(bar.value(),before)
 
+    def test_shared_wheel_easing_reaches_scroll_areas_and_dialog_lists(self):
+        from ui.design.motion import MotionFilter
+        from PySide6.QtCore import Qt, QPoint, QPointF, QStringListModel
+        from PySide6.QtGui import QWheelEvent
+        from PySide6.QtWidgets import QScrollArea, QWidget, QListView, QAbstractItemView
+        from PySide6.QtTest import QTest
+        for kind in ('friends', 'dialogs'):
+            if kind == 'friends':
+                area=QScrollArea();content=QWidget();content.resize(200,2000);area.setWidget(content)
+            else:
+                area=QListView();area.setModel(QStringListModel([str(i) for i in range(100)],area))
+                area.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+            area.resize(300,300);area.show();self.addCleanup(area.close)
+            watcher=MotionFilter(area);watcher.watch(area)
+            self.app.processEvents();bar=area.verticalScrollBar();bar.setValue(100)
+            event=QWheelEvent(QPointF(40,40),QPointF(40,40),QPoint(),QPoint(0,-120),Qt.NoButton,Qt.NoModifier,Qt.NoScrollPhase,False)
+            self.app.sendEvent(area.viewport(),event)
+            self.assertEqual(bar.value(),100,kind)
+            QTest.qWait(70);middle=bar.value();self.assertGreater(middle,100,kind)
+            QTest.qWait(150);self.assertGreater(bar.value(),middle,kind)
+            # Preserve trackpad pixel input without adding a second animation.
+            event=QWheelEvent(QPointF(40,40),QPointF(40,40),QPoint(0,-8),QPoint(0,-15),Qt.NoButton,Qt.NoModifier,Qt.ScrollUpdate,False)
+            self.app.sendEvent(area.viewport(),event)
+            self.assertEqual(area._smooth_scroll.animation.state().name, "Stopped")
+            area.close()
+
     def test_manual_scroll_cancels_delayed_resize_anchor(self):
         from ui.design.widgets import MessageList
         from PySide6.QtWidgets import QAbstractSlider
@@ -458,12 +484,12 @@ class DesignGeometryTests(unittest.TestCase):
         for direction in (Qt.Vertical,Qt.Horizontal):
             bar=QScrollBar(direction);bar.setStyleSheet(style)
             bar.setRange(0,100);bar.setPageStep(20);bar.setValue(40)
-            bar.resize(23,180) if direction==Qt.Vertical else bar.resize(180,18)
+            bar.resize(18,180) if direction==Qt.Vertical else bar.resize(180,18)
             bar.show();self.app.processEvents()
             option=QStyleOptionSlider();bar.initStyleOption(option)
             rect=bar.style().subControlRect(QStyle.CC_ScrollBar,option,QStyle.SC_ScrollBarSlider,bar)
             self.assertEqual(rect.left() if direction==Qt.Vertical else rect.top(),12)
-            self.assertEqual(rect.width() if direction==Qt.Vertical else rect.height(),8 if direction==Qt.Vertical else 3)
+            self.assertEqual(rect.width() if direction==Qt.Vertical else rect.height(),3)
             bar.close()
 
     def test_startup_screen_centers_content_and_stops_hidden_animation(self):
