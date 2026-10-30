@@ -608,7 +608,7 @@ class MessageDelegate(QStyledItemDelegate):
         return value
 
     def reply_at(self, message, width, point):
-        if not message.reply:
+        if not message.reply or message.reply.get('deleted'):
             return None
         _, bw, _, head, _ = self.geometry(message, width)
         if QRectF(70, head + 8, bw - 24, 50).contains(point):

@@ -53,6 +53,9 @@ class MessageReplies:
 
     def update(self):
         draft = self.drafts.get(self.c.identity)
+        if draft and any(row['id'] == draft['id'] and row.get('deleted_at') for row in self.c.rows):
+            self.drafts.pop(self.c.identity, None)
+            draft = None
         self.strip.setVisible(bool(draft) and not self.c.message_actions.edit)
         if draft:
             author = 'Вы' if draft['author'] == self.c.owner.ctx.login else draft['author']
@@ -77,7 +80,7 @@ class MessageReplies:
 
     def focus(self, identity):
         c = self.c
-        index = next((i for i, row in enumerate(c.rows) if row['id'] == identity), None)
+        index = next((i for i, row in enumerate(c.model.rows) if row.id == identity), None)
         if index is None:
             return
         c._applying = True
@@ -92,6 +95,8 @@ class MessageReplies:
     def jump(self, identity):
         c = self.c
         if not c.identity:
+            return
+        if any(row['id'] == identity and row.get('deleted_at') for row in c.rows):
             return
         snapshot = dict(rows=deepcopy(c.rows), older=c.older, newer=c.newer,
                         anchor=c.anchor(), scroll=c.view.verticalScrollBar().value())
@@ -114,6 +119,8 @@ class MessageReplies:
             if result.get('status') != 'ok':
                 c.send_error.setText(result.get('message', 'Исходное сообщение недоступно'))
                 return
+            if any(row['id'] == identity and row.get('deleted_at') for row in result['messages']):
+                return
             if self.return_state is None:
                 self.return_state = snapshot
             c.apply(result['messages'], 'latest', result)
@@ -130,7 +137,9 @@ class MessageReplies:
         c.scope.invalidate()
         c.loading = False
         self.clear_navigation()
-        c.apply(saved['rows'], 'latest', dict(has_older=saved['older'], has_newer=saved['newer']))
+        current = {row['id']: row for row in c.rows}
+        rows = [current.get(row['id'], row) if current.get(row['id'], {}).get('revision', -1) >= row.get('revision', 0) else row for row in saved['rows']]
+        c.apply(rows, 'latest', dict(has_older=saved['older'], has_newer=saved['newer']))
         c._applying = True
         c.restore_position(saved['anchor'], fallback=saved['scroll'])
         c._applying = False

@@ -41,8 +41,24 @@ class MessageActionsTests(VoiceFixture, unittest.TestCase):
         self.assertTrue(deleted['message']['deleted_at'])
         self.assertEqual(deleted['message']['text'], '')
         self.assertEqual(self.request('bob', 'get_unread_counts')['counts'], {})
-        self.assertEqual(self.request('bob', 'get_unread_counts')['summaries']['alice']['text'], 'Сообщение удалено')
+        self.assertNotIn('alice', self.request('bob', 'get_unread_counts')['summaries'])
         self.assertEqual(self.request('bob', 'get_messages', to_user='alice', paged=True, after_id=row['id'])['status'], 'ok')
+
+    def test_deleted_rows_disappear_from_pages_but_updates_still_reach_peers(self):
+        for channel in (False, True):
+            first, fields = self.send(channel)
+            last, _ = self.send(channel)
+            action = 'get_channel_messages' if channel else 'get_messages'
+            self.request('alice', 'delete_message', **fields, message_id=last['id'], expected_revision=0)
+            page = self.request('alice', action, **fields, paged=True, limit=1,
+                                visible_versions=f"{last['id']}:0")
+            self.assertEqual([r['id'] for r in page['messages']], [first['id']])
+            self.assertFalse(page['has_newer'])
+            self.assertTrue(page['updated_messages'][0]['deleted_at'])
+            if not channel:
+                self.assertEqual(self.request('bob', 'get_unread_counts')['summaries']['alice']['text'], 'original')
+            self.request('alice', 'delete_message', **fields, message_id=first['id'], expected_revision=0)
+            self.assertEqual(self.request('alice', action, **fields, paged=True)['messages'], [])
 
     def test_author_scope_and_channel_permissions(self):
         for channel in (False, True):

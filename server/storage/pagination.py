@@ -44,7 +44,7 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
                     has_newer=right['has_newer'] if right_count else bool(right['messages']))
     direction = "ASC" if after_id else "DESC"
     raw = connection.execute(
-        f"SELECT *,timestamp AS created_at FROM {table} WHERE ({where}){boundary} ORDER BY timestamp {direction},id {direction} LIMIT ?",  # nosec B608: identifiers allowlisted above; values bound separately.
+        f"SELECT *,timestamp AS created_at FROM {table} WHERE ({where}) AND deleted_at IS NULL{boundary} ORDER BY timestamp {direction},id {direction} LIMIT ?",  # nosec B608: identifiers allowlisted above; values bound separately.
         (*values, size),
     ).fetchall()
     rows = [dict(x) for x in (raw if after_id else reversed(raw))]
@@ -53,14 +53,14 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
         first, last = rows[0], rows[-1]
         older = (
             connection.execute(
-                f"SELECT 1 FROM {table} WHERE ({where}) AND (timestamp,id)<(?,?) LIMIT 1",  # nosec B608: identifiers allowlisted above; values bound separately.
+                f"SELECT 1 FROM {table} WHERE ({where}) AND deleted_at IS NULL AND (timestamp,id)<(?,?) LIMIT 1",  # nosec B608: identifiers allowlisted above; values bound separately.
                 (*params, first["created_at"], first["id"]),
             ).fetchone()
             is not None
         )
         newer = (
             connection.execute(
-                f"SELECT 1 FROM {table} WHERE ({where}) AND (timestamp,id)>(?,?) LIMIT 1",  # nosec B608: identifiers allowlisted above; values bound separately.
+                f"SELECT 1 FROM {table} WHERE ({where}) AND deleted_at IS NULL AND (timestamp,id)>(?,?) LIMIT 1",  # nosec B608: identifiers allowlisted above; values bound separately.
                 (*params, last["created_at"], last["id"]),
             ).fetchone()
             is not None

@@ -155,8 +155,27 @@ class UiTests(unittest.TestCase):
         c.refresh_rows([row])
         self.assertEqual(c.rows[0]['text'], 'changed')
         c.refresh_rows([dict(row, text='', revision=2, deleted_at='now')])
-        self.assertEqual(c.model.rows[0].text, 'Сообщение удалено')
+        self.assertEqual(c.model.rows, [])
+        self.assertIs(c.history_stack.currentWidget(), c.empty_state)
         self.assertFalse(resets)
+
+    def test_deleted_rows_do_not_offset_reply_navigation_or_restore_on_return(self):
+        c = self.page.conversation
+        c.request = lambda data, callback: None
+        c.select((1, 0))
+        rows = [dict(id=i, from_user='alice', text=str(i), revision=0,
+                     created_at='2026-10-30 12:00:00') for i in (1, 2, 3)]
+        c.apply(rows, 'latest', {})
+        c.replies.begin(rows[0])
+        c.replies.jump(3)
+        c.refresh_rows([dict(rows[0], text='', revision=1, deleted_at='now')])
+        self.assertNotIn(c.identity, c.replies.drafts)
+        self.assertEqual([r.id for r in c.model.rows], [2, 3])
+        c.replies.focus(3)
+        self.assertEqual(c.delegate.highlight_id, 3)
+        c.replies.go_back()
+        self.assertEqual([r.id for r in c.model.rows], [2, 3])
+        self.assertEqual(c.editor.toPlainText(), '')
 
     def test_user_controlled_labels_are_literal_text(self):
         from PySide6.QtCore import Qt

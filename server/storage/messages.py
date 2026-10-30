@@ -80,9 +80,9 @@ class MessageRepository:
         with database_connection(self.database) as conn:
             rows = conn.execute(
                 """WITH owned AS (
-                       SELECT to_user AS peer, id FROM messages WHERE from_user=?
+                       SELECT to_user AS peer, id FROM messages WHERE from_user=? AND deleted_at IS NULL
                        UNION ALL
-                       SELECT from_user AS peer, id FROM messages WHERE to_user=?
+                       SELECT from_user AS peer, id FROM messages WHERE to_user=? AND deleted_at IS NULL
                    ), latest AS (SELECT peer, MAX(id) AS id FROM owned GROUP BY peer)
                    SELECT latest.peer, m.from_user, CASE WHEN m.deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN m.text='' AND m.attachment_id IS NOT NULL THEN '📎 ' || COALESCE((SELECT name FROM attachments WHERE id=m.attachment_id),'Файл') ELSE substr(m.text,1,160) END, m.timestamp
                    FROM latest JOIN messages m ON m.id=latest.id""",

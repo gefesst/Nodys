@@ -294,8 +294,8 @@ class ChatsPage(QWidget, ThreadSafeMixin):
                 self.unread_counts = dict(response.get('counts', {}))
                 for peer in self._read_pending:self.unread_counts.pop(peer,None)
                 summaries=response.get('summaries', {})
-                for peer,summary in summaries.items():
-                    if summary!=self.dialog_summaries.get(peer):
+                for peer in self.dialog_summaries.keys() | summaries.keys():
+                    if summaries.get(peer)!=self.dialog_summaries.get(peer):
                         self.conversation.prefetched.pop(peer,None)
                 self.dialog_summaries = summaries
                 self.refresh_dialog_summaries()

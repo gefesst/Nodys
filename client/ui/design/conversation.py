@@ -455,8 +455,8 @@ class Conversation(QWidget):
 
     def anchor(self):
         index = self.view.indexAt(QPoint(80, 12))
-        if index.isValid() and index.row() < len(self.rows):
-            return self.rows[index.row()]["id"], self.view.visualRect(index).top()
+        if index.isValid() and index.row() < len(self.model.rows):
+            return self.model.rows[index.row()].id, self.view.visualRect(index).top()
         return None
 
     def restore_position(self, anchor, bottom=False, fallback=None):
@@ -466,7 +466,7 @@ class Conversation(QWidget):
         if bottom:
             self.view.scrollToBottom()
         elif anchor:
-            row = next((i for i, item in enumerate(self.rows) if item["id"] == anchor[0]), None)
+            row = next((i for i, item in enumerate(self.model.rows) if item.id == anchor[0]), None)
             if row is not None:
                 self.view.scrollTo(self.model.index(row), QAbstractItemView.PositionAtTop)
                 bar.setValue(bar.value() - anchor[1])
@@ -542,6 +542,8 @@ class Conversation(QWidget):
             participants[peer["login"]] = peer
         previous_author = previous_date = None
         for row in self.rows:
+            if row.get("deleted_at"):
+                continue
             author = row["from_user"]
             date = (row.get("created_at") or "")[:10]
             try:
@@ -748,13 +750,13 @@ class Conversation(QWidget):
         if hasattr(self, "replies"):
             self.replies.update()
         self._update_new_messages()
-        surface = self.view if self.rows else (
-            self.view if self.identity is not None and not self.history_loaded and not self.history_error else
+        surface = self.view if self.model.rows else (
+            self.view if self.identity is not None and not self.history_loaded and not self.rows and not self.history_error else
             self.error_state if self.history_error else self.empty_state)
         self.history_stack.setCurrentWidget(surface)
         # Background polling must not insert a status row and shift the history.
         # Initial loading already has its own full-page skeleton.
-        self.hint.setVisible(bool(self.rows) and self.history_error)
+        self.hint.setVisible(bool(self.model.rows) and self.history_error)
         self.previous.setEnabled(self.older and not self.loading)
         self.previous.setVisible(self.older)
         self.latest.setVisible(self.newer)

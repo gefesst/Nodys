@@ -63,9 +63,16 @@ class MessageModel(QAbstractListModel):
         self.endInsertRows()
 
     def sync(self, rows):
+        # Remove vanished messages without resetting the entire history view.
+        target_ids = {row.id for row in rows}
+        for index in range(len(self.rows) - 1, -1, -1):
+            if self.rows[index].id not in target_ids:
+                self.beginRemoveRows(QModelIndex(), index, index)
+                del self.rows[index]
+                self.endRemoveRows()
         # Common polling response: append only; read receipts update individual rows.
         if len(rows) >= len(self.rows) and all(
-            a.id == b.id and a.group == b.group and a.unread_count == b.unread_count
+            a.id == b.id
             for a, b in zip(self.rows, rows)
         ):
             for i, m in enumerate(rows[: len(self.rows)]):
