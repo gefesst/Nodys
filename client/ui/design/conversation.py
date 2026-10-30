@@ -288,6 +288,7 @@ class Conversation(QWidget):
             for key in ("older","newer","at_latest","unread_boundary","unread_count","unread_initialized"):
                 setattr(self,key,cached[key])
             self.history_loaded=True
+            self.unread_initialized = False
             self.model.replace(cached["rendered"])
             self.view.doItemsLayout()
         if cached is None and warmed is not None:
@@ -537,8 +538,12 @@ class Conversation(QWidget):
         for row in self.rows:
             if row["from_user"] == self.owner.ctx.login and row["id"] <= read_through:
                 row["is_read"] = True
+        incoming_read = response.get('incoming_read_through_id', 0)
+        for row in self.rows:
+            if row['from_user'] != self.owner.ctx.login and row['id'] <= incoming_read:
+                row['is_read'] = True
         self.at_latest = not self.newer
-        if direction == "latest" and not self.channel and not self.unread_initialized:
+        if not self.channel and not self.unread_initialized:
             self.unread_initialized = True
             unread = [row for row in self.rows if row['from_user'] != self.owner.ctx.login and not row.get('is_read') and not row.get('deleted_at')]
             self.unread_boundary = unread[0]['id'] if unread else None

@@ -29,6 +29,7 @@ class MessageRepository:
         with database_connection(self.database) as conn:
             result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id, around_id, viewer=user_a)
             result['read_through_id'] = conn.execute('SELECT COALESCE(MAX(id),0) FROM messages WHERE from_user=? AND to_user=? AND is_read=1', (user_a,user_b)).fetchone()[0]
+            result['incoming_read_through_id'] = conn.execute('SELECT COALESCE(MAX(id),0) FROM messages WHERE from_user=? AND to_user=? AND is_read=1', (user_b,user_a)).fetchone()[0]
             return result
 
     def get_messages(self, user_a: str, user_b: str, limit: int = 50) -> list:

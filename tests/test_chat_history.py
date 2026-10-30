@@ -416,6 +416,17 @@ class ConversationTests(unittest.TestCase):
         self.chat.apply(self.response('carol',1)['messages'],'poll',{})
         self.assertEqual(self.chat.model.rows[0].unread_count,0)
 
+    def test_reopening_cached_read_chat_removes_old_unread_separator(self):
+        self.chat.select('bob')
+        self.requests[-1][1](self.response(count=3))
+        self.assertTrue(any(m.unread_count for m in self.chat.model.rows))
+        self.chat.select(None)
+        self.chat.select('bob')
+        self.requests[-1][1](dict(status='ok', messages=[], has_older=False,
+                                 has_newer=False, incoming_read_through_id=3))
+        self.assertFalse(any(m.unread_count for m in self.chat.model.rows))
+        self.assertTrue(all(row['is_read'] for row in self.chat.rows))
+
     def test_rapid_switch_discards_old_results_and_loading_state(self):
         for peer in ("bob", "carol", "dave"):
             self.chat.select(peer, peer)
