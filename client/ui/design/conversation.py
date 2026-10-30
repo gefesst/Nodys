@@ -66,7 +66,6 @@ class Conversation(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
         history = QHBoxLayout()
-        self.history_navigation = history
         self.previous = Button("Раньше", "back")
         self.previous.clicked.connect(lambda: self.load("older"))
         history.addWidget(self.previous)
