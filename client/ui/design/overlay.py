@@ -30,7 +30,7 @@ class OverlayDialog(QDialog):
         self.setObjectName("OverlayDialog")
         self.shade = DismissShade(host, self)
         self.shade.setStyleSheet(
-            "background:rgba(5,10,18,130);border:0;"
+            "background:rgba(0,0,0,130);border:0;"
             if dim
             else "background:transparent;border:0;"
         )
@@ -69,7 +69,7 @@ class OverlayDialog(QDialog):
             self.shade.setGeometry(
                 88, 42, self.host.width() - 88, self.host.height() - 42
             )
-            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;" if self.dim else "background:transparent;border:0;")
+            self.shade.setStyleSheet("background:rgba(0,0,0,153);border:0;" if self.dim else "background:transparent;border:0;")
         if self.anchor == "modal":
             x = min(
                 self.host.width() - width - 20, (self.host.width() - width) // 2 + 125
@@ -78,7 +78,7 @@ class OverlayDialog(QDialog):
             self.shade.setGeometry(
                 88, 42, self.host.width() - 88, self.host.height() - 42
             )
-            self.shade.setStyleSheet("background:rgba(8,13,21,153);border:0;" if self.dim else "background:transparent;border:0;")
+            self.shade.setStyleSheet("background:rgba(0,0,0,153);border:0;" if self.dim else "background:transparent;border:0;")
         self.setGeometry(x, y, width, height)
 
     def show(self):

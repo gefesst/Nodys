@@ -11,9 +11,9 @@ class VoiceDock(QFrame):
         self.main=main
         self.setFixedSize(LIST_WIDTH-26,140)
         self.divider=QFrame(self);self.divider.setGeometry(0,0,LIST_WIDTH-26,1)
-        self.divider.setStyleSheet('background:#354152;border:0;')
+        self.divider.setStyleSheet('background:#41434A;border:0;')
         card=QFrame(self);self.card=card;card.setObjectName('VoiceDock');card.setGeometry(0,20,LIST_WIDTH-26,112)
-        card.setStyleSheet('QFrame#VoiceDock {background:#233449;border:1px solid #405A7C;border-radius:12px;}')
+        card.setStyleSheet('QFrame#VoiceDock {background:#2B2D31;border:1px solid #5865A0;border-radius:12px;}')
         layout=QVBoxLayout(card);layout.setContentsMargins(14,9,14,10);layout.setSpacing(2)
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
         self.title.setMinimumHeight(0);self.title.setFixedHeight(24);self.title.clicked.connect(main.open_voice_surface)
@@ -28,7 +28,7 @@ class VoiceDock(QFrame):
         layout.addLayout(status_row)
         self.meter_timer=QTimer(self);self.meter_timer.setInterval(125);self.meter_timer.timeout.connect(self.update_meter)
         row=QHBoxLayout();row.setSpacing(12)
-        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#ACB9CC;');self.participants.setFixedHeight(16);status_row.addWidget(self.participants)
+        self.participants=QLabel();self.participants.setStyleSheet('font-size:11px;color:#B5BAC1;');self.participants.setFixedHeight(16);status_row.addWidget(self.participants)
         self.controls={}
         for name,symbol,callback in [('Микрофон','mic',self.toggle_mic),('Звук','headphones',self.toggle_sound),('Отключиться','end',main.end_voice_surface)]:
             button=Button('',symbol);button.setMinimumHeight(0);button.setFixedSize(32,28);button.setAccessibleName(name)

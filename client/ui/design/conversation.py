@@ -139,7 +139,7 @@ class Conversation(QWidget):
         self.download_strip.hide()
         self.attachment_strip = QFrame()
         self.attachment_strip.setObjectName('AttachmentDraft')
-        self.attachment_strip.setStyleSheet('QFrame#AttachmentDraft {background:#203448;border:1px solid #354D65;border-radius:10px;}')
+        self.attachment_strip.setStyleSheet('QFrame#AttachmentDraft {background:#383A40;border:1px solid #41434A;border-radius:10px;}')
         attachment_layout = QHBoxLayout(self.attachment_strip)
         attachment_layout.setContentsMargins(12, 8, 8, 8)
         self.attachment_label = QLabel()

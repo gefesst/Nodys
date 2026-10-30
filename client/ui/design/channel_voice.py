@@ -44,7 +44,7 @@ def build(page):
     title.setParent(tab);title.hide()
     page.voice_members_count=QLabel('Нет участников')
     page.voice_members_count.setObjectName('Muted')
-    page.voice_members_count.setStyleSheet("font-size:13px;color:#ACB9CC;")
+    page.voice_members_count.setStyleSheet("font-size:13px;color:#B5BAC1;")
     page.voice_members_count.setFixedHeight(16)
     page.voice_members_count.setParent(tab);page.voice_members_count.hide()
     page.voice_members_scroll=QScrollArea()

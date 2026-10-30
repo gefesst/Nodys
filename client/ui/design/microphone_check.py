@@ -38,7 +38,7 @@ class MicrophoneMeter(QWidget):
         painter.setPen(Qt.NoPen)
         for index,level in enumerate(self.samples):
             height=max(3,(self.height()-4)*level/100)
-            painter.setBrush(QColor('#67D5AD' if level>1 else '#3C4E66'))
+            painter.setBrush(QColor('#67D5AD' if level>1 else '#4E5058'))
             painter.drawRoundedRect(QRectF(index*(self.width()-6)/9,(self.height()-height)/2,6,height),3,3)
 
 
@@ -57,7 +57,7 @@ class MicrophoneCheck(QFrame):
         self.setObjectName("MicrophoneCheck")
         self.setMinimumHeight(105)
         self.setFocusPolicy(Qt.StrongFocus)
-        self.setStyleSheet("QFrame#MicrophoneCheck {background:#202D3D;border:1px solid #354152;border-radius:12px;}")
+        self.setStyleSheet("QFrame#MicrophoneCheck {background:#2B2D31;border:1px solid #41434A;border-radius:12px;}")
         self.stop_event = threading.Event()
         self.level = 0
         self.last_signal = time.monotonic()
@@ -70,7 +70,7 @@ class MicrophoneCheck(QFrame):
         root = QHBoxLayout(self)
         root.setContentsMargins(18,16,18,16)
         root.setSpacing(16)
-        symbol=QSvgWidget();symbol.load(QByteArray((ASSETS/"mic.svg").read_bytes().replace(b"#ACB9CC",b"#91ADFF")));symbol.setFixedSize(22,22)
+        symbol=QSvgWidget();symbol.load(QByteArray((ASSETS/"mic.svg").read_bytes().replace(b"#B5BAC1",b"#B6BCFF")));symbol.setFixedSize(22,22)
         symbol_column=QVBoxLayout();symbol_column.setContentsMargins(0,7,0,0)
         symbol_column.addWidget(symbol);symbol_column.addStretch()
         root.addLayout(symbol_column)
@@ -80,7 +80,7 @@ class MicrophoneCheck(QFrame):
         column.addWidget(self.title)
         self.status=QLabel('Проверка начинается по кнопке. Звук не сохраняется и не передаётся.')
         self.status.setWordWrap(True);self.status.setAlignment(Qt.AlignLeft|Qt.AlignTop)
-        self.status.setStyleSheet('font-size:13px;color:#ACB9CC;')
+        self.status.setStyleSheet('font-size:13px;color:#B5BAC1;')
         column.addWidget(self.status)
         root.addLayout(column,1)
         self.meter=MicrophoneMeter()

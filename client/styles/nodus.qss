@@ -6,55 +6,55 @@ QFrame#Divider,QFrame#ChannelsSidebarSeparator { background:@EDGE@; border:0; }
 QLabel#PageTitle,QLabel#FriendsTitle,QLabel#ChannelOpenTitle,QLabel#ProfileTitle {font-size:25px;font-weight:600;}
 QLabel#Eyebrow {color:@ACC@;font-size:10px;font-weight:600;}
 QLabel#Muted,QLabel#FriendItemSub,QLabel#AddPanelHint,QLabel#ChannelAccessHint,QLabel#ChannelTextEmptyHint {color:@MUT@;font-size:12px;}
-QLineEdit,QPlainTextEdit,QTextEdit {background:@BACKGROUND@;border:1px solid @EDGE@;border-radius:10px;padding:11px 14px;selection-background-color:#405A7C;min-height:20px;}
+QLineEdit,QPlainTextEdit,QTextEdit {background:@BACKGROUND@;border:1px solid @EDGE@;border-radius:10px;padding:11px 14px;selection-background-color:#5865A0;min-height:20px;}
 QLineEdit:focus,QPlainTextEdit:focus,QTextEdit:focus {border-color:@ACC@;}
 QLineEdit:disabled,QPlainTextEdit:disabled {color:@MUT@;}
-QPushButton {background:#28364A;border:1px solid @EDGE@;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;min-height:18px;}
-QPushButton:hover {background:#33465F;border-color:#536D92;}
-QPushButton:pressed {background:#354866;}
+QPushButton {background:#383A40;border:1px solid @EDGE@;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:600;min-height:18px;}
+QPushButton:hover {background:#4E5058;border-color:#62656E;}
+QPushButton:pressed {background:#35363C;}
 QPushButton:focus {border:1px solid @ACC@;}
-QPushButton:disabled {color:@MUT@;background:#202B39;border-color:@EDGE@;}
-QPushButton:checked,QPushButton[active="true"] {background:#2B3B51;border-color:#536D92;}
-QPushButton#PrimaryButton,QPushButton#ChannelPrimaryButton,QPushButton#ProfilePrimaryButton,QPushButton#SendRequestButton,QPushButton#AcceptButton,QPushButton#FindUserButton {background:@ACC@;color:#142039;border-color:@ACC@;}
-QPushButton#PrimaryButton:hover,QPushButton#ChannelPrimaryButton:hover,QPushButton#ProfilePrimaryButton:hover {background:#ACC0FF;}
+QPushButton:disabled {color:@MUT@;background:#383A40;border-color:@EDGE@;}
+QPushButton:checked,QPushButton[active="true"] {background:#404249;border-color:#62656E;}
+QPushButton#PrimaryButton,QPushButton#ChannelPrimaryButton,QPushButton#ProfilePrimaryButton,QPushButton#SendRequestButton,QPushButton#AcceptButton,QPushButton#FindUserButton {background:@PRIMARY@;color:#FFFFFF;border-color:@ACC@;}
+QPushButton#PrimaryButton:hover,QPushButton#ChannelPrimaryButton:hover,QPushButton#ProfilePrimaryButton:hover {background:#4752C4;}
 QPushButton#ChannelTinyDangerButton,QPushButton#ChannelDangerButton,QPushButton#ProfileDangerButton,QPushButton#InlineConfirmDeleteButton,QPushButton#DeclineButton {color:@RED@;background:#492D39;border-color:@EDGE@;}
 QFrame#FriendItem,QFrame#AddFriendPanel,QFrame#ProfileCard,QFrame#AuthCard,QFrame#InlineConfirmCard,QFrame#ChannelConfirmCard,QFrame#ChannelSettingsCard,QFrame#ChannelCreateCard,QFrame#ChannelJoinCard,QFrame#ChannelVoiceMemberItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
-QFrame#FriendItem:hover {border-color:#536D92;}
+QFrame#FriendItem:hover {border-color:#62656E;}
 QLabel#FriendItemName {font-size:15px;font-weight:600;}
 QLabel#FieldTitle {color:@SUB@;font-size:12px;font-weight:600;}
 QFrame#ChannelListItem {border:0;border-radius:12px;background:transparent;}
-QFrame#ChannelListItem:hover {background:#273446;}
-QFrame#ChannelListItem[active="true"] {background:#2B3B51;border-left:3px solid @ACC@;}
+QFrame#ChannelListItem:hover {background:#35373C;}
+QFrame#ChannelListItem[active="true"] {background:#404249;border-left:3px solid @ACC@;}
 QLabel#ChannelListItemName {font-weight:600;}
-QLabel#InlineToast {background:#2B3B51;border:1px solid #536D92;border-radius:10px;padding:13px 18px;}
+QLabel#InlineToast {background:#404249;border:1px solid #62656E;border-radius:10px;padding:13px 18px;}
 QScrollArea,QListView,QStackedWidget {border:0;background:transparent;outline:0;}
 QScrollArea > QWidget > QWidget {background:transparent;}
 QScrollBar:vertical {background:transparent;width:18px;margin:2px 3px 2px 12px;}
-QScrollBar::handle:vertical {background:#53627A;border-radius:3px;min-height:30px;}
+QScrollBar::handle:vertical {background:#1E1F22;border-radius:3px;min-height:30px;}
 QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {height:0;}
 QScrollBar::add-page:vertical,QScrollBar::sub-page:vertical {background:transparent;}
 QScrollBar:horizontal {height:18px;background:transparent;margin:12px 2px 3px 2px;}
-QScrollBar::handle:horizontal {background:#53627A;border-radius:3px;min-width:30px;}
+QScrollBar::handle:horizontal {background:#1E1F22;border-radius:3px;min-width:30px;}
 QScrollBar::add-line:horizontal,QScrollBar::sub-line:horizontal {width:0;}
-QMenu {background:@SURFACE@;border:1px solid #485B76;border-radius:10px;padding:7px;}
+QMenu {background:@SURFACE@;border:1px solid #41434A;border-radius:10px;padding:7px;}
 QMenu::item {padding:10px 24px;}
-QMenu::item:selected {background:#3A4D67;border-radius:6px;}
-QToolTip {background:@SURFACE@;color:@FG@;border:1px solid #536D92;padding:7px;}
-QComboBox {background:#253244;border:1px solid @EDGE@;border-radius:8px;padding:9px 12px;min-height:20px;}
+QMenu::item:selected {background:#4E5058;border-radius:6px;}
+QToolTip {background:@SURFACE@;color:@FG@;border:1px solid #62656E;padding:7px;}
+QComboBox {background:#2B2D31;border:1px solid @EDGE@;border-radius:8px;padding:9px 12px;min-height:20px;}
 QComboBox:focus {border-color:@ACC@;}
 QComboBox::drop-down {border:0;width:32px;}
 QComboBox::down-arrow {image:url("@ASSETS@/chevron-down.svg");width:16px;height:16px;}
-QComboBox QAbstractItemView {background:#253244;selection-background-color:#3A4D67;}
+QComboBox QAbstractItemView {background:#2B2D31;selection-background-color:#4E5058;}
 QCheckBox {spacing:10px;}
-QCheckBox::indicator {width:18px;height:18px;border:1px solid #536D92;border-radius:5px;background:@BACKGROUND@;}
-QCheckBox::indicator:checked {background:@ACC@;}
+QCheckBox::indicator {width:18px;height:18px;border:1px solid #62656E;border-radius:5px;background:@BACKGROUND@;}
+QCheckBox::indicator:checked {background:@PRIMARY@;}
 QDialog,QMessageBox {background:@BACKGROUND@;}
 QLabel#AuthTitle,QLabel#RegisterTitle {font-size:30px;font-weight:600;}
 QLabel#AuthHero {font-size:44px;font-weight:700;}
 QLabel#AuthSubtitle {color:@SUB@;font-size:16px;}
 QLabel#ErrorLabel {color:@RED@;}
 QFrame#UserMiniCard {background:transparent;border:0;border-radius:10px;}
-QFrame#UserMiniCard:hover {background:rgba(43,59,81,150);}
+QFrame#UserMiniCard:hover {background:rgba(64,66,73,150);}
 QLabel#UserMiniNick {font-size:10px;color:@SUB@;}
 QLabel#ProfileStatusOnline {color:@GREEN@;}
 QLabel#ProfileStatusOffline {color:@MUT@;}
@@ -67,14 +67,14 @@ QLabel#ChannelsListHeader {color:@MUT@;font-size:10px;padding-top:12px;}
 QFrame#ChannelVoiceMemberRow {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
 QWidget#Sidebar {background:transparent;}
 
-QFrame#IncomingCallInlineCard,QFrame#CallInlineNoticeCard,QFrame#ChannelInlineConfirm {background:@SURFACE@;border:1px solid #536D92;border-radius:14px;}
+QFrame#IncomingCallInlineCard,QFrame#CallInlineNoticeCard,QFrame#ChannelInlineConfirm {background:@SURFACE@;border:1px solid #62656E;border-radius:14px;}
 QLabel#IncomingCallInlineTitle {font-size:20px;font-weight:600;}
-QPushButton#IncomingCallInlineAcceptBtn {background:@ACC@;color:#142039;}
+QPushButton#IncomingCallInlineAcceptBtn {background:@PRIMARY@;color:#FFFFFF;}
 QPushButton#IncomingCallInlineDeclineBtn,QPushButton#ChannelTinyDangerButton {color:@RED@;}
 
-QPushButton#SectionTab {text-align:left; background:#202B39; border:0; padding:0 22px; min-height:44px; color:@SUB@; border-radius:9px;}
-QPushButton#SectionTab:checked {background:#2B3B51;color:@FG@;}
-QPushButton#SectionTab:hover {background:#2B3B51;}
+QPushButton#SectionTab {text-align:left; background:#383A40; border:0; padding:0 22px; min-height:44px; color:@SUB@; border-radius:9px;}
+QPushButton#SectionTab:checked {background:#404249;color:@FG@;}
+QPushButton#SectionTab:hover {background:#404249;}
 QPushButton#SectionTab:focus {border:1px solid @ACC@;}
 QLabel#FriendsSubtitle {color:@SUB@;font-size:14px;}
 QLabel#FriendItemName {font-size:16px;}
@@ -113,25 +113,29 @@ QDialog#OverlayDialog {background:@SURFACE@;border:1px solid @EDGE@;border-radiu
 QLabel#FieldTitle {font-size:13px;}
 
 QFrame#ChannelMemberItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
-QPushButton#ChannelSettingsTab:checked {background:@ACC@;color:#142039;border-color:@ACC@;}
+QPushButton#ChannelSettingsTab:checked {background:@PRIMARY@;color:#FFFFFF;border-color:@ACC@;}
 
-QPushButton#ChannelsInvitesToggle {background:#24384D;border:1px solid #34495E;border-radius:10px;text-align:center;padding:0 14px;min-height:44px;}
-QPushButton#ChannelsInvitesToggle:hover,QPushButton#ChannelsInvitesToggle:checked {background:#304965;border-color:#587698;}
+QPushButton#ChannelsInvitesToggle {background:#383A40;border:1px solid #41434A;border-radius:10px;text-align:center;padding:0 14px;min-height:44px;}
+QPushButton#ChannelsInvitesToggle:hover,QPushButton#ChannelsInvitesToggle:checked {background:#4E5058;border-color:#62656E;}
 QLabel#ChannelListItemSub {font-size:12px;color:@SUB@;}
 
-QFrame#ProfileForm QLabel#ReadOnlyField {background:#18222E;color:#EDF2FA;}
+QFrame#ProfileForm QLabel#ReadOnlyField {background:#232428;color:#F2F3F5;}
 
 QFrame#VoiceControls {background:@SURFACE@;border:1px solid @EDGE@;border-radius:14px;}
 QLabel#ChannelOpenTitle {font-size:21px;}
 QLabel#ChannelVoiceMemberName {font-size:17px;}
 
-QPushButton#ChannelInnerNavButton:checked {background:@ACC@;color:#142039;border-color:@ACC@;}
+QPushButton#ChannelInnerNavButton:checked {background:@PRIMARY@;color:#FFFFFF;border-color:@ACC@;}
 
 QFrame#ChannelInviteItem {background:@SURFACE@;border:1px solid @EDGE@;border-radius:12px;}
 
 QPushButton#ChannelTinyDangerButton:hover,QPushButton#ChannelDangerButton:hover,QPushButton#ProfileDangerButton:hover,QPushButton#DeclineButton:hover {background:#603748;}
 QPushButton#ChannelTinyDangerButton:pressed,QPushButton#ChannelDangerButton:pressed,QPushButton#ProfileDangerButton:pressed,QPushButton#DeclineButton:pressed {background:#3D2530;}
 
-QFrame#ConnectionCard {background:#202F40;border:1px solid #344658;border-radius:14px;}
-QLabel#ChannelsInviteBadge {background:#91ADFF;color:#142039;border:0;border-radius:10px;min-width:20px;max-height:20px;padding:0 4px;font-size:12px;font-weight:700;}
+QFrame#ConnectionCard {background:#2B2D31;border:1px solid #41434A;border-radius:14px;}
+QLabel#ChannelsInviteBadge {background:@PRIMARY@;color:#FFFFFF;border:0;border-radius:10px;min-width:20px;max-height:20px;padding:0 4px;font-size:12px;font-weight:700;}
 QFrame#ChannelsInvitesDropdown {background:transparent;border:0;}
+
+QPushButton#PrimaryButton:hover,QPushButton#ChannelPrimaryButton:hover,QPushButton#ProfilePrimaryButton:hover,QPushButton#SendRequestButton:hover,QPushButton#AcceptButton:hover,QPushButton#FindUserButton:hover,QPushButton#IncomingCallInlineAcceptBtn:hover {background:#4752C4;color:#FFFFFF;}
+
+QPushButton#PrimaryButton:pressed,QPushButton#ChannelPrimaryButton:pressed,QPushButton#ProfilePrimaryButton:pressed,QPushButton#SendRequestButton:pressed,QPushButton#AcceptButton:pressed,QPushButton#FindUserButton:pressed,QPushButton#IncomingCallInlineAcceptBtn:pressed {background:#3C45A5;color:#FFFFFF;}

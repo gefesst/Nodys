@@ -14,7 +14,7 @@ class MessageActions:
         self.operation = 0
         self.strip = QFrame()
         self.strip.setObjectName('MessageEditStrip')
-        self.strip.setStyleSheet('QFrame#MessageEditStrip {background:#203448;border:1px solid #354D65;border-radius:10px;}')
+        self.strip.setStyleSheet('QFrame#MessageEditStrip {background:#383A40;border:1px solid #41434A;border-radius:10px;}')
         layout = QHBoxLayout(self.strip)
         layout.setContentsMargins(12, 6, 8, 6)
         layout.addWidget(QLabel('Редактирование сообщения'), 1)

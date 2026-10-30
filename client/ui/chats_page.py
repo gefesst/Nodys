@@ -235,7 +235,7 @@ class ChatsPage(QWidget, ThreadSafeMixin):
         self.avatar.set_avatar(friend.get('avatar', ''), friend['login'], friend.get('nickname', ''))
         self.avatar.set_online(friend.get('online', False))
         self.presence.setText('В сети' if friend.get('online') else 'Не в сети')
-        self.presence.setStyleSheet("color:#67D5AD;" if friend.get("online") else "color:#ACB9CC;")
+        self.presence.setStyleSheet("color:#67D5AD;" if friend.get("online") else "color:#B5BAC1;")
 
     def open_chat(self, friend):
         if not friend or not friend.get('login'):

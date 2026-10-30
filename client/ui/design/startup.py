@@ -52,7 +52,7 @@ class StartupProgress(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor('#2B3B51'))
+        p.setBrush(QColor('#404249'))
         p.drawRoundedRect(QRectF(0, 0, 160, 4), 2, 2)
         # Continuous there-and-back motion, with no fictitious percentage.
         position = (1 - math.cos(2*math.pi*self._phase)) / 2
@@ -76,7 +76,7 @@ class StartupPage(QWidget):
         layout.addSpacing(10)
         self.status = status = QLabel('Подключаемся…')
         status.setAlignment(Qt.AlignCenter)
-        status.setStyleSheet('font-size:13px;color:#9AA9BE;')
+        status.setStyleSheet('font-size:13px;color:#949BA4;')
         layout.addWidget(status)
         layout.addSpacing(24)
         self.progress = StartupProgress()

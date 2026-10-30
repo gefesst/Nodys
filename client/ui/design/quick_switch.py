@@ -32,7 +32,7 @@ class QuickDelegate(QStyledItemDelegate):
         r = QRectF(option.rect).adjusted(0, 0, 0, -12)
         painter.setPen(Qt.NoPen)
         painter.setBrush(
-            QColor("#2E425F" if option.state & QStyle.State_Selected else "#202D3F")
+            QColor("#444750" if option.state & QStyle.State_Selected else "#2B2D31")
         )
         painter.drawRoundedRect(r, 10, 10)
         name = row.get("nickname") or row.get("name") or row.get("login", "")
@@ -63,7 +63,7 @@ class QuickSwitch(OverlayDialog):
         self.main = main
         self.setWindowTitle("Быстрый переход")
         self.setStyleSheet(
-            "QDialog#OverlayDialog {background:#202D3F;border:1px solid #4A5D7B;border-radius:16px;}"
+            "QDialog#OverlayDialog {background:#2B2D31;border:1px solid #62656E;border-radius:16px;}"
         )
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 44)
@@ -92,12 +92,12 @@ class QuickSwitch(OverlayDialog):
         self.list.setModel(self.model)
         self.list.setItemDelegate(QuickDelegate(self.list))
         self.list.setStyleSheet(
-            "QListView::item {padding:12px;} QListView::item:selected {background:#2B3B51;}"
+            "QListView::item {padding:12px;} QListView::item:selected {background:#404249;}"
         )
         self.results=QStackedWidget();self.results.addWidget(self.list)
         self.empty=QWidget();empty_layout=QVBoxLayout(self.empty);empty_layout.setContentsMargins(0,42,0,0);empty_layout.setSpacing(16)
         title=QLabel('Ничего не найдено');title.setAlignment(Qt.AlignCenter);title.setFixedHeight(28);title.setStyleSheet('font-size:23px;font-weight:600;');empty_layout.addWidget(title)
-        subtitle=QLabel('Попробуйте имя, логин или название канала.');subtitle.setAlignment(Qt.AlignCenter);subtitle.setWordWrap(True);subtitle.setStyleSheet('font-size:14px;color:#ACB9CC;');empty_layout.addWidget(subtitle)
+        subtitle=QLabel('Попробуйте имя, логин или название канала.');subtitle.setAlignment(Qt.AlignCenter);subtitle.setWordWrap(True);subtitle.setStyleSheet('font-size:14px;color:#B5BAC1;');empty_layout.addWidget(subtitle)
         empty_layout.addStretch();self.results.addWidget(self.empty)
         root.addWidget(self.results,1)
         self.query.textChanged.connect(self.filter)
@@ -108,7 +108,7 @@ class QuickSwitch(OverlayDialog):
 
     def paintEvent(self,event):
         super().paintEvent(event)
-        painter=QPainter(self);painter.setPen(QColor('#354152'))
+        painter=QPainter(self);painter.setPen(QColor('#41434A'))
         painter.drawLine(20,74,self.width()-20,74)
 
     def filter(self, text):

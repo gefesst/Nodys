@@ -21,7 +21,7 @@ class ActionMenu(QFrame):
         self.setObjectName('InlineActionMenu')
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setFixedWidth(230)
-        self.setStyleSheet('QFrame#InlineActionMenu {background:#253142;border:1px solid #485B76;border-radius:12px;}')
+        self.setStyleSheet('QFrame#InlineActionMenu {background:#2B2D31;border:1px solid #41434A;border-radius:12px;}')
         self.box=QVBoxLayout(self);self.box.setContentsMargins(8,8,8,8);self.box.setSpacing(0)
         self.danger=danger
         self.anchor_right=anchor_right
@@ -34,8 +34,8 @@ class ActionMenu(QFrame):
         button=MenuButton(text,self);button.setFixedHeight(40)
         button.setAttribute(Qt.WA_MacShowFocusRect,False)
         button.setProperty('keyboardFocus',False)
-        color='#FFA7AE' if self.danger else '#EDF2FA'
-        button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"] {background:#3A4D67;}')
+        color='#FFA7AE' if self.danger else '#F2F3F5'
+        button.setStyleSheet('QPushButton {text-align:left;padding:0 8px;border:0;border-radius:6px;background:transparent;font-size:13px;font-weight:400;color:'+color+';} QPushButton:hover,QPushButton[keyboardFocus="true"] {background:#4E5058;}')
         def activate():
             self.close()
             callback()
@@ -54,7 +54,7 @@ class ActionMenu(QFrame):
             button.setCheckable(True)
             button.setChecked(value in selected)
             button.setFixedSize(33, 34)
-            button.setStyleSheet('QPushButton {border:1px solid transparent;border-radius:8px;background:transparent;padding:0;color:#EDF2FA;font-size:18px;} QPushButton:hover {background:#3A4D67;} QPushButton:checked {background:#344F70;border-color:#87ABFF;}')
+            button.setStyleSheet('QPushButton {border:1px solid transparent;border-radius:8px;background:transparent;padding:0;color:#F2F3F5;font-size:18px;} QPushButton:hover {background:#4E5058;} QPushButton:checked {background:#444750;border-color:#B6BCFF;}')
             def activate(checked=False, value=value):
                 self.close()
                 callback(value)

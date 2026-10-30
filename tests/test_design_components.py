@@ -386,7 +386,7 @@ class DesignGeometryTests(unittest.TestCase):
             image = QImage(str(ASSETS / name))
             self.assertFalse(image.isNull(), name)
         checked = QImage(str(ASSETS / "radio-checked.svg"))
-        self.assertEqual(checked.pixelColor(9, 9).name(), "#91adff")
+        self.assertEqual(checked.pixelColor(9, 9).name(), "#b6bcff")
 
     def test_long_header_elides_and_restores_full_name_on_resize(self):
         from ui.design.widgets import ElidedLabel
@@ -693,7 +693,7 @@ class DesignGeometryTests(unittest.TestCase):
         self.assertLessEqual(menu.geometry().bottom(),host.height()-12)
         QTest.keyClick(menu.buttons[0], Qt.Key_Down)
         self.assertTrue(menu.buttons[0].property('keyboardFocus'))
-        self.assertEqual(menu.buttons[0].grab().toImage().pixelColor(5,20).name(), '#3a4d67')
+        self.assertEqual(menu.buttons[0].grab().toImage().pixelColor(5,20).name(), '#4e5058')
         QTest.keyClick(menu.buttons[0],Qt.Key_Escape)
         self.assertFalse(fired)
         self.assertFalse(menu.isVisible())

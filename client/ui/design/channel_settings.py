@@ -149,7 +149,7 @@ def build(page):
     take(page.settings_back_btn, root, height=17)
     page.settings_back_btn.setText("← Вернуться в канал")
     page.settings_back_btn.setStyleSheet(
-        "text-align:left;border:0;padding:0;color:#A9B8CD;background:transparent;font-size:14px;"
+        "text-align:left;border:0;padding:0;color:#B5BAC1;background:transparent;font-size:14px;"
     )
     root.addSpacing(15)
     divider = QFrame()
@@ -221,7 +221,7 @@ def build(page):
     take(page.settings_code_lbl, code, 300, 46)
     page.settings_code_lbl.setMinimumWidth(120)
     page.settings_code_lbl.setStyleSheet(
-        "background:#17212D;border:1px solid #354458;border-radius:8px;padding:0 14px;font-size:15px;"
+        "background:#1E1F22;border:1px solid #41434A;border-radius:8px;padding:0 14px;font-size:15px;"
     )
     take(page.settings_copy_code_btn, code, 150, 40)
     page.settings_copy_code_btn.setText("Копировать")
@@ -301,7 +301,7 @@ def build(page):
     note.setWordWrap(True)
     note.setMinimumHeight(46)
     note.setStyleSheet(
-        "background:#253142;border:1px solid #354458;border-radius:10px;color:#91ADFF;padding:0 16px;font-size:13px;"
+        "background:#2B2D31;border:1px solid #41434A;border-radius:10px;color:#B6BCFF;padding:0 16px;font-size:13px;"
     )
     access.addWidget(note)
     access.addSpacing(38)

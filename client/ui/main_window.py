@@ -84,7 +84,7 @@ class MainWindow(QWidget):
         menu_layout.addWidget(brand,0,Qt.AlignHCenter)
         menu_layout.addSpacing(6)
         wordmark = QLabel('noda');wordmark.setAlignment(Qt.AlignCenter)
-        wordmark.setFixedHeight(14);wordmark.setStyleSheet('font-size:12px;font-weight:700;color:#ACB9CC;')
+        wordmark.setFixedHeight(14);wordmark.setStyleSheet('font-size:12px;font-weight:700;color:#B5BAC1;')
         menu_layout.addWidget(wordmark)
         menu_layout.addSpacing(10)
         brand_separator=QFrame();brand_separator.setObjectName("Divider");brand_separator.setFixedHeight(1)

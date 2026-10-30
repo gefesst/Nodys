@@ -16,7 +16,7 @@ class StateIcon(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor("#263750"))
+        painter.setBrush(QColor("#34384D"))
         painter.drawEllipse(self.rect())
         icon(painter, "chat", QRectF(22, 22, 32, 32), ACC)
 
@@ -91,12 +91,12 @@ class LoadingState(QWidget):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         for y, width in ((20, 430), (85, 310), (175, 490), (265, 360)):
-            painter.setBrush(QColor("#293646"))
+            painter.setBrush(QColor("#383A40"))
             painter.drawEllipse(QRectF(0, y - 1, 32, 32))
             width = max(40, min(width, self.width() - 58))
-            painter.setBrush(QColor("#2B384A"))
+            painter.setBrush(QColor("#41434A"))
             painter.drawRoundedRect(QRectF(42, y, width, 16), 6, 6)
-            painter.setBrush(QColor("#253142"))
+            painter.setBrush(QColor("#2B2D31"))
             painter.drawRoundedRect(QRectF(42, y + 27, max(25, width - 80), 11), 5, 5)
         draw_text(painter, 42, 382, "Загружаем…", 13, SUB)
 
@@ -116,7 +116,7 @@ class InlineNote(QLabel):
             tone, ACC
         )
         self.setStyleSheet(
-            "background:#253142;border:1px solid #354152;border-radius:10px;padding:0 34px;font-size:13px;color:"
+            "background:#2B2D31;border:1px solid #41434A;border-radius:10px;padding:0 34px;font-size:13px;color:"
             + self.note_color
             + ";"
         )

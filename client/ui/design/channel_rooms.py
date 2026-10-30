@@ -25,7 +25,7 @@ class OccupiedRoom(QWidget):
     def paintEvent(self,event):
         painter=QPainter(self);painter.setRenderHint(QPainter.Antialiasing)
         painter.setClipRect(0,0,self.width(),int(self.height()*self.reveal))
-        painter.setPen(QPen(QColor('#354152'),1));painter.setBrush(Qt.NoBrush)
+        painter.setPen(QPen(QColor('#41434A'),1));painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(self.rect().adjusted(1,1,-1,-1),10,10)
 
 
@@ -44,7 +44,7 @@ class RoomNavigationMixin:
         self._occupied_rooms=set()
         panel=QWidget();panel.setFixedWidth(180)
         panel.setObjectName('RoomNavigation')
-        panel.setStyleSheet('QWidget#RoomNavigation {background:#1B2936;border:1px solid #354152;border-radius:14px;}')
+        panel.setStyleSheet('QWidget#RoomNavigation {background:#2B2D31;border:1px solid #41434A;border-radius:14px;}')
         outer=QVBoxLayout(panel);outer.setContentsMargins(8,12,8,8);outer.setSpacing(10)
         self.rooms_scroll=QScrollArea();self.rooms_scroll.setWidgetResizable(True)
         self.rooms_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -120,11 +120,11 @@ class RoomNavigationMixin:
             if item.widget():item.widget().hide();item.widget().deleteLater()
         for kind,title in [('text','Текстовые'),('voice','Голосовые')]:
             heading=QWidget();row=QHBoxLayout(heading);row.setContentsMargins(4,12,0,4)
-            label=QLabel(title);label.setStyleSheet('font-size:12px;color:#9BAFC6;font-weight:600;');row.addWidget(label,1)
+            label=QLabel(title);label.setStyleSheet('font-size:12px;color:#B5BAC1;font-weight:600;');row.addWidget(label,1)
             add=Button('+');add.setMinimumWidth(0);add.setFixedSize(24,26);add.setProperty('flat',True);add.setAccessibleName('Создать '+('текстовый' if kind=='text' else 'голосовой')+' канал')
             add.setVisible(self._rooms_manage);add.clicked.connect(lambda _,k=kind:self.edit_room_dialog(kind=k));row.addWidget(add)
             self.rooms_layout.addWidget(heading)
-            divider=QWidget();divider.setFixedHeight(1);divider.setStyleSheet('background:#354152;')
+            divider=QWidget();divider.setFixedHeight(1);divider.setStyleSheet('background:#41434A;')
             self.rooms_layout.addWidget(divider)
             for room in (r for r in rooms if r['kind']==kind):
                 container=QWidget();line=QHBoxLayout(container);line.setContentsMargins(0,0,0,0);line.setSpacing(2)
@@ -148,7 +148,7 @@ class RoomNavigationMixin:
                     self._room_avatars[(room['id'],person['login'])]=avatar
                     member_row.addWidget(avatar)
                     name=ElidedLabel(person.get('nickname',person['login']))
-                    name.setStyleSheet('font-size:11px;color:#A9B8CD;')
+                    name.setStyleSheet('font-size:11px;color:#B5BAC1;')
                     info=QVBoxLayout();info.setContentsMargins(0,0,0,0);info.setSpacing(1)
                     info.addWidget(name)
                     activity_label=ElidedLabel(activity_text(person.get('steam_activity')))

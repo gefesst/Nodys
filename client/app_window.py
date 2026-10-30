@@ -130,12 +130,12 @@ class AppWindow(QWidget):
         # Each structural surface replaces the base, rather than stacking alpha
         # over it (96% over 96% is effectively opaque).
         painter.setCompositionMode(QPainter.CompositionMode_Source)
-        colors = {"Sidebar": "#19222D", "SectionSidebar": "#202B36",
-                  "ChannelsSidebarCard": "#202B36"}
+        colors = {"Sidebar": "#1E1F22", "SectionSidebar": "#2B2D31",
+                  "ChannelsSidebarCard": "#2B2D31"}
         for child in self.findChildren(QWidget):
             shade = colors.get(child.objectName())
             if isinstance(child, TitleBar):
-                shade = "#1B2430"
+                shade = "#1E1F22"
             if shade and child.isVisibleTo(self):
                 panel = QColor(shade)
                 panel.setAlpha(color.alpha())

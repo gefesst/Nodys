@@ -368,7 +368,7 @@ class ProfilePage(QWidget, ThreadSafeMixin):
             self.show_toast(resp.get("message", "Не удалось обновить профиль"), msec=3200)
 
     def update_status(self, online: bool):
-        self.avatar_label.set_online(online,ring_color="#19222D")
+        self.avatar_label.set_online(online,ring_color="#1E1F22")
         if online:
             self.status_label.setText(f"@{self.login} · В сети")
             self.status_label.setObjectName("ProfileStatusOnline")

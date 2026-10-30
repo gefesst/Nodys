@@ -143,7 +143,7 @@ class ChannelMemberItem(QFrame):
         role_name = {"owner":"Владелец", "admin":"Администратор", "moderator":"Модератор", "member":"Участник"}.get(role, "Участник")
         sub_lbl = QLabel(role_name)
         sub_lbl.setObjectName("ChannelMemberSub")
-        sub_lbl.setStyleSheet("font-size:13px;color:#91ADFF;")
+        sub_lbl.setStyleSheet("font-size:13px;color:#B6BCFF;")
         text_col.addWidget(sub_lbl)
 
         lay.addLayout(text_col, 1)
@@ -2426,7 +2426,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         joined = self.viewing_connected_room()
         if not joined:
             self.voice_status_lbl.setText("Вы подключены к другой комнате" if self._voice_joined else "Вы не в голосовом канале")
-            self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#EDF2FA;")
+            self.voice_status_lbl.setStyleSheet("font-size:16px;font-weight:600;color:#F2F3F5;")
 
         if joined:
             self.voice_status_lbl.setFixedWidth(56)

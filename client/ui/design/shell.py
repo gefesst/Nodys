@@ -114,7 +114,7 @@ class NavButton(Button):
         p.setRenderHint(QPainter.Antialiasing)
         active = bool(self.property("active"))
         if active or self._hover:
-            color = QColor("#2B3B51")
+            color = QColor("#454B78")
             color.setAlpha(255 if active else int(150 * self._hover))
             p.setPen(Qt.NoPen)
             p.setBrush(color)

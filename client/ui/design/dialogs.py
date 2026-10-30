@@ -17,7 +17,7 @@ def confirm(parent, title, description, accept_text, callback, *, danger=False):
     dialog.setAttribute(Qt.WA_DeleteOnClose)
     dialog.setWindowTitle(title)
     dialog.setStyleSheet(
-        "QDialog#OverlayDialog {background:#202C3B;border:1px solid #465772;border-radius:16px;}"
+        "QDialog#OverlayDialog {background:#383A40;border:1px solid #62656E;border-radius:16px;}"
     )
     layout = QVBoxLayout(dialog)
     layout.setContentsMargins(32, 26, 32, 36)
@@ -31,7 +31,7 @@ def confirm(parent, title, description, accept_text, callback, *, danger=False):
     description_lines.setSpacing(9)
     for line in description.split("\n"):
         text = QLabel(line)
-        text.setStyleSheet("font-size:14px;color:#A9B8CD;")
+        text.setStyleSheet("font-size:14px;color:#B5BAC1;")
         text.setWordWrap(True)
         description_lines.addWidget(text)
     layout.addLayout(description_lines)

@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtSvg import QSvgRenderer
 from .motion import reduced
-from .tokens import ACC, FG, SUB, MUT, EDGE, GREEN, RED
+from .tokens import ACC, PRIMARY, FG, SUB, MUT, EDGE, GREEN, RED
 
 ASSETS = Path(__file__).parent / "assets"
 COMBO_ARROW_STYLE = (
@@ -84,10 +84,10 @@ class SelectorDelegate(QStyledItemDelegate):
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
         if active and enabled:
-            painter.setBrush(QColor("#3A4D67"))
+            painter.setBrush(QColor("#4E5058"))
             painter.drawRoundedRect(rect, 7, 7)
         elif selected:
-            painter.setBrush(QColor("#2B3B51"))
+            painter.setBrush(QColor("#404249"))
             painter.drawRoundedRect(rect, 7, 7)
         painter.setPen(QColor(FG if enabled else MUT))
         painter.setFont(option.font)
@@ -113,12 +113,12 @@ class ScrollSafeComboBox(QComboBox):
         view.setMouseTracking(True)
         view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        view.setStyleSheet("QListView {background:#253142;border:1px solid #485B76;border-radius:10px;padding:6px;outline:0;} ")
+        view.setStyleSheet("QListView {background:#2B2D31;border:1px solid #41434A;border-radius:10px;padding:6px;outline:0;} ")
         self.setView(view)
         self.setItemDelegate(SelectorDelegate(self))
         self.setMaxVisibleItems(7)
         self.setAttribute(Qt.WA_MacShowFocusRect, False)
-        self.setStyleSheet("QComboBox {min-height:24px;max-height:24px;padding:10px 40px 10px 14px;background:#17212D;border:1px solid #354458;border-radius:10px;} QComboBox:hover {border-color:#536D92;} QComboBox:focus,QComboBox:on {border-color:#91ADFF;} QComboBox::drop-down {border:0;width:32px;}" + COMBO_ARROW_STYLE)
+        self.setStyleSheet("QComboBox {min-height:24px;max-height:24px;padding:10px 40px 10px 14px;background:#1E1F22;border:1px solid #41434A;border-radius:10px;} QComboBox:hover {border-color:#62656E;} QComboBox:focus,QComboBox:on {border-color:#B6BCFF;} QComboBox::drop-down {border:0;width:32px;}" + COMBO_ARROW_STYLE)
 
     def showPopup(self):
         popup = self.view().window()
@@ -220,7 +220,7 @@ def icon(p, name, rect, color=SUB):
     key = (name, color)
     if key not in ICONS:
         file = ASSETS / (name + ".svg")
-        data = file.read_text().replace("#ACB9CC", color)
+        data = file.read_text().replace("#B5BAC1", color)
         # Select the byte-array overload explicitly. The constructor also accepts
         # a filename and a QXmlStreamReader; never pass untyped temporary bytes.
         renderer = QSvgRenderer(QApplication.instance())
@@ -238,7 +238,7 @@ def draw_text(p, x, y, s, px=15, color=FG, bold=False):
 
 def avatar(p, x, y, initials="АМ", size=36, online=False, own=False):
     p.setPen(Qt.NoPen)
-    p.setBrush(QColor("#4A485E" if own else "#40536B"))
+    p.setBrush(QColor("#4A485E" if own else "#465772"))
     p.drawEllipse(QRectF(x, y, size, size))
     curve = QPainterPath()
     curve.moveTo(x+size*.14, y+size*.75)
@@ -254,7 +254,7 @@ def avatar(p, x, y, initials="АМ", size=36, online=False, own=False):
     p.setPen(QColor(FG))
     p.drawText(QRectF(x, y, size, size), Qt.AlignCenter, initials)
     if online:
-        p.setPen(QPen(QColor("#19222D"), 2))
+        p.setPen(QPen(QColor("#1E1F22"), 2))
         p.setBrush(QColor(GREEN))
         p.drawEllipse(QRectF(x + size - 8, y + size - 8, 8, 8))
 
@@ -343,8 +343,8 @@ class Button(QPushButton):
         filled_primary = self.primary and not flat
         # Selected flat navigation controls keep a dark surface under their
         # accent icon. Only filled primary actions use the light blue surface.
-        a = QColor(ACC if filled_primary else "#2B3B51" if self.primary else "#28364A")
-        b = QColor("#ACC0FF" if filled_primary else "#3A4D67")
+        a = QColor(PRIMARY if filled_primary else "#454B78" if self.primary else "#383A40")
+        b = QColor("#4752C4" if filled_primary else "#4E5058")
         if self.property("danger"):
             a, b = QColor("#492D39"), QColor("#603748")
         t = self._hover
@@ -354,27 +354,27 @@ class Button(QPushButton):
             a.blueF() * (1 - t) + b.blueF() * t,
         )
         if self.isDown():
-            bg = QColor("#3D2530" if self.property("danger") else "#7898EB" if filled_primary else "#354866")
+            bg = QColor("#3D2530" if self.property("danger") else "#3C45A5" if filled_primary else "#35363C")
         if not self.isEnabled():
-            bg = QColor("#252E3A")
+            bg = QColor("#2B2D31")
         if flat and not self.primary and not self._hover and not self.isDown():
             bg.setAlpha(0)
         keyboard_focus = self.hasFocus() and self._keyboard_focus
         # Paint one contour in every state. A second inset focus rectangle
         # produces mismatched corners when the ordinary border is still drawn.
         p.setPen(QPen(QColor(ACC), 2) if keyboard_focus else
-                 Qt.NoPen if self.property("flat") else QPen(QColor("#354152"), 1))
+                 Qt.NoPen if self.property("flat") else QPen(QColor("#41434A"), 1))
         p.setBrush(bg)
         inset = 1.0 if keyboard_focus else 0.5
         p.drawRoundedRect(QRectF(inset, inset, self.width() - 2*inset, self.height() - 2*inset),
                           9.5-inset, 9.5-inset)
-        color = ACC if self.primary and self.property("flat") else "#142039" if self.primary else SUB if self.property("flat") else FG
+        color = ACC if self.primary and self.property("flat") else "#FFFFFF" if self.primary else SUB if self.property("flat") else FG
         if self.property("danger"):
             color = RED
         if self.property("text_color"):
             color = self.property("text_color")
         if not self.isEnabled():
-            color = "#7C8A9D"
+            color = "#80848E"
         p.setFont(self.font())
         available=max(0,self.width()-24-(26 if self.icon_name and self.text() else 0))
         label=p.fontMetrics().elidedText(self.text(),Qt.ElideRight,available)
@@ -422,7 +422,7 @@ class RoundCallButton(Button):
         danger=bool(self.property('danger'))
         off=self.property('off')=='true'
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else '#3A4D67' if self._hover else '#303E53'))
+        painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else '#4E5058' if self._hover else '#383A40'))
         painter.drawEllipse(QRectF(0,0,52,52))
         icon(painter,self.icon_name,QRectF(15,15,22,22),RED if danger or off else FG)
         if off and not self.icon_name.endswith("-off"):
@@ -454,7 +454,7 @@ class DialogDelegate(QStyledItemDelegate):
         hover = bool(o.state & QStyle.State_MouseOver)
         if selected or hover:
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor("#2B3B51" if selected else "#273446"))
+            p.setBrush(QColor("#404249" if selected else "#35373C"))
             p.drawRoundedRect(r, 11, 11)
         if selected:
             p.setBrush(QColor(ACC))
@@ -508,9 +508,9 @@ class DialogDelegate(QStyledItemDelegate):
             badge_width = 20 if count < 10 else 28
             badge = QRectF(r.right() - 14 - badge_width, r.center().y() + 6, badge_width, 20)
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(ACC))
+            p.setBrush(QColor(PRIMARY))
             p.drawRoundedRect(badge, 10, 10)
-            p.setPen(QColor("#142039"))
+            p.setPen(QColor("#FFFFFF"))
             p.setFont(font(11, True))
             p.drawText(badge, Qt.AlignCenter, str(min(count, 99)))
         p.restore()
@@ -745,7 +745,7 @@ class MessageDelegate(QStyledItemDelegate):
             center = o.rect.center().x()
             p.setPen(QPen(QColor(EDGE), 1))
             line_y = o.rect.y() + unread_offset + 22
-            p.setBrush(QColor('#1B2937'))
+            p.setBrush(QColor('#2B2D31'))
             p.setPen(QPen(QColor(EDGE), 1))
             date_rect = QRectF(center-label_width/2-12, line_y-15, label_width+24, 26)
             p.drawRoundedRect(date_rect, 13, 13)
@@ -781,7 +781,7 @@ class MessageDelegate(QStyledItemDelegate):
             draw_text(
                 p, x, o.rect.y() + 14 + date_offset, name, 13, ACC if own else FG, True
             )
-        p.setBrush(QColor("#304C70" if own else "#222E3D"))
+        p.setBrush(QColor("#454B78" if own else "#383A40"))
         p.setPen(Qt.NoPen)
         if m.id == self.highlight_id:
             p.setPen(QPen(QColor(ACC), 2))
@@ -791,7 +791,7 @@ class MessageDelegate(QStyledItemDelegate):
         if m.reply:
             box = QRectF(x + 12, y + 8, bw - 24, 44)
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor('#192B3C'))
+            p.setBrush(QColor('#34394F'))
             p.drawRoundedRect(box, 6, 6)
             p.setPen(QPen(QColor(ACC), 2))
             p.drawLine(int(x+16), int(y+15), int(x+16), int(y+46))
@@ -813,7 +813,7 @@ class MessageDelegate(QStyledItemDelegate):
             clip = self.shape(x, y, bw, bh, tail, own)
             p.save()
             p.setClipPath(clip, Qt.IntersectClip)
-            p.fillRect(box, QColor('#15212C'))
+            p.fillRect(box, QColor('#232428'))
             image = self.image_cache.get(m.attachment) if self.image_cache else None
             if image is not None:
                 size = image.size().scaled(box.size().toSize(), Qt.KeepAspectRatio)
@@ -831,7 +831,7 @@ class MessageDelegate(QStyledItemDelegate):
             p.restore()
         if is_image_attachment(m.attachment) and not m.text and not m.reactions and not m.edited:
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor(16, 27, 38, 180))
+            p.setBrush(QColor(20, 20, 23, 180))
             p.drawRoundedRect(QRectF(x+bw-(78 if own else 57), y+bh-28, 70 if own else 49, 22), 11, 11)
         footer_text, footer_width = self.footer(m)
         draw_text(p, x + bw - 12 - footer_width, y + bh - 12, footer_text, 11, MUT)
@@ -846,7 +846,7 @@ class MessageDelegate(QStyledItemDelegate):
             emoji, count, mine = reaction
             box.translate(o.rect.topLeft())
             p.setPen(Qt.NoPen)
-            p.setBrush(QColor('#527EAD' if mine else '#38516B'))
+            p.setBrush(QColor('#5865A0' if mine else '#4B4F65'))
             p.drawRoundedRect(box, 13, 13)
             p.setPen(QColor(FG))
             p.setFont(font(15))
@@ -989,8 +989,8 @@ class Toast(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         p.setOpacity(self._progress)
-        p.setBrush(QColor("#2B3B51"))
-        p.setPen(QPen(QColor("#536D92"), 1))
+        p.setBrush(QColor("#404249"))
+        p.setPen(QPen(QColor("#62656E"), 1))
         p.drawRoundedRect(QRectF(1, 1, self.width() - 2, self.height() - 2), 10, 10)
         p.setFont(font(13))
         p.setPen(QColor(FG))

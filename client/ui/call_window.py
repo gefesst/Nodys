@@ -19,7 +19,7 @@ class CallPanel(OverlayDialog):
         super().__init__(parent, 550, 650, anchor="call")
         self.setObjectName("CallPanel")
         self.setStyleSheet(
-            "QDialog#CallPanel {background:#202C3B;border:1px solid #465772;border-radius:18px;}"
+            "QDialog#CallPanel {background:#383A40;border:1px solid #62656E;border-radius:18px;}"
         )
         self.shade.mousePressEvent = lambda event: event.accept()
 
@@ -119,7 +119,7 @@ class ActiveCallWindow(CallPanel):
             column.addWidget(button,0,Qt.AlignHCenter)
             column.addSpacing(9)
             caption=QLabel(label);caption.setAlignment(Qt.AlignCenter);caption.setFixedHeight(15)
-            caption.setStyleSheet('font-size:12px;color:'+('#FFA7AE' if button is self.btn_end else '#ACB9CC')+';')
+            caption.setStyleSheet('font-size:12px;color:'+('#FFA7AE' if button is self.btn_end else '#B5BAC1')+';')
             column.addWidget(caption)
             btns.addLayout(column,1)
         root.addLayout(btns)
@@ -147,7 +147,7 @@ class ActiveCallWindow(CallPanel):
         if quality_score >= 75:
             return "▁▃▅█", "#67D5AD"
         if quality_score >= 50:
-            return "▁▃▅▆", "#ACB9CC"
+            return "▁▃▅▆", "#B5BAC1"
         if quality_score >= 30:
             return "▁▂▄▅", "#faa61a"
         return "▁▂▃▄", "#f04747"
@@ -186,13 +186,13 @@ class ActiveCallWindow(CallPanel):
             self.speaking_lbl.setText("Сейчас говорите: вы")
             self.state_lbl.setText("Вы говорите")
             self.state_lbl.setStyleSheet(
-                "color:#91ADFF; font-size:15px; font-weight:400;"
+                "color:#B6BCFF; font-size:15px; font-weight:400;"
             )
         else:
             self.speaking_lbl.setText("Сейчас: тишина")
             self.state_lbl.setText("Соединение активно")
             self.state_lbl.setStyleSheet(
-                "color:#ACB9CC; font-size:15px; font-weight:400;"
+                "color:#B5BAC1; font-size:15px; font-weight:400;"
             )
 
         quality = a.get("quality")
@@ -205,7 +205,7 @@ class ActiveCallWindow(CallPanel):
                 self.state_lbl.setStyleSheet("color:#EAC184;font-size:15px;")
             elif score < 50:
                 self.state_lbl.setText("Связь нестабильна")
-                self.state_lbl.setStyleSheet("color:#ACB9CC;font-size:15px;")
+                self.state_lbl.setStyleSheet("color:#B5BAC1;font-size:15px;")
             bars, color = self._bars_for_quality(score)
             self.quality_bars_lbl.setText(bars)
             self.quality_bars_lbl.setStyleSheet(
@@ -320,14 +320,14 @@ class OutgoingCallWindow(CallPanel):
         login = QLabel("@" + peer)
         login.setAlignment(Qt.AlignCenter)
         login.setFixedHeight(18)
-        login.setStyleSheet("font-size:14px;color:#ACB9CC;")
+        login.setStyleSheet("font-size:14px;color:#B5BAC1;")
         root.addWidget(login)
         root.addSpacing(31)
         hint = QLabel("Ожидаем ответа")
         self.status_label = hint
         hint.setAlignment(Qt.AlignCenter)
         hint.setFixedHeight(22)
-        hint.setStyleSheet("font-size:15px;color:#ACB9CC;")
+        hint.setStyleSheet("font-size:15px;color:#B5BAC1;")
         root.addWidget(hint)
         root.addSpacing(99)
         button = Button("Отменить")

@@ -93,13 +93,13 @@ class ImageCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
-        painter.fillRect(self.rect(), QColor('#111B24'))
+        painter.fillRect(self.rect(), QColor('#1E1F22'))
         if self.image is not None:
             size = self.image.size().scaled(self.size(), Qt.KeepAspectRatio)
             target = QRectF((self.width()-size.width())/2, (self.height()-size.height())/2, size.width(), size.height())
             painter.drawImage(target, self.image)
         else:
-            painter.setPen(QColor('#ACB9CC'))
+            painter.setPen(QColor('#B5BAC1'))
             painter.drawText(self.rect().adjusted(24, 24, -24, -24), Qt.AlignCenter | Qt.TextWordWrap, self.message)
 
 
@@ -109,7 +109,7 @@ class ImageViewer(OverlayDialog):
         self.metadata = metadata
         self.cache = conversation.image_cache
         self.setAccessibleName('Просмотр изображения')
-        self.setStyleSheet('QDialog#OverlayDialog {background:#192632;border:1px solid #354D65;border-radius:14px;}')
+        self.setStyleSheet('QDialog#OverlayDialog {background:#2B2D31;border:1px solid #41434A;border-radius:14px;}')
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 16)
         header = QHBoxLayout()

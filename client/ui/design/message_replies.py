@@ -12,7 +12,7 @@ class MessageReplies:
         self.return_state = None
         self.strip = QFrame()
         self.strip.setObjectName('ReplyDraft')
-        self.strip.setStyleSheet('QFrame#ReplyDraft {background:#203448;border:1px solid #354D65;border-radius:10px;}')
+        self.strip.setStyleSheet('QFrame#ReplyDraft {background:#383A40;border:1px solid #41434A;border-radius:10px;}')
         layout = QHBoxLayout(self.strip)
         layout.setContentsMargins(12, 6, 8, 6)
         self.label = QLabel()

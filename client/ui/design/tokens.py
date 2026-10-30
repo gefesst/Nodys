@@ -1,16 +1,17 @@
-"""Approved Nodus 3.3 palette and common dimensions."""
+"""Approved noda graphite palette and common dimensions."""
 
-ACC = "#91ADFF"
-FG = "#EDF2FA"
-SUB = "#ACB9CC"
-MUT = "#9AA9BE"
-EDGE = "#354152"
+ACC = "#B6BCFF"
+PRIMARY = "#5865F2"
+FG = "#F2F3F5"
+SUB = "#B5BAC1"
+MUT = "#949BA4"
+EDGE = "#41434A"
 GREEN = "#67D5AD"
 RED = "#FFA7AE"
-BACKGROUND = "#18212A"
-SURFACE = "#202B39"
-SIDEBAR = "#202B36"
-RAIL = "#19222D"
+BACKGROUND = "#313338"
+SURFACE = "#383A40"
+SIDEBAR = "#2B2D31"
+RAIL = "#1E1F22"
 RAIL_WIDTH = 88
 LIST_WIDTH = 280
 RADIUS = 12
