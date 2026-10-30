@@ -742,13 +742,15 @@ class MessageDelegate(QStyledItemDelegate):
         if m.divider:
             p.setFont(font(11))
             label_width = p.fontMetrics().horizontalAdvance(m.date)
-            center = (self.view.viewport().width() - 28) / 2
+            center = o.rect.center().x()
             p.setPen(QPen(QColor(EDGE), 1))
             line_y = o.rect.y() + unread_offset + 22
             p.setBrush(QColor('#1B2937'))
             p.setPen(QPen(QColor(EDGE), 1))
-            p.drawRoundedRect(QRectF(center-label_width/2-12, line_y-15, label_width+24, 26), 13, 13)
-            draw_text(p, center-label_width/2, o.rect.y()+unread_offset+26, m.date, 11, MUT)
+            date_rect = QRectF(center-label_width/2-12, line_y-15, label_width+24, 26)
+            p.drawRoundedRect(date_rect, 13, 13)
+            p.setPen(QColor(MUT))
+            p.drawText(date_rect, Qt.AlignCenter, m.date)
         if m.group and not own:
             display_name = self.own_name() if own else m.name
             initials = self._avatar_helper._initials(display_name)
