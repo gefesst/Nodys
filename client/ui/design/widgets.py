@@ -804,8 +804,10 @@ class Composer(QPlainTextEdit):
         self.setFont(font(15))
         self.setPlaceholderText("Сообщение…")
         self.document().setDocumentMargin(0)
+        # Keep the initial empty composer fixed; adjust_height grows it for text.
+        # Raising maximumHeight here undoes setFixedHeight and lets the first
+        # layout expand it before the deferred resize callback shrinks it again.
         self.setFixedHeight(44)
-        self.setMaximumHeight(130)
         self.setTabChangesFocus(True)
         self.textChanged.connect(self.adjust_height)
         self._resize_height_timer=QTimer(self)
