@@ -361,10 +361,14 @@ class DesignGeometryTests(unittest.TestCase):
             self.assertEqual(bar.value(),100,kind)
             QTest.qWait(70);middle=bar.value();self.assertGreater(middle,100,kind)
             QTest.qWait(150);self.assertGreater(bar.value(),middle,kind)
-            # Preserve trackpad pixel input without adding a second animation.
+            # Cocoa pixel input must also ease instead of jumping immediately.
             event=QWheelEvent(QPointF(40,40),QPointF(40,40),QPoint(0,-8),QPoint(0,-15),Qt.NoButton,Qt.NoModifier,Qt.ScrollUpdate,False)
+            before = bar.value()
             self.app.sendEvent(area.viewport(),event)
-            self.assertEqual(area._smooth_scroll.animation.state().name, "Stopped")
+            self.assertEqual(bar.value(), before)
+            self.assertEqual(area._smooth_scroll.animation.state().name, "Running")
+            QTest.qWait(130)
+            self.assertEqual(bar.value(), before + 8)
             area.close()
 
     def test_manual_scroll_cancels_delayed_resize_anchor(self):
