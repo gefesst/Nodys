@@ -638,16 +638,25 @@ def main():
                 assert lab.request(peer, "heartbeat", activity_sequence=1,
                     steam_nickname="Steam Player", steam_game="Counter-Strike 2", steam_app_id="730")["status"] == "ok"
                 m.show_friends();m.friends_page.set_view('all');m.friends_page.load_friends()
-                self.wait(predicate=lambda: any(f.get('steam_activity') for f in m.friends_page._friends_data));yield
                 from ui.friends_page import FriendItem
-                activity_card = next(item for item in m.friends_page.findChildren(FriendItem) if item.login == peer and item.isVisible())
-                assert 'Counter-Strike 2' in activity_card.activity_label.full_text
+
+                def activity_card_ready(expected):
+                    # A populated cache does not mean Qt has shown the newly
+                    # inserted card yet. Wait for the actual visible result;
+                    # polling can also replace the card when presence changes.
+                    return any(
+                        item.login == peer and item.isVisible()
+                        and expected == item.activity_label.full_text
+                        for item in m.friends_page.findChildren(FriendItem)
+                    )
+
+                expected_activity = 'Играет в Counter-Strike 2 · Steam: Steam Player'
+                self.wait(predicate=lambda: activity_card_ready(expected_activity));yield
                 self.shot("22-steam-friend-activity")
                 assert lab.request(peer, "heartbeat", activity_sequence=2,
                     steam_nickname="", steam_game="", steam_app_id="")["status"] == "ok"
                 m.friends_page.load_friends()
-                self.wait(predicate=lambda: not any(f.get('steam_activity') for f in m.friends_page._friends_data));yield
-                assert activity_card.activity_label.full_text == ''
+                self.wait(predicate=lambda: activity_card_ready(''));yield
                 self.workflow_checks.append('steam_activity_visible_to_friend_and_cleared')
             m.show_settings();m.settings_page.select_section("Внешний вид")
 
