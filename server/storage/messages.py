@@ -27,7 +27,7 @@ class MessageRepository:
     def get_page(self, user_a, user_b, limit=80, before_id=None, after_id=None, around_id=None):
         from .pagination import page
         with database_connection(self.database) as conn:
-            result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id, around_id)
+            result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id, around_id, viewer=user_a)
             result['read_through_id'] = conn.execute('SELECT COALESCE(MAX(id),0) FROM messages WHERE from_user=? AND to_user=? AND is_read=1', (user_a,user_b)).fetchone()[0]
             return result
 
@@ -47,7 +47,7 @@ class MessageRepository:
             # Клиенту по-прежнему отдаём в хронологическом порядке (старые -> новые).
             rows = cur.fetchall()
             from .message_content import enrich
-            return enrich(conn, [dict(r) for r in reversed(rows)])
+            return enrich(conn, [dict(r) for r in reversed(rows)], user_a)
 
     def mark_chat_read(self, current_user: str, friend: str, through_id=None) -> None:
         with database_connection(self.database) as conn:

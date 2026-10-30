@@ -221,6 +221,16 @@ class RequestRouter:
             ok = self.friends.remove_friend(current_user, friend_login)
             return {"status": "ok"} if ok else {"status": "error", "message": "Друг не найден или уже удалён"}
 
+        if action == 'set_message_reaction':
+            try:
+                from ..services.message_reactions import set_reaction
+            except ImportError:
+                from services.message_reactions import set_reaction
+            try:
+                return set_reaction(self, current_user, data)
+            except ValueError as error:
+                return dict(status='error', message=str(error))
+
         if action in ('edit_message', 'delete_message'):
             try:
                 from ..services.message_actions import mutate
@@ -345,7 +355,7 @@ class RequestRouter:
                 return dict(status="error",message="Текстовый канал не найден")
             if data.get('paged'):
                 try:
-                    return dict(status='ok', updated_messages=self._message_refresh(current_user, data), **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id, around_id=data.get('around_id')))
+                    return dict(status='ok', updated_messages=self._message_refresh(current_user, data), **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id, around_id=data.get('around_id'), viewer=current_user))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
             msgs = self.channels.get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200),room_id=room_id)

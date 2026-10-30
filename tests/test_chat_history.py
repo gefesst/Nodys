@@ -218,7 +218,8 @@ class ConversationTests(unittest.TestCase):
         response['messages'][0]['attachment'] = dict(id='b'*32, name='image.png', size=200, sha256='c'*64)
         self.requests[-1][1](response)
         self.assertEqual(self.chat.model.rows[0].attachment['name'], 'image.png')
-        self.assertEqual(self.chat.model.rows[0].text, 'image.png')
+        self.assertEqual(self.chat.model.rows[0].text, '')
+        self.assertEqual(self.chat.model.rows[0].attachment['name'], 'image.png')
         self.chat.can_send = False
         self.chat.update_controls()
         self.assertFalse(self.chat.attach_button.isEnabled())

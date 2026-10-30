@@ -1,7 +1,7 @@
 """Keyboard-accessible context menu contained by the application window."""
 from shiboken6 import isValid
 from PySide6.QtCore import Qt, QEvent
-from PySide6.QtWidgets import QApplication, QFrame, QVBoxLayout, QPushButton, QWidget, QStyle, QStyleOptionButton, QStylePainter
+from PySide6.QtWidgets import QApplication, QFrame, QVBoxLayout, QPushButton, QWidget, QStyle, QStyleOptionButton, QStylePainter, QHBoxLayout
 
 
 class MenuButton(QPushButton):
@@ -43,9 +43,29 @@ class ActionMenu(QFrame):
         self.box.addWidget(button);self.buttons.append(button)
         return button
 
+    def addChoices(self, values, selected, callback):
+        row = QWidget(self)
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 8)
+        layout.setSpacing(2)
+        for value in values:
+            button = MenuButton(value, row)
+            button.setAccessibleName('Реакция ' + value)
+            button.setCheckable(True)
+            button.setChecked(value in selected)
+            button.setFixedSize(33, 34)
+            button.setStyleSheet('QPushButton {border:1px solid transparent;border-radius:8px;background:transparent;padding:0;color:#EDF2FA;font-size:18px;} QPushButton:hover {background:#3A4D67;} QPushButton:checked {background:#344F70;border-color:#87ABFF;}')
+            def activate(checked=False, value=value):
+                self.close()
+                callback(value)
+            button.clicked.connect(activate)
+            layout.addWidget(button)
+            self.buttons.append(button)
+        self.box.addWidget(row)
+
     def popup(self, global_point):
         self.previous_focus=QApplication.focusWidget()
-        self.setFixedHeight(18+40*len(self.buttons))
+        self.setFixedHeight(self.box.sizeHint().height())
         self.preferred_position=self.parentWidget().mapFromGlobal(global_point)
         self.right_gap=self.parentWidget().width()-self.preferred_position.x()-self.width()
         self.move(self.preferred_position)

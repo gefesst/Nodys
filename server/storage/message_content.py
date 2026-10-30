@@ -17,9 +17,21 @@ def validate_reply(c, row, identity):
             raise ValueError('Исходное сообщение удалено или недоступно в этой переписке')
 
 
-def enrich(c, rows):
+def enrich(c, rows, viewer=None):
     enrich_attachments(c, rows)
+    reactions = {}
+    for kind in ('messages', 'channel_messages'):
+        ids = [row['id'] for row in rows if ('channel_id' in row) == (kind == 'channel_messages') and not row.get('deleted_at')]
+        if not ids:
+            continue
+        slots = ','.join('?' for _ in ids)
+        for r in c.execute(
+                f'SELECT message_id,emoji,COUNT(*),MAX(login=?) FROM message_reactions WHERE kind=? AND message_id IN ({slots}) GROUP BY message_id,emoji ORDER BY emoji',  # nosec B608: placeholders only.
+                (viewer or '', kind, *ids)):
+            reactions.setdefault((kind, r[0]), []).append(dict(emoji=r[1], count=r[2], mine=bool(r[3])))
     for row in rows:
+        kind = 'channel_messages' if 'channel_id' in row else 'messages'
+        row['reactions'] = reactions.get((kind, row['id']), [])
         identity = row.get('reply_to_id')
         if not identity or row.get('deleted_at'):
             continue

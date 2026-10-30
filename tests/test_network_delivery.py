@@ -23,6 +23,16 @@ class NetworkDeliveryTests(unittest.TestCase):
         while not predicate() and time.monotonic()<deadline:
             self.app.processEvents();time.sleep(.001)
         self.assertTrue(predicate())
+    def test_reaction_request_includes_session_and_retry_identity(self):
+        from types import SimpleNamespace
+        request = NetworkThread('localhost', 1, dict(action='set_message_reaction', message_id=1, emoji='👍', active=True, to_user='bob'))
+        with patch('network.UserContext', return_value=SimpleNamespace(login='alice', session_token='test-token')):
+            payload = request._prepare_payload()
+        self.assertEqual(payload['token'], 'test-token')
+        self.assertEqual(payload['login'], 'alice')
+        self.assertTrue(payload['request_id'])
+        self.assertEqual(payload['request_id'], request.data['request_id'])
+
     def test_worker_completion_is_retained_and_delivered_on_gui(self):
         callbacks=[];workers=[]
         request=NetworkThread('localhost',1,{'action':'status'})

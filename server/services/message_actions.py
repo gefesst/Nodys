@@ -44,7 +44,7 @@ def refresh(router, user, data):
         rows = conn.execute(
             f'SELECT *,timestamp AS created_at FROM {table} WHERE ({where}) AND id IN ({slots})',  # nosec B608: scope returns fixed SQL; ids bound.
             (*params, *seen)).fetchall()
-        return enrich(conn, [dict(row) for row in rows if row['revision'] > seen[row['id']]])
+        return enrich(conn, [dict(row) for row in rows if row['revision'] > seen[row['id']]], user)
 
 
 def mutate(router, user, data):
@@ -80,6 +80,7 @@ def mutate(router, user, data):
             conn.execute(
                 f"UPDATE {table} SET text='',attachment_id=NULL,deleted_at=strftime('%Y-%m-%d %H:%M:%f','now'),revision=revision+1 WHERE id=?",  # nosec B608: fixed table.
                 (identity,))
+            conn.execute('DELETE FROM message_reactions WHERE kind=? AND message_id=?', (table, identity))
             aid = row['attachment_id']
             if aid and not conn.execute('SELECT 1 FROM messages WHERE attachment_id=? UNION ALL SELECT 1 FROM channel_messages WHERE attachment_id=? LIMIT 1', (aid, aid)).fetchone():
                 conn.execute('DELETE FROM attachment_chunks WHERE attachment_id=?', (aid,))
@@ -89,4 +90,4 @@ def mutate(router, user, data):
         updated = conn.execute(
             f'SELECT *,timestamp AS created_at FROM {table} WHERE id=?',  # nosec B608: fixed table.
             (identity,)).fetchone()
-        return dict(status='ok', message=enrich(conn, [dict(updated)])[0])
+        return dict(status='ok', message=enrich(conn, [dict(updated)], user)[0])

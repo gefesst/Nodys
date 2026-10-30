@@ -223,9 +223,13 @@ def _message_replies(c):
         c.execute(f'CREATE INDEX idx_{table}_reply_to ON {table}(reply_to_id)')
 
 
+def _message_reactions(c):
+    c.execute("CREATE TABLE message_reactions(kind TEXT NOT NULL, message_id INTEGER NOT NULL, login TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY(kind,message_id,login,emoji))")
+
+
 MIGRATIONS = {
     'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup), ('channel_rooms', _channel_rooms), ('steam_activity', _steam_activity)],
-    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages), ('attachments', _attachments), ('message_actions', _message_actions), ('message_replies', _message_replies)],
+    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages), ('attachments', _attachments), ('message_actions', _message_actions), ('message_replies', _message_replies), ('message_reactions', _message_reactions)],
 }
 
 

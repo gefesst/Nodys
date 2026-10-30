@@ -550,10 +550,10 @@ class MessageDelegate(QStyledItemDelegate):
         self.fade_timer.start()
 
     def geometry(self, m, width):
-        maxw = max(180, min(660, width - 114))
+        maxw = max(150, min(660, width - 90))
         from shared.attachments import is_image_attachment
         picture = is_image_attachment(m.attachment)
-        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited, tuple(sorted(m.reply.items())) if m.reply else None)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited, m.author == self.me, tuple(sorted(m.reply.items())) if m.reply else None, m.reactions)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -593,13 +593,23 @@ class MessageDelegate(QStyledItemDelegate):
         bw = min(maxw, max(210 if m.edited else 125, natural + 32))
         if m.reply:
             bw = max(bw, min(maxw, 320))
-        bh = y + 40 + (58 if m.reply else 0)
+        inline_time = layout.lineCount() == 1 and not (m.reply or m.edited or picture or m.reactions) and natural + 110 <= maxw
+        if inline_time:
+            bw = max(bw, natural + 110)
+        bh = y + (20 if inline_time else 40) + (58 if m.reply else 0)
         if picture:
             bw = max(bw, min(maxw, 380))
             bh += 220
-        head = (27 if m.divider else 41) if m.group else 0
+        head = (27 if m.divider else 32) if m.group and m.author != self.me else 0
         head += 52 if m.divider else 0
         head += 40 if m.unread_count else 0
+        # Leave room for the antialiased stroke even in consecutive bubbles.
+        head += 2
+        if m.reactions:
+            bw = max(bw, min(maxw, 220))
+        columns = max(1, int((bw - 24) // 66))
+        reaction_height = ((len(m.reactions) + columns - 1) // columns) * 34 if m.reactions else 0
+        bh += reaction_height
         height = head + bh + 8
         value = (layout, bw, bh, head, height)
         self.cache[key] = value
@@ -607,18 +617,36 @@ class MessageDelegate(QStyledItemDelegate):
             self.cache.popitem(last=False)
         return value
 
+    def bubble_x(self, message, width):
+        bw = self.geometry(message, width)[1]
+        return max(12, width - bw - 18) if message.author == self.me else 52
+
+    def bubble_rect(self, message, width):
+        _, bw, bh, head, _ = self.geometry(message, width)
+        return QRectF(self.bubble_x(message, width), head, bw, bh)
+
+    def reaction_rects(self, message, width):
+        _, bw, bh, head, _ = self.geometry(message, width)
+        columns = max(1, int((bw - 24) // 66))
+        height = ((len(message.reactions)+columns-1)//columns)*34
+        return [(reaction, QRectF(self.bubble_x(message, width) + 12 + (i % columns)*66, head + bh - height - 22 + (i//columns)*34, 60, 28))
+                for i, reaction in enumerate(message.reactions)]
+
+    def reaction_at(self, message, width, point):
+        return next((r[0] for r, rect in self.reaction_rects(message, width) if rect.contains(point)), None)
+
     def reply_at(self, message, width, point):
         if not message.reply or message.reply.get('deleted'):
             return None
         _, bw, _, head, _ = self.geometry(message, width)
-        if QRectF(70, head + 8, bw - 24, 50).contains(point):
+        if QRectF(self.bubble_x(message, width) + 12, head + 8, bw - 24, 50).contains(point):
             return message.reply['id']
         return None
 
     def link_at(self, message, width, point):
         from .message_links import link_spans
         layout, _, _, head, _ = self.geometry(message, width)
-        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(74, head + 11 + (58 if message.reply else 0))
+        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(self.bubble_x(message, width) + 16, head + 11 + (58 if message.reply else 0) + (220 if __import__('shared.attachments', fromlist=['is_image_attachment']).is_image_attachment(message.attachment) else 0))
         for number in range(layout.lineCount()):
             line = layout.lineAt(number)
             if line.naturalTextRect().contains(position):
@@ -667,7 +695,7 @@ class MessageDelegate(QStyledItemDelegate):
         p.setClipRect(o.rect)
         if index.row() == self.fade_row:
             p.setOpacity(min(1, (time.perf_counter() - self.fade_start) / 0.16))
-        x = o.rect.x() + 58
+        x = o.rect.x() + self.bubble_x(m, self.view.viewport().width())
         y = o.rect.y() + head
         unread_offset = 40 if m.unread_count else 0
         date_offset = unread_offset + (52 if m.divider else (14 if m.group else 0))
@@ -687,12 +715,11 @@ class MessageDelegate(QStyledItemDelegate):
             center = (self.view.viewport().width() - 28) / 2
             p.setPen(QPen(QColor(EDGE), 1))
             line_y = o.rect.y() + unread_offset + 22
-            gap=max(165,label_width/2+16)
-            length=min(135,max(0,center-gap-10))
-            p.drawLine(int(center-gap-length),line_y,int(center-gap),line_y)
-            p.drawLine(int(center+gap),line_y,int(center+gap+length),line_y)
+            p.setBrush(QColor('#1B2937'))
+            p.setPen(QPen(QColor(EDGE), 1))
+            p.drawRoundedRect(QRectF(center-label_width/2-12, line_y-15, label_width+24, 26), 13, 13)
             draw_text(p, center-label_width/2, o.rect.y()+unread_offset+26, m.date, 11, MUT)
-        if m.group:
+        if m.group and not own:
             display_name = self.own_name() if own else m.name
             initials = self._avatar_helper._initials(display_name)
             avatar(
@@ -722,11 +749,11 @@ class MessageDelegate(QStyledItemDelegate):
             draw_text(
                 p, x, o.rect.y() + 14 + date_offset, name, 13, ACC if own else FG, True
             )
-        p.setBrush(QColor("#273951" if own else "#222E3D"))
+        p.setBrush(QColor("#304C70" if own else "#222E3D"))
         p.setPen(QPen(QColor("#3B506C" if own else "#334254"), 1))
         if m.id == self.highlight_id:
             p.setPen(QPen(QColor(ACC), 2))
-        p.drawPath(self.shape(x, y, bw, bh, m.group))
+        p.drawRoundedRect(QRectF(x, y, bw, bh), 14, 14)
         if m.reply:
             box = QRectF(x + 12, y + 8, bw - 24, 50)
             p.setPen(Qt.NoPen)
@@ -744,11 +771,11 @@ class MessageDelegate(QStyledItemDelegate):
         p.setPen(QColor(FG))
         layout.draw(
             p,
-            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0)),
+            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0) + (220 if __import__('shared.attachments', fromlist=['is_image_attachment']).is_image_attachment(m.attachment) else 0)),
         )
         from shared.attachments import is_image_attachment
         if is_image_attachment(m.attachment):
-            box = QRectF(x + 12, y + bh - 246, bw - 24, 212)
+            box = QRectF(x + 12, y + 10 + (58 if m.reply else 0), bw - 24, 212)
             clip = QPainterPath()
             clip.addRoundedRect(box, 9, 9)
             p.save()
@@ -779,6 +806,15 @@ class MessageDelegate(QStyledItemDelegate):
                 QRectF(x + bw - 30, y + bh - 24, 16, 16),
                 ACC if m.read else MUT,
             )
+        for reaction, box in self.reaction_rects(m, self.view.viewport().width()):
+            emoji, count, mine = reaction
+            box.translate(o.rect.topLeft())
+            p.setPen(QPen(QColor(ACC if mine else '#35495F'), 1))
+            p.setBrush(QColor('#304967' if mine else '#203144'))
+            p.drawRoundedRect(box, 10, 10)
+            p.setPen(QColor(FG))
+            p.setFont(font(12, mine))
+            p.drawText(box, Qt.AlignCenter, f'{emoji} {count if count < 1000 else "999+"}')
         p.restore()
         self.paint_count += 1
         if len(self.paint_ns) < 50000:

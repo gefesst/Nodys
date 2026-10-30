@@ -334,13 +334,13 @@ class ChannelService:
             cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id,attachment_id,reply_to_id) VALUES(?,?,?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id),attachment_id,reply_to_id))
             return cursor.lastrowid
 
-    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0, around_id=None):
+    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0, around_id=None, viewer=None):
         try:
             from ..storage.pagination import page
         except ImportError:
             from storage.pagination import page
         with database_connection(self.chat_database) as conn:
-            return page(conn, 'channel_messages', 'channel_id=? AND room_id=?', (int(channel_id),int(room_id)), limit, before_id, after_id, around_id)
+            return page(conn, 'channel_messages', 'channel_id=? AND room_id=?', (int(channel_id),int(room_id)), limit, before_id, after_id, around_id, viewer=viewer)
 
     def _normalize_member_role(self, role: str) -> str:
         r = (role or "").strip().lower()

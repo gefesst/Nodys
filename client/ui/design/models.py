@@ -21,6 +21,7 @@ class Message:
     link_text: str | None = None
     edited: bool = False
     reply: object = None
+    reactions: tuple = ()
 
 
 class MessageModel(QAbstractListModel):
@@ -37,7 +38,7 @@ class MessageModel(QAbstractListModel):
             return None
         m = self.rows[index.row()]
         if role == Qt.DisplayRole:
-            return m.text
+            return m.text or (m.attachment or {}).get('name', '')
         if role == Qt.UserRole:
             return m
         if role == Qt.ToolTipRole:

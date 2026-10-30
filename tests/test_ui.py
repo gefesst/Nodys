@@ -92,10 +92,11 @@ class UiTests(unittest.TestCase):
         message = Message(2, 'alice', 'Alice', 'https://example.com', reply=quote)
         layout, width, height, head, total = c.delegate.geometry(message, 500)
         self.assertGreaterEqual(height, 98)
-        self.assertEqual(c.delegate.reply_at(message, 500, QPointF(80, head+20)), 1)
-        self.assertIsNone(c.delegate.link_at(message, 500, QPointF(80, head+20)))
-        self.assertIsNone(c.delegate.reply_at(message, 500, QPointF(80, head+75)))
-        self.assertIsNotNone(c.delegate.link_at(message, 500, QPointF(80, head+75)))
+        x = c.delegate.bubble_x(message, 500) + 22
+        self.assertEqual(c.delegate.reply_at(message, 500, QPointF(x, head+20)), 1)
+        self.assertIsNone(c.delegate.link_at(message, 500, QPointF(x, head+20)))
+        self.assertIsNone(c.delegate.reply_at(message, 500, QPointF(x, head+75)))
+        self.assertIsNotNone(c.delegate.link_at(message, 500, QPointF(x, head+75)))
 
     def test_message_edit_preserves_draft_and_ignores_stale_session_reply(self):
         c = self.page.conversation
@@ -176,6 +177,43 @@ class UiTests(unittest.TestCase):
         c.replies.go_back()
         self.assertEqual([r.id for r in c.model.rows], [2, 3])
         self.assertEqual(c.editor.toPlainText(), '')
+
+    def test_reaction_clicks_are_scoped_and_do_not_replace_drafts(self):
+        c = self.page.conversation
+        calls = []
+        c.request = lambda data, cb: calls.append((data, cb))
+        c.select((1, 0))
+        row = dict(id=1, from_user='alice', text='hello', revision=0, created_at='2026-10-30 12:00:00')
+        c.apply([row], 'latest', {})
+        c.editor.setPlainText('draft')
+        c.react(1, '👍')
+        request, callback = calls[-1]
+        self.assertTrue(request['active'])
+        before = len(calls)
+        c.react(1, '👍')
+        self.assertEqual(len(calls), before)
+        callback(dict(status='ok', message=dict(row, revision=1, reactions=[dict(emoji='👍', count=1, mine=True)])))
+        self.assertEqual(c.editor.toPlainText(), 'draft')
+        m = c.model.rows[0]
+        rect = c.delegate.reaction_rects(m, 700)[0][1]
+        self.assertEqual(c.delegate.reaction_at(m, 700, rect.center()), '👍')
+        self.assertIsNone(c.delegate.reply_at(m, 700, rect.center()))
+        c.react(1, '👍')
+        self.assertFalse(calls[-1][0]['active'])
+        callback = calls[-1][1]
+        c.select((2, 0))
+        callback(dict(status='ok', message=dict(row, revision=2, reactions=[])))
+        self.assertEqual(c.rows, [])
+
+    def test_bubble_border_has_padding_and_outgoing_alignment(self):
+        from ui.design.models import Message
+        c = self.page.conversation
+        own = Message(1, c.owner.ctx.login, 'Me', 'Short', group=False)
+        other = Message(2, 'other', 'Other', 'Short', group=False)
+        for width in (350, 600, 1100):
+            self.assertGreaterEqual(c.delegate.geometry(own, width)[3], 2)
+            self.assertGreater(c.delegate.bubble_x(own, width), c.delegate.bubble_x(other, width))
+            self.assertLessEqual(c.delegate.bubble_x(own, width)+c.delegate.geometry(own, width)[1], width-12)
 
     def test_user_controlled_labels_are_literal_text(self):
         from PySide6.QtCore import Qt

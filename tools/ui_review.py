@@ -532,7 +532,7 @@ def main():
             c.scope.invalidate()
             from unittest.mock import patch
             with patch.object(c,"load"):
-                c.rows=[]
+                c.rows=[];c.model.sync([])
                 c.loading=False;c.history_error=False;c.update_controls()
                 self.shot('09b-chat-empty')
                 assert c.history_stack.currentWidget() is c.empty_state
@@ -540,7 +540,7 @@ def main():
                 assert c.history_stack.currentWidget() is not c.loading_state
                 c.loading=False;c.history_error=True;c.update_controls();self.shot('09d-chat-error')
                 assert c.history_stack.currentWidget() is c.error_state
-                c.rows=saved_rows;c.history_error=False;c.update_controls()
+                c.history_error=False;c.apply(saved_rows, 'latest', {})
                 self.visual_fixtures.extend(['09b-chat-empty: empty local history','09c-chat-loading: pending history','09d-chat-error: failed initial history'])
 
             c = m.chats_page.conversation

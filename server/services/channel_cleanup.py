@@ -18,6 +18,7 @@ def drain(users_db, chat_db):
                 chat.execute('DELETE FROM attachment_chunks WHERE attachment_id IN '
                              '(SELECT id FROM attachments WHERE channel_id=?)', (channel_id,))
                 chat.execute('DELETE FROM attachments WHERE channel_id=?', (channel_id,))
+                chat.execute("DELETE FROM message_reactions WHERE kind='channel_messages' AND message_id IN (SELECT id FROM channel_messages WHERE channel_id=?)", (channel_id,))
                 chat.execute('DELETE FROM channel_messages WHERE channel_id=?', (channel_id,))
             with connect(users_db, timeout=1) as users:
                 users.execute('DELETE FROM channel_cleanup WHERE channel_id=?', (channel_id,))

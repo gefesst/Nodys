@@ -156,7 +156,6 @@ class Conversation(QWidget):
         attachment_layout.addWidget(self.remove_attachment_button)
         root.addWidget(self.attachment_strip)
         self.attachment_strip.hide()
-        self.view.clicked.connect(self.open_attachment)
         compose_frame = QFrame()
         self.compose_frame = compose_frame
         compose_frame.setObjectName("ComposerFrame")
@@ -402,6 +401,11 @@ class Conversation(QWidget):
         self.request(data, done)
 
     def eventFilter(self, watched, event):
+        if watched is getattr(self, 'editor', None) and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Up and event.modifiers() == Qt.NoModifier and not self.editor.toPlainText() and not self.message_actions.edit and self.identity not in self.replies.drafts:
+            row = next((r for r in reversed(self.rows) if r['from_user'] == self.owner.ctx.login and not r.get('deleted_at')), None)
+            if row and self.can_send:
+                self.message_actions.begin(row)
+                return True
         if watched is getattr(self, "editor", None) and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape and self.message_actions.edit:
             self.message_actions.cancel()
             return True
@@ -430,6 +434,11 @@ class Conversation(QWidget):
                 index = self.view.indexAt(point)
                 if index.isValid():
                     from PySide6.QtCore import QPointF
+                    emoji = self.delegate.reaction_at(index.data(Qt.UserRole), self.view.viewport().width(), QPointF(point-self.view.visualRect(index).topLeft()))
+                    if emoji:
+                        self.react(index.data(Qt.UserRole).id, emoji)
+                        event.accept()
+                        return True
                     quoted = self.delegate.reply_at(index.data(Qt.UserRole), self.view.viewport().width(), QPointF(point-self.view.visualRect(index).topLeft()))
                     if quoted:
                         self.replies.jump(quoted)
@@ -442,6 +451,8 @@ class Conversation(QWidget):
                             self.send_error.setText('Не удалось открыть браузер')
                         event.accept()
                         return True
+                    if self.delegate.bubble_rect(index.data(Qt.UserRole), self.view.viewport().width()).contains(QPointF(point-self.view.visualRect(index).topLeft())):
+                        self.open_attachment(index)
         if watched is self.view.viewport() and event.type()==QEvent.Resize:
             self.new_messages_button.move(max(0,watched.width()-260),max(0,watched.height()-60))
         return super().eventFilter(watched,event)
@@ -583,6 +594,7 @@ class Conversation(QWidget):
                     row["text"],
                     bool(row.get("edited_at")) and not row.get("deleted_at"),
                     row.get("reply") if not row.get("deleted_at") else None,
+                    tuple((r["emoji"], r["count"], r["mine"]) for r in row.get("reactions", [])),
                 )
             )
             previous_author, previous_date = author, date
@@ -597,7 +609,7 @@ class Conversation(QWidget):
         self.view.doItemsLayout()
         self.view.reflow.stop()
         if direction == "latest" or (
-            direction in ("poll", "newer") and near_bottom and self.at_latest
+            direction in ("poll", "newer", "refresh") and near_bottom and self.at_latest
         ):
             self.view.scrollToBottom()
         elif anchor:
@@ -628,7 +640,7 @@ class Conversation(QWidget):
             return row['text']
         from shared.attachments import is_image_attachment
         if is_image_attachment(attachment):
-            return row['text'] or attachment['name']
+            return row['text']
         label = f"📎 {attachment['name']} · {size_label(attachment['size'])}\n↓ Скачать файл"
         return (row['text'] + '\n\n' if row['text'] else '') + label
 
@@ -939,6 +951,35 @@ class Conversation(QWidget):
 
         self.request(data, done)
 
+    def react(self, identity, emoji):
+        row = next((r for r in self.rows if r['id'] == identity), None)
+        if not row or row.get('deleted_at') or not self.can_send:
+            return
+        pending = getattr(self, '_reaction_pending', set())
+        self._reaction_pending = pending
+        key = (self.epoch, self.identity, identity, emoji)
+        if key in pending:
+            return
+        pending.add(key)
+        epoch, conversation = self.epoch, self.identity
+        active = not any(r['emoji'] == emoji and r['mine'] for r in row.get('reactions', []))
+        data = self.payload('set_message_reaction')
+        data.update(message_id=identity, emoji=emoji, active=active, request_id=str(uuid.uuid4()))
+        def done(result):
+            pending.discard(key)
+            if epoch != self.epoch:
+                return
+            self.history_cache.pop(conversation, None)
+            self.prefetched.pop(conversation, None)
+            if conversation != self.identity:
+                return
+            if result.get('status') == 'ok':
+                self.refresh_rows([result['message']])
+                self.send_error.clear()
+            else:
+                self.send_error.setText(result.get('message', 'Не удалось изменить реакцию'))
+        self.request(data, done)
+
     def context_menu(self, pos):
         index = self.view.indexAt(pos)
         if not index.isValid():
@@ -953,6 +994,10 @@ class Conversation(QWidget):
         text = row["text"]
         from .action_menu import ActionMenu
         menu = ActionMenu(self)
+        if self.can_send:
+            from shared.reactions import REACTIONS
+            selected = {r['emoji'] for r in row.get('reactions', []) if r['mine']}
+            menu.addChoices(REACTIONS, selected, lambda emoji: self.react(row['id'], emoji) if current() else None)
         if getattr(index.data(Qt.UserRole), 'attachment', None):
             menu.addAction('Скачать файл', lambda: self.download_attachment(index))
         menu.addAction(

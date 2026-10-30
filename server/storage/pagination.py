@@ -3,7 +3,7 @@
 import sqlite3
 
 
-def page(connection, table, where, params, limit=80, before_id=None, after_id=None, around_id=None):
+def page(connection, table, where, params, limit=80, before_id=None, after_id=None, around_id=None, viewer=None):
     if table not in ("messages", "channel_messages"):
         raise ValueError("Unknown message table")
     allowed_where = {
@@ -32,13 +32,13 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
         # Two bounded keyset pages, including the anchor exactly once.
         left_count = (size - 1) // 2
         right_count = size - 1 - left_count
-        left = page(connection, table, where, params, max(1, left_count), before_id=around_id)
-        right = page(connection, table, where, params, max(1, right_count), after_id=around_id)
+        left = page(connection, table, where, params, max(1, left_count), before_id=around_id, viewer=viewer)
+        right = page(connection, table, where, params, max(1, right_count), after_id=around_id, viewer=viewer)
         target = connection.execute(
             f'SELECT *,timestamp AS created_at FROM {table} WHERE ({where}) AND id=?',  # nosec B608: allowlisted scope.
             (*params, around_id)).fetchone()
         from .message_content import enrich
-        middle = enrich(connection, [dict(target)])
+        middle = enrich(connection, [dict(target)], viewer)
         return dict(messages=(left['messages'] if left_count else []) + middle + (right['messages'] if right_count else []),
                     has_older=left['has_older'] if left_count else bool(left['messages']),
                     has_newer=right['has_newer'] if right_count else bool(right['messages']))
@@ -66,5 +66,5 @@ def page(connection, table, where, params, limit=80, before_id=None, after_id=No
             is not None
         )
     from .message_content import enrich
-    enrich(connection, rows)
+    enrich(connection, rows, viewer)
     return dict(messages=rows, has_older=older, has_newer=newer)
