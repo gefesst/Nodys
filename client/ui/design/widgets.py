@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QColor,
+    QLinearGradient,
     QPainter,
     QPainterPath,
     QFont,
@@ -161,6 +162,21 @@ class ElidedLabel(QLabel):
             self._fit()
 
 
+def paint_selection_indicator(painter, rect):
+    """Shared inset selection light, with no rectangular halo behind it."""
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    x, top, height = rect.left() + 2, rect.top() + 12, rect.height() - 24
+    light = QLinearGradient(0, top, 0, top + height)
+    light.setColorAt(0, QColor("#8993ED"))
+    light.setColorAt(0.5, QColor("#CDD1FF"))
+    light.setColorAt(1, QColor("#8993ED"))
+    painter.setBrush(light)
+    painter.drawRoundedRect(QRectF(x, top, 3, height), 1.5, 1.5)
+    painter.restore()
+
+
 class MessageList(QListView):
     """Preserve a visible row after width-dependent message reflow."""
 
@@ -174,14 +190,33 @@ class MessageList(QListView):
         self.verticalScrollBar().actionTriggered.connect(lambda _:self.reflow.stop())
         self.verticalScrollBar().sliderPressed.connect(self.reflow.stop)
         self.verticalScrollBar().setSingleStep(24)
+        self.scroll_animation = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
+        self.scroll_animation.setDuration(140)
+        self.scroll_animation.setEasingCurve(QEasingCurve.OutCubic)
+        self.verticalScrollBar().sliderPressed.connect(self.scroll_animation.stop)
+        self.verticalScrollBar().actionTriggered.connect(self.scroll_animation.stop)
 
     def wheelEvent(self,event):
         self.reflow.stop()
-        super().wheelEvent(event)
+        bar = self.verticalScrollBar()
+        if not event.pixelDelta().isNull() or reduced() or not event.angleDelta().y():
+            self.scroll_animation.stop()
+            super().wheelEvent(event)
+            return
+        target = (self.scroll_animation.endValue()
+                  if self.scroll_animation.state() == QPropertyAnimation.Running else bar.value())
+        target = max(bar.minimum(), min(bar.maximum(),
+                     int(target - event.angleDelta().y() / 120 * bar.singleStep() * QApplication.wheelScrollLines())))
+        self.scroll_animation.stop()
+        self.scroll_animation.setStartValue(bar.value())
+        self.scroll_animation.setEndValue(target)
+        self.scroll_animation.start()
+        event.accept()
 
     def resizeEvent(self, event):
         from PySide6.QtCore import QPoint
 
+        self.scroll_animation.stop()
         index = self.indexAt(QPoint(80, 12))
         if index.isValid():
             self.anchor = index.row()
@@ -456,8 +491,7 @@ class DialogDelegate(QStyledItemDelegate):
             p.setBrush(QColor("#404249" if selected else "#35373C"))
             p.drawRoundedRect(r, 11, 11)
         if selected:
-            p.setBrush(QColor(ACC))
-            p.drawRoundedRect(QRectF(r.left(), r.center().y() - 19, 3, 38), 1.5, 1.5)
+            paint_selection_indicator(p, QRectF(r))
         n = d.get("nickname", d["login"])
         ini = self._avatar_helper._initials(n)
         avatar(p, r.left() + 14, r.center().y() - 19, ini, 38, d.get("online", False))

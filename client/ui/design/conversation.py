@@ -484,6 +484,7 @@ class Conversation(QWidget):
     def restore_position(self, anchor, bottom=False, fallback=None):
         # A delayed resize anchor belongs to the previous layout/conversation.
         self.view.reflow.stop()
+        self.view.scroll_animation.stop()
         bar = self.view.verticalScrollBar()
         if bottom:
             self.view.scrollToBottom()

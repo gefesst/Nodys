@@ -153,7 +153,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         heading=QLabel('Друзья');heading.setObjectName('PageTitle');heading.setFixedHeight(31);heading.setContentsMargins(8,0,0,0);side.addWidget(heading);side.addSpacing(17)
         self.view_buttons={}
         for mode,text in [('all','Все друзья'),('online','В сети'),('requests','Заявки'),('add','Добавить друга')]:
-            button=QPushButton(text);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.toggled.connect(lambda checked,m=mode:self.set_view(m) if checked else None);side.addWidget(button);self.view_buttons[mode]=button
+            button=QPushButton(text);button.setFocusPolicy(Qt.StrongFocus);button.setObjectName("SectionTab");button.setCheckable(True);button.setChecked(mode=='all');button.toggled.connect(lambda checked,m=mode:self.set_view(m) if checked else None);side.addWidget(button);self.view_buttons[mode]=button
         side.addStretch();outer.addWidget(sidebar)
         work=QWidget();outer.addWidget(work,1)
         root = QVBoxLayout(work)
@@ -397,6 +397,10 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             with QSignalBlocker(button):
                 button.setChecked(key==mode)
         self._update_heading()
+        # Move focus before hiding the add form, otherwise Qt walks to the
+        # first focusable widget in the entire window (the Friends rail tab).
+        if mode != 'add':
+            self.view_buttons[mode].setFocus(Qt.OtherFocusReason)
         self.add_panel.setVisible(mode=='add');self.body_card.setVisible(mode!='add')
         self.filter_input.setVisible(mode!='add')
         self._render_if_needed(force=True)

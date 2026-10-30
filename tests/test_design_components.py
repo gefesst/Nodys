@@ -295,6 +295,52 @@ class DesignGeometryTests(unittest.TestCase):
         stack.setCurrentIndex(1);self.app.processEvents()
         self.assertFalse(stack.findChildren(PageOverlay))
 
+    def test_friends_add_exit_keeps_focus_on_local_tab(self):
+        from unittest.mock import patch
+        from ui.friends_page import FriendsPage
+        from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtTest import QTest
+        with patch.object(FriendsPage, "start_request"):
+            host=QWidget(); layout=QHBoxLayout(host)
+            rail=QPushButton("Friends"); layout.addWidget(rail)
+            page=FriendsPage();layout.addWidget(page)
+            host.show();host.activateWindow();self.app.processEvents()
+            self.addCleanup(host.close)
+            for mode in ('all','online','requests'):
+                page.set_view('add');self.app.processEvents()
+                self.assertIs(self.app.focusWidget(),page.login_input)
+                QTest.mouseClick(page.view_buttons[mode],Qt.LeftButton)
+                self.app.processEvents()
+                self.assertIs(self.app.focusWidget(),page.view_buttons[mode])
+
+    def test_message_wheel_is_animated_and_thumb_drags(self):
+        from ui.design.widgets import MessageList
+        from style_manager import apply_widget_styles
+        from PySide6.QtCore import Qt, QPoint, QPointF, QStringListModel
+        from PySide6.QtGui import QWheelEvent
+        from PySide6.QtWidgets import QAbstractItemView, QStyleOptionSlider, QStyle
+        from PySide6.QtTest import QTest
+        view=MessageList();apply_widget_styles(view)
+        model=QStringListModel([str(i) for i in range(100)],view);view.setModel(model)
+        view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
+        view.resize(300,300);view.show();self.addCleanup(view.close)
+        self.app.processEvents();view.reflow.stop()
+        bar=view.verticalScrollBar();bar.setValue(100)
+        event=QWheelEvent(QPointF(40,40),QPointF(40,40),QPoint(),QPoint(0,-120),Qt.NoButton,Qt.NoModifier,Qt.NoScrollPhase,False)
+        view.wheelEvent(event)
+        self.assertEqual(bar.value(),100)
+        QTest.qWait(60);middle=bar.value();self.assertGreater(middle,100)
+        QTest.qWait(120);self.assertGreater(bar.value(),middle)
+        option=QStyleOptionSlider();bar.initStyleOption(option)
+        rect=bar.style().subControlRect(QStyle.CC_ScrollBar,option,QStyle.SC_ScrollBarSlider,bar)
+        before=bar.value();point=rect.center()
+        QTest.mousePress(bar,Qt.LeftButton,Qt.NoModifier,point)
+        self.assertTrue(bar.isSliderDown())
+        QTest.mouseMove(bar,point+QPoint(0,40))
+        QTest.mouseRelease(bar,Qt.LeftButton,Qt.NoModifier,point+QPoint(0,40))
+        self.assertGreater(bar.value(),before)
+
     def test_manual_scroll_cancels_delayed_resize_anchor(self):
         from ui.design.widgets import MessageList
         from PySide6.QtWidgets import QAbstractSlider
@@ -412,12 +458,12 @@ class DesignGeometryTests(unittest.TestCase):
         for direction in (Qt.Vertical,Qt.Horizontal):
             bar=QScrollBar(direction);bar.setStyleSheet(style)
             bar.setRange(0,100);bar.setPageStep(20);bar.setValue(40)
-            bar.resize(18,180) if direction==Qt.Vertical else bar.resize(180,18)
+            bar.resize(23,180) if direction==Qt.Vertical else bar.resize(180,18)
             bar.show();self.app.processEvents()
             option=QStyleOptionSlider();bar.initStyleOption(option)
             rect=bar.style().subControlRect(QStyle.CC_ScrollBar,option,QStyle.SC_ScrollBarSlider,bar)
             self.assertEqual(rect.left() if direction==Qt.Vertical else rect.top(),12)
-            self.assertEqual(rect.width() if direction==Qt.Vertical else rect.height(),3)
+            self.assertEqual(rect.width() if direction==Qt.Vertical else rect.height(),8 if direction==Qt.Vertical else 3)
             bar.close()
 
     def test_startup_screen_centers_content_and_stops_hidden_animation(self):
