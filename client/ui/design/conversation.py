@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QMenu,
     QApplication,
     QAbstractItemView,
     QStackedWidget,

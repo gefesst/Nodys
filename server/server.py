@@ -22,7 +22,7 @@ try:
     from .protocol.router import RequestRouter
     from .services.friends import FriendshipService
     from .storage.messages import MessageRepository
-    from .domain.passwords import hash_password, verify_password, maybe_upgrade_legacy_password
+    from .domain.passwords import hash_password as hash_password, verify_password as verify_password, maybe_upgrade_legacy_password as maybe_upgrade_legacy_password
     from .services import mutations, channel_cleanup
 except ImportError:
     from storage.migrations import migrate as migrate_database
@@ -33,13 +33,13 @@ except ImportError:
     from protocol.router import RequestRouter
     from services.friends import FriendshipService
     from storage.messages import MessageRepository
-    from domain.passwords import hash_password, verify_password, maybe_upgrade_legacy_password
+    from domain.passwords import hash_password as hash_password, verify_password as verify_password, maybe_upgrade_legacy_password as maybe_upgrade_legacy_password
     from services import mutations, channel_cleanup
 
 try:
-    from .storage.database import connect as database_connection
+    from .storage.database import connect as database_connection  # noqa: F401 - compatibility facade
 except ImportError:
-    from storage.database import connect as database_connection
+    from storage.database import connect as database_connection  # noqa: F401 - compatibility facade
 
 import datetime as dt
 import json
@@ -478,7 +478,7 @@ def handle_client(conn: socket.socket, addr, tls_context=None):
             return
         resp = handle_request(data)
         send_response(conn, resp)
-    except (ValueError, TimeoutError) as error:
+    except (ValueError, TimeoutError):
         try:
             send_response(conn, {"status":"error", "code":"invalid_request", "message":"Некорректный или незавершённый запрос"})
         except Exception:

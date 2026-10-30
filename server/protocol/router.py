@@ -269,7 +269,7 @@ class RequestRouter:
                 return {"status": "ok", "channel": ch}
             except ValueError as ve:
                 return {"status": "error", "message": str(ve)}
-            except Exception as e:
+            except Exception:
                 return {"status": "error", "message": "Не удалось создать канал"}
 
         if action == "join_channel":

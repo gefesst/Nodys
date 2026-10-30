@@ -6,13 +6,11 @@ from PySide6.QtWidgets import QStyledItemDelegate, QStyle
 from .widgets import avatar, draw_text, font, Button
 from .tokens import FG, SUB
 from PySide6.QtWidgets import (
-    QDialog,
     QVBoxLayout,
     QLineEdit,
     QListView,
     QLabel,
     QHBoxLayout,
-    QFrame,
     QStackedWidget,
     QWidget,
 )

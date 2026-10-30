@@ -4,7 +4,7 @@ from PySide6.QtCore import Qt, QRectF, QSize
 from PySide6.QtGui import QPainter, QColor
 from PySide6.QtWidgets import QWidget, QFrame, QLabel, QVBoxLayout, QLayout
 from .widgets import Button, icon, draw_text
-from .tokens import ACC, FG, SUB
+from .tokens import ACC, SUB
 
 
 class StateIcon(QWidget):

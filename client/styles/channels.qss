@@ -284,52 +284,6 @@ QPushButton#ChannelInnerNavButton:checked {
     color: #ffffff;
 }
 
-QScrollArea#ChannelMessagesScroll {
-    background: #2b2f36;
-    border: 1px solid #3d4350;
-    border-radius: 14px;
-    padding: 4px;
-}
-QScrollArea#ChannelMessagesScroll > QWidget > QWidget {
-    background: transparent;
-}
-
-QFrame#ChannelMessageRow {
-    background: transparent;
-    border: none;
-}
-
-QFrame#ChannelMsgCard {
-    background: #323741;
-    border: 1px solid #3f4655;
-    border-radius: 17px;
-}
-QFrame#ChannelMsgCard[outgoing="true"] {
-    background: #3d4ac0;
-    border: 1px solid #6072ff;
-}
-
-QLabel#ChannelMsgAuthor {
-    color: #d7d9df;
-    font-size: 12px;
-    font-weight: 700;
-}
-QLabel#ChannelMsgText {
-    color: #ffffff;
-    font-size: 13px;
-    background: transparent;
-    border: none;
-    padding: 0;
-}
-QLabel#ChannelMsgMeta {
-    color: #b9bbbe;
-    font-size: 10px;
-    font-weight: 700;
-}
-QFrame#ChannelMsgCard[outgoing="true"] QLabel#ChannelMsgMeta {
-    color: #dde4ff;
-}
-
 QLabel#ChannelVoiceStatus {
     color: #ffffff;
     font-size: 16px;

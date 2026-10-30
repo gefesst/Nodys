@@ -1,4 +1,3 @@
-import json
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 import test_voice_authorization as fixtures

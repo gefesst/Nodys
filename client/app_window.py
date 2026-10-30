@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QStackedWidget, QApplication, QSizeGrip
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QApplication, QSizeGrip
 from PySide6.QtCore import Qt, Slot, QTimer, QEvent, QPoint, QRect
 from network import NetworkThread
 from PySide6.QtGui import QIcon, QPainter, QColor, QPainterPath

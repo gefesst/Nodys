@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
+from PySide6.QtWidgets import QWidget, QLabel
 from network import NetworkThread
 from settings import get_api_endpoint
 

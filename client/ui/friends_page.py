@@ -3,7 +3,7 @@ import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame, QLineEdit,
-    QMenu, QApplication, QDialog, QSizePolicy
+    QApplication, QSizePolicy
 )
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QFont
@@ -51,6 +51,7 @@ class FriendItem(QFrame):
         text_col.setAlignment(Qt.AlignVCenter)
 
         name = QLabel(nickname)
+        name.setTextFormat(Qt.PlainText)
         name.setObjectName("FriendItemName")
         name.setFixedHeight(20)
         name.setMinimumWidth(0)
@@ -76,7 +77,6 @@ class FriendItem(QFrame):
             from ui.design.widgets import Button
             self.call_btn = Button('Позвонить','phone')
             self.call_btn.setObjectName("FriendCallButton")
-            btn_size = 34
             self.call_btn.setFixedSize(156, 40)
             self.call_btn.setToolTip("Позвонить")
             if on_call:
@@ -221,9 +221,9 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         found=QHBoxLayout(self.found_card);found.setContentsMargins(24,26,26,26);found.setSpacing(18)
         self.found_avatar=AvatarLabel(48);found.addWidget(self.found_avatar)
         names=QVBoxLayout();names.setSpacing(5)
-        self.found_name=QLabel();self.found_name.setStyleSheet("font-size:18px;font-weight:600;")
+        self.found_name=QLabel();self.found_name.setTextFormat(Qt.PlainText);self.found_name.setStyleSheet("font-size:18px;font-weight:600;")
         self.found_name.setMinimumWidth(0);self.found_name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
-        self.found_login=QLabel();self.found_login.setStyleSheet("font-size:13px;color:#ACB9CC;")
+        self.found_login=QLabel();self.found_login.setTextFormat(Qt.PlainText);self.found_login.setStyleSheet("font-size:13px;color:#ACB9CC;")
         names.addWidget(self.found_name);names.addWidget(self.found_login);found.addLayout(names,1)
         self.send_request_btn=QPushButton("Отправить заявку");self.send_request_btn.setObjectName("SendRequestButton")
         self.send_request_btn.setFixedSize(204,40);self.send_request_btn.setEnabled(False)
@@ -712,7 +712,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         avatar=AvatarLabel(size=80);avatar.set_avatar(friend.get('avatar',''),login,friend.get('nickname',''))
         avatar.set_online(friend.get('online',False));layout.addWidget(avatar,0,Qt.AlignHCenter)
         layout.addSpacing(15)
-        name=QLabel(friend.get('nickname',login));name.setObjectName('ChannelFormTitle')
+        name=QLabel(friend.get('nickname',login));name.setTextFormat(Qt.PlainText);name.setObjectName('ChannelFormTitle')
         name.setAlignment(Qt.AlignCenter);name.setFixedHeight(24);layout.addWidget(name)
         layout.addSpacing(13)
         status=QLabel('@'+login+' · '+('В сети' if friend.get('online') else 'Не в сети'))

@@ -16,7 +16,7 @@ def main():
     prepare_platform_plugins()
     from PySide6.QtWidgets import QApplication,QLineEdit
     from ui.design.widgets import Button
-    from review_support import audio  # synthetic devices; real encrypted transport
+    from review_support import audio  # noqa: F401 - installs synthetic audio backend  # synthetic devices; real encrypted transport
     from app_window import AppWindow
     app=QApplication([])
     from application.qt_runtime import prepare_application_fonts

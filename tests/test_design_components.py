@@ -680,7 +680,7 @@ class DesignGeometryTests(unittest.TestCase):
         removed.assert_not_called()
 
     def test_inline_menu_stays_inside_window_and_escape_does_not_activate(self):
-        from PySide6.QtWidgets import QWidget, QPushButton
+        from PySide6.QtWidgets import QWidget
         from PySide6.QtCore import QPoint, Qt
         from PySide6.QtTest import QTest
         from ui.design.action_menu import ActionMenu

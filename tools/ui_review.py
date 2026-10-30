@@ -14,7 +14,6 @@ os.environ["QT_QPA_PLATFORM"] = (
 )
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "client"), str(ROOT / "tools")]
-from application.qt_runtime import prepare_platform_plugins
 from review_support.sandbox import Sandbox
 
 
@@ -36,11 +35,10 @@ def main():
 
     save_config(lab.config)
     if args.synthetic_voice:
-        from review_support import audio
+        from review_support import audio  # noqa: F401 - installs synthetic audio backend
     import app_window
-    from PySide6.QtCore import QTimer, Qt
+    from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
-    from PySide6.QtGui import QPainter
 
     original = app_window.AppWindow.__init__
 

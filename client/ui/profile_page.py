@@ -4,7 +4,7 @@ import shutil
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QLineEdit,
-    QPushButton, QFileDialog, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
+    QFileDialog, QFrame, QHBoxLayout, QScrollArea, QSizePolicy
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -68,13 +68,13 @@ class ProfilePage(QWidget, ThreadSafeMixin):
         identity=QHBoxLayout();identity.setSpacing(30)
         self.avatar_label=AvatarLabel(size=88);self.avatar_label.setProperty("own_avatar",True);identity.addWidget(self.avatar_label)
         names=QVBoxLayout();names.setSpacing(6);names.setAlignment(Qt.AlignVCenter)
-        self.display_name=QLabel(self.nickname);self.display_name.setObjectName('ProfileTitle');self.display_name.setFixedHeight(30);self.display_name.setMinimumWidth(0);self.display_name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed);names.addWidget(self.display_name)
+        self.display_name=QLabel(self.nickname);self.display_name.setTextFormat(Qt.PlainText);self.display_name.setObjectName('ProfileTitle');self.display_name.setFixedHeight(30);self.display_name.setMinimumWidth(0);self.display_name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Fixed);names.addWidget(self.display_name)
         self.status_label=QLabel('Не в сети');self.status_label.setObjectName('ProfileStatusOffline');self.status_label.setFixedHeight(17);names.addWidget(self.status_label)
         identity.addLayout(names,1)
         avatar=Button('Изменить аватар');avatar.setFixedSize(228,40);avatar.clicked.connect(self.choose_avatar);identity.addWidget(avatar)
         card_l.addLayout(identity);card_l.addSpacing(45)
         login_title=QLabel('Логин · нельзя изменить');login_title.setObjectName('FieldTitle');login_title.setFixedHeight(17);card_l.addWidget(login_title);card_l.addSpacing(13)
-        self.login_label=QLabel(self.login);self.login_label.setObjectName('ReadOnlyField');self.login_label.setFixedHeight(46);self.login_label.setMaximumWidth(720);card_l.addWidget(self.login_label)
+        self.login_label=QLabel(self.login);self.login_label.setTextFormat(Qt.PlainText);self.login_label.setObjectName('ReadOnlyField');self.login_label.setFixedHeight(46);self.login_label.setMaximumWidth(720);card_l.addWidget(self.login_label)
         card_l.addSpacing(6)
         login_hint=QLabel('Логин используется для входа и поиска друзей.');login_hint.setObjectName('Muted');login_hint.setFixedHeight(15);card_l.addWidget(login_hint);card_l.addSpacing(31)
         self.edit_block=QWidget();self.edit_block.setMaximumWidth(720)

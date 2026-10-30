@@ -56,6 +56,44 @@ class AttachmentTests(fixtures.VoiceFixture, unittest.TestCase):
         self.request('bob', 'leave_channel', channel_id=self.channel['id'])
         self.assertEqual(self.request('bob', 'download_attachment_chunk', attachment_id=aid)['status'], 'error')
 
+    def test_deleted_channel_releases_files_and_preserves_other_scopes(self):
+        cid = self.channel['id']
+        published = self.upload(channel_id=cid)
+        pending = self.upload(channel_id=cid)
+        self.request('alice', 'send_channel_message', channel_id=cid,
+                     text='', attachment_id=published)
+        self.server.send_friend_request('alice', 'bob')
+        self.server.accept_friend_request('alice', 'bob')
+        private = self.upload(to_user='bob')
+        with patch.object(self.server.channel_cleanup, 'drain', return_value=False):
+            self.assertEqual(self.request('alice', 'delete_channel', channel_id=cid)['status'], 'ok')
+        self.assertTrue(self.server.channel_cleanup.drain(self.server.DB_FILE, self.server.CHAT_DB))
+        self.assertTrue(self.server.channel_cleanup.drain(self.server.DB_FILE, self.server.CHAT_DB))
+        with self.server.database_connection(self.server.CHAT_DB) as conn:
+            self.assertEqual(conn.execute('SELECT id FROM attachments').fetchall(), [(private,)])
+            for aid in (published, pending):
+                self.assertEqual(conn.execute('SELECT COUNT(*) FROM attachment_chunks WHERE attachment_id=?',
+                                              (aid,)).fetchone()[0], 0)
+            self.assertGreater(conn.execute('SELECT COUNT(*) FROM attachment_chunks WHERE attachment_id=?',
+                                            (private,)).fetchone()[0], 0)
+
+    def test_cleanup_failure_rolls_back_files_and_keeps_retry(self):
+        cid = self.channel['id']
+        aid = self.upload(channel_id=cid)
+        with patch.object(self.server.channel_cleanup, 'drain', return_value=False):
+            self.request('alice', 'delete_channel', channel_id=cid)
+        with self.server.database_connection(self.server.CHAT_DB) as conn:
+            conn.execute("CREATE TRIGGER fail_cleanup BEFORE DELETE ON attachments "
+                         "BEGIN SELECT RAISE(ABORT, 'synthetic failure'); END")
+        self.assertFalse(self.server.channel_cleanup.drain(self.server.DB_FILE, self.server.CHAT_DB))
+        with self.server.database_connection(self.server.CHAT_DB) as conn:
+            self.assertEqual(conn.execute('SELECT id FROM attachments').fetchall(), [(aid,)])
+            self.assertGreater(conn.execute('SELECT COUNT(*) FROM attachment_chunks').fetchone()[0], 0)
+            conn.execute('DROP TRIGGER fail_cleanup')
+        with self.server.database_connection(self.server.DB_FILE) as conn:
+            self.assertEqual(conn.execute('SELECT channel_id FROM channel_cleanup').fetchall(), [(cid,)])
+        self.assertTrue(self.server.channel_cleanup.drain(self.server.DB_FILE, self.server.CHAT_DB))
+
     def test_incomplete_hash_mismatch_and_chunk_replay(self):
         aid = uuid.uuid4().hex
         self.assertEqual(self.request('alice', 'begin_attachment', attachment_id=aid, filename='x.bin',

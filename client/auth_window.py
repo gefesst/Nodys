@@ -1,8 +1,7 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel, QMessageBox
+from PySide6.QtWidgets import QWidget, QLabel
 from network import NetworkThread
 from config import save_config
 from user_context import UserContext
-from settings import get_api_endpoint
 
 
 class AuthWindow(QWidget):

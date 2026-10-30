@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QFrame,
     QScrollArea,
-    QPushButton,
 )
 from config import load_config, save_config
 from .widgets import Button, ScrollSafeComboBox

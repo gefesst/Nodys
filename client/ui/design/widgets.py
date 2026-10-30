@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from pathlib import Path
-import re, time
+import time
 from PySide6.QtCore import (
     Qt,
     QByteArray,

@@ -19,8 +19,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QTextEdit,
     QComboBox,
-    QDialog,
-    QMenu,
 )
 
 

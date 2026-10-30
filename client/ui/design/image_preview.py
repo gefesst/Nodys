@@ -114,6 +114,7 @@ class ImageViewer(OverlayDialog):
         layout.setContentsMargins(16, 12, 16, 16)
         header = QHBoxLayout()
         title = QLabel(metadata['name'])
+        title.setTextFormat(Qt.PlainText)
         title.setWordWrap(True)
         header.addWidget(title, 1)
         save = Button('Сохранить')

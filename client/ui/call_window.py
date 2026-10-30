@@ -1,11 +1,8 @@
-from PySide6.QtCore import Qt, QTimer, QEvent
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QDialog,
     QVBoxLayout,
     QLabel,
-    QPushButton,
     QHBoxLayout,
-    QFrame,
 )
 from ui.avatar_widget import AvatarLabel
 from ui.design.widgets import Button, RoundCallButton
@@ -200,7 +197,6 @@ class ActiveCallWindow(CallPanel):
 
         quality = a.get("quality")
         lat = a.get("latency_ms")
-        jit = a.get("jitter_ms")
         score = float(a.get("quality_score", 0.0) or 0.0)
         if quality is not None:
             self.quality_lbl.setText(f"Качество: {quality} · {lat} мс")

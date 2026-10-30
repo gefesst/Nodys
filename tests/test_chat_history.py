@@ -144,7 +144,6 @@ class ConversationTests(unittest.TestCase):
 
     def test_picked_image_preview_and_remove_are_scoped_to_dialog(self):
         import tempfile
-        from unittest.mock import patch
         from PySide6.QtGui import QImage, QColor
         self.select('bob')
         with tempfile.TemporaryDirectory() as directory:
@@ -164,7 +163,6 @@ class ConversationTests(unittest.TestCase):
             self.assertTrue(self.chat.attachment_strip.isHidden())
 
     def test_inline_image_load_preserves_geometry_and_opens_viewer_without_save_dialog(self):
-        from unittest.mock import patch
         from PySide6.QtGui import QImage, QColor
         self.owner.resize(1280, 800)
         self.owner.show()
@@ -372,7 +370,6 @@ class ConversationTests(unittest.TestCase):
         self.assertTrue(self.chat.loading)
 
     def test_empty_private_and_channel_poll_keeps_empty_surface(self):
-        from unittest.mock import patch
         for channel in (False, True):
             self.chat.channel = channel
             self.chat.select("bob")

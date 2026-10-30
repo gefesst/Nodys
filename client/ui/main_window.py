@@ -1,15 +1,14 @@
 from application.call_controller import CallController
 from application.polling import PollingController
 from application.session_cleanup import submit as submit_session_cleanup
-from PySide6.QtCore import QTimer, Qt, QRect, QEvent
+from PySide6.QtCore import QTimer, Qt, QEvent
 import os
-import socket
 import time
 from types import SimpleNamespace
 
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
-    QSizePolicy, QStackedWidget, QApplication, QLabel, QFrame
+    QApplication, QLabel, QFrame
 )
 from PySide6.QtGui import QIcon
 
@@ -25,7 +24,6 @@ from network import NetworkThread
 from application.voice_session import VoiceSession
 from config import clear_config
 from settings import get_voice_endpoint, get_api_endpoint
-from ui.micro_interactions import install_opacity_feedback
 
 from ui.design.motion import TransitionStack as QStackedWidget
 from ui.design.tokens import RAIL_WIDTH, LIST_WIDTH

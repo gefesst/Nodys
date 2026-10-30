@@ -32,6 +32,23 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_user_controlled_labels_are_literal_text(self):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QLabel
+        from ui.friends_page import FriendItem
+        from ui.channels_page import ChannelListItem
+        text = '<b>not markup</b>'
+        friend = FriendItem('bob', text)
+        self.addCleanup(friend.close)
+        label = friend.findChild(QLabel, 'FriendItemName')
+        self.assertEqual(label.text(), text)
+        self.assertEqual(label.textFormat(), Qt.PlainText)
+        channel = ChannelListItem({'id': 1, 'name': text})
+        self.addCleanup(channel.close)
+        labels = [item for item in channel.findChildren(QLabel) if item.text() == text]
+        self.assertEqual(len(labels), 1)
+        self.assertEqual(labels[0].textFormat(), Qt.PlainText)
+
     def test_confirmed_message_updates_preview_before_friend_refresh_and_fences_old_poll(self):
         from ui.chats_page import ChatsPage
         page=ChatsPage();self.addCleanup(page.close)
@@ -255,7 +272,6 @@ class UiTests(unittest.TestCase):
 
     def test_cancelled_channel_join_does_not_resume_after_microphone_stops(self):
         from types import SimpleNamespace
-        from unittest.mock import Mock
         p=self.page
         p.active_channel={'id':1,'name':'Channel'}
         p._main_window=SimpleNamespace(settings_page=SimpleNamespace(stop_microphone_check=lambda:False))
@@ -300,7 +316,7 @@ class UiTests(unittest.TestCase):
         from register_window import RegisterWindow
         window = RegisterWindow()
         self.addCleanup(window.close)
-        with patch('register_window.QMessageBox.warning') as modal:
+        with patch('PySide6.QtWidgets.QMessageBox.warning') as modal:
             window.handle_register_response({'status':'error','message':'Логин уже существует'})
             modal.assert_not_called()
         self.assertEqual(window.status_label.text(),'Логин уже существует')
@@ -542,7 +558,7 @@ class UiTests(unittest.TestCase):
     def test_login_error_is_inline(self):
         from auth_window import AuthWindow
         window=AuthWindow();self.addCleanup(window.close)
-        with patch('auth_window.QMessageBox.warning') as modal:
+        with patch('PySide6.QtWidgets.QMessageBox.warning') as modal:
             window.handle_login_response({'status':'error','message':'Слишком много попыток'})
             modal.assert_not_called()
         self.assertEqual(window.status_label.text(),'Слишком много попыток')

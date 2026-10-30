@@ -9,16 +9,12 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
-    QGridLayout,
-    QBoxLayout,
     QLabel,
     QFrame,
     QPushButton,
     QLineEdit,
     QScrollArea,
-    QStackedWidget,
     QFileDialog,
-    QComboBox,
     QSizePolicy,
     QApplication,
 )
@@ -69,6 +65,7 @@ class ChannelListItem(QFrame):
         text_col.setSpacing(1)
 
         name = QLabel(self.channel.get("name", "Без названия"))
+        name.setTextFormat(Qt.PlainText)
         name.setObjectName("ChannelListItemName")
         name.setMinimumWidth(0)
         name.setSizePolicy(QSizePolicy.Ignored,QSizePolicy.Preferred)
@@ -100,65 +97,6 @@ class ChannelListItem(QFrame):
         if callable(self._on_click):
             self._on_click()
         super().mousePressEvent(event)
-
-
-class ChannelMessageBubble(QFrame):
-    def __init__(self, text: str, author: str, is_outgoing: bool = False, time_text: str = ""):
-        super().__init__()
-        self.setObjectName("ChannelMessageRow")
-        self.setProperty("outgoing", "true" if is_outgoing else "false")
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 6, 0, 6)
-        row.setSpacing(8)
-
-        avatar = AvatarLabel(size=32)
-        avatar.set_avatar(path="", login=author or "user", nickname=author or "Пользователь")
-        avatar.set_online(None)
-
-        card = QFrame()
-        card.setObjectName("ChannelMsgCard")
-        card.setProperty("outgoing", "true" if is_outgoing else "false")
-
-        col = QVBoxLayout(card)
-        col.setContentsMargins(12, 9, 12, 9)
-        col.setSpacing(5)
-
-        head = QHBoxLayout()
-        head.setContentsMargins(0, 0, 0, 0)
-        head.setSpacing(6)
-
-        author_lbl = QLabel(author)
-        author_lbl.setObjectName("ChannelMsgAuthor")
-        head.addWidget(author_lbl)
-
-        head.addStretch(1)
-
-        if time_text:
-            meta = QLabel(time_text)
-            meta.setObjectName("ChannelMsgMeta")
-            head.addWidget(meta)
-
-        col.addLayout(head)
-
-        bubble = QLabel(text)
-        bubble.setWordWrap(True)
-        bubble.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        bubble.setObjectName("ChannelMsgText")
-        bubble.setProperty("outgoing", "true" if is_outgoing else "false")
-        col.addWidget(bubble)
-
-        card.setMaximumWidth(740)
-
-        if is_outgoing:
-            row.addStretch(1)
-            row.addWidget(card, 0, Qt.AlignRight)
-            row.addWidget(avatar, 0, Qt.AlignBottom)
-        else:
-            row.addWidget(avatar, 0, Qt.AlignBottom)
-            row.addWidget(card, 0, Qt.AlignLeft)
-            row.addStretch(1)
 
 
 class ChannelMemberItem(QFrame):
@@ -195,6 +133,7 @@ class ChannelMemberItem(QFrame):
         text_col.setSpacing(1)
 
         name_lbl = QLabel(nickname)
+        name_lbl.setTextFormat(Qt.PlainText)
         name_lbl.setObjectName("ChannelMemberName")
         name_lbl.setStyleSheet("font-size:16px;font-weight:600;")
         name_lbl.setMinimumWidth(0)
@@ -288,7 +227,7 @@ class VoiceParticipantItem(QFrame):
         avatar.setProperty('speaking',speaking)
         layout.addWidget(avatar,0,Qt.AlignHCenter)
         layout.addSpacing(19)
-        title=QLabel('Вы' if login==current_login else name);title.setObjectName('ChannelVoiceMemberName')
+        title=QLabel('Вы' if login==current_login else name);title.setTextFormat(Qt.PlainText);title.setObjectName('ChannelVoiceMemberName')
         title.setAlignment(Qt.AlignCenter);title.setWordWrap(True);layout.addWidget(title)
         layout.addSpacing(12)
         state=QLabel('Говорит' if speaking else 'Микрофон выключен' if self.participant.get('muted') else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
@@ -317,9 +256,9 @@ class ChannelInviteItem(QFrame):
         heading=QHBoxLayout();heading.setSpacing(10)
         avatar=AvatarLabel(32);avatar.set_avatar(self.invite.get('avatar',''),nickname=channel_name);heading.addWidget(avatar)
         names=QVBoxLayout();names.setSpacing(3)
-        title=QLabel(channel_name);title.setStyleSheet('font-size:14px;font-weight:600;');title.setWordWrap(True);names.addWidget(title)
+        title=QLabel(channel_name);title.setTextFormat(Qt.PlainText);title.setStyleSheet('font-size:14px;font-weight:600;');title.setWordWrap(True);names.addWidget(title)
         sender=self.invite.get('from_nickname') or self.invite.get('from_user') or 'пользователь'
-        subtitle=QLabel(f'От {sender}');subtitle.setObjectName('Muted');subtitle.setWordWrap(True);names.addWidget(subtitle)
+        subtitle=QLabel(f'От {sender}');subtitle.setTextFormat(Qt.PlainText);subtitle.setObjectName('Muted');subtitle.setWordWrap(True);names.addWidget(subtitle)
         heading.addLayout(names,1);lay.addLayout(heading)
         actions=QHBoxLayout();actions.setSpacing(8);lay.addLayout(actions)
         for label,callback,primary in [('Принять',on_accept,True),('Отклонить',on_decline,False)]:
@@ -2707,9 +2646,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
             quality = activity.get("quality", "—")
             latency = activity.get("latency_ms", 0)
             jitter = activity.get("jitter_ms", 0)
-            buffer_frames = int(activity.get("buffer_frames", 0) or 0)
             me = bool(activity.get("me_speaking", False)) and not self._voice_muted
-            peer = bool(activity.get("peer_speaking", False))
 
             reconnecting=quality == "Переподключение"
             elapsed=max(0,int(time.monotonic()-getattr(self,'_voice_started_at',time.monotonic())))

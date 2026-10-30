@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QFrame,
     QScrollArea,
-    QWidget,
     QLineEdit,
     QSizePolicy,
 )
