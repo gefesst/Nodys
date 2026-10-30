@@ -33,7 +33,7 @@ Supported mutations obtain the users write lock before any chat write lock. Auth
 
 Account and message databases are separate. There is no claim of an atomic transaction spanning both. Channel deletion persists a cleanup marker with membership deletion; message cleanup is idempotent and retried after deletion, at startup and every 30 seconds. Revoked membership stops message/voice access before physical history cleanup completes.
 
-Migrations are ordered and versioned in `server/storage/migrations.py` (currently users v6, chat v6). Existing databases receive consistent SQLite backup snapshots (including WAL) before upgrade. Failed upgrades roll back; future/inconsistent versions stop startup. Backups contain sensitive data and are not automatically removed.
+Migrations are ordered and versioned in `server/storage/migrations.py` (currently users v6, chat v7). Existing databases receive consistent SQLite backup snapshots (including WAL) before upgrade. Failed upgrades roll back; future/inconsistent versions stop startup. Backups contain sensitive data and are not automatically removed.
 
 ## Network and media
 

@@ -9,23 +9,25 @@ class MessageRepository:
     def __init__(self, database):
         self.database = database
 
-    def save_message(self, from_user: str, to_user: str, text: str, client_message_id=None, attachment_id=None):
+    def save_message(self, from_user: str, to_user: str, text: str, client_message_id=None, attachment_id=None, reply_to_id=None):
         with database_connection(self.database) as conn:
             if client_message_id:
-                previous = conn.execute('SELECT id,to_user,text,attachment_id FROM messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                previous = conn.execute('SELECT id,to_user,text,attachment_id,reply_to_id FROM messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
                 if previous:
-                    if previous[1:] != (to_user,text,attachment_id):
+                    if previous[1:] != (to_user,text,attachment_id,reply_to_id):
                         raise ValueError('Идентификатор сообщения уже использован')
                     return previous[0]
+            from .message_content import validate_reply
+            validate_reply(conn, dict(from_user=from_user, to_user=to_user), reply_to_id)
             from .attachments import bind
             bind(conn, attachment_id, from_user, peer=to_user)
-            cursor = conn.execute('INSERT INTO messages(from_user,to_user,text,is_read,client_message_id,attachment_id) VALUES(?,?,?,0,?,?)', (from_user,to_user,text,client_message_id,attachment_id))
+            cursor = conn.execute('INSERT INTO messages(from_user,to_user,text,is_read,client_message_id,attachment_id,reply_to_id) VALUES(?,?,?,0,?,?,?)', (from_user,to_user,text,client_message_id,attachment_id,reply_to_id))
             return cursor.lastrowid
 
-    def get_page(self, user_a, user_b, limit=80, before_id=None, after_id=None):
+    def get_page(self, user_a, user_b, limit=80, before_id=None, after_id=None, around_id=None):
         from .pagination import page
         with database_connection(self.database) as conn:
-            result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id)
+            result = page(conn, 'messages', '(from_user=? AND to_user=?) OR (from_user=? AND to_user=?)', (user_a,user_b,user_b,user_a), limit, before_id, after_id, around_id)
             result['read_through_id'] = conn.execute('SELECT COALESCE(MAX(id),0) FROM messages WHERE from_user=? AND to_user=? AND is_read=1', (user_a,user_b)).fetchone()[0]
             return result
 
@@ -35,7 +37,7 @@ class MessageRepository:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute(
-                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read, attachment_id, revision, edited_at, deleted_at
+                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read, attachment_id, revision, edited_at, deleted_at, reply_to_id
                    FROM messages
                    WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)
                    ORDER BY timestamp DESC, id DESC
@@ -44,7 +46,7 @@ class MessageRepository:
             )
             # Клиенту по-прежнему отдаём в хронологическом порядке (старые -> новые).
             rows = cur.fetchall()
-            from .attachments import enrich
+            from .message_content import enrich
             return enrich(conn, [dict(r) for r in reversed(rows)])
 
     def mark_chat_read(self, current_user: str, friend: str, through_id=None) -> None:

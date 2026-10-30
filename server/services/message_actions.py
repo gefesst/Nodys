@@ -2,10 +2,10 @@
 import sqlite3
 try:
     from ..storage.database import connect
-    from ..storage.attachments import enrich
+    from ..storage.message_content import enrich
 except ImportError:
     from storage.database import connect
-    from storage.attachments import enrich
+    from storage.message_content import enrich
 
 
 def scope(router, user, data):
@@ -84,6 +84,8 @@ def mutate(router, user, data):
             if aid and not conn.execute('SELECT 1 FROM messages WHERE attachment_id=? UNION ALL SELECT 1 FROM channel_messages WHERE attachment_id=? LIMIT 1', (aid, aid)).fetchone():
                 conn.execute('DELETE FROM attachment_chunks WHERE attachment_id=?', (aid,))
                 conn.execute('DELETE FROM attachments WHERE id=?', (aid,))
+        # Quote changes must reach clients even when the original is outside their window.
+        conn.execute(f'UPDATE {table} SET revision=revision+1 WHERE reply_to_id=?', (identity,))  # nosec B608: fixed table.
         updated = conn.execute(
             f'SELECT *,timestamp AS created_at FROM {table} WHERE id=?',  # nosec B608: fixed table.
             (identity,)).fetchone()

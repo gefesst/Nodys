@@ -295,7 +295,7 @@ class ChannelService:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
-                SELECT id, channel_id, from_user, text, timestamp AS created_at, attachment_id, revision, edited_at, deleted_at
+                SELECT id, channel_id, room_id, from_user, text, timestamp AS created_at, attachment_id, revision, edited_at, deleted_at, reply_to_id
                 FROM channel_messages
                 WHERE channel_id=? AND room_id=?
                 ORDER BY id DESC
@@ -305,37 +305,42 @@ class ChannelService:
             ).fetchall()
             # Возвращаем в хронологическом порядке для UI.
             try:
-                from ..storage.attachments import enrich
+                from ..storage.message_content import enrich
             except ImportError:
-                from storage.attachments import enrich
+                from storage.message_content import enrich
             return enrich(conn, [dict(r) for r in reversed(rows)])
 
-    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None, room_id=0, attachment_id=None):
+    def save_channel_message(self, channel_id: int, from_user: str, text: str, client_message_id=None, room_id=0, attachment_id=None, reply_to_id=None):
         msg = (text or "").strip()
         if not msg and not attachment_id:
             return False
         with database_connection(self.chat_database, timeout=10) as conn:
             if client_message_id:
-                previous = conn.execute('SELECT id,channel_id,text,room_id,attachment_id FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
+                previous = conn.execute('SELECT id,channel_id,text,room_id,attachment_id,reply_to_id FROM channel_messages WHERE from_user=? AND client_message_id=?', (from_user,client_message_id)).fetchone()
                 if previous:
-                    if previous[1:] != (int(channel_id),msg,int(room_id),attachment_id):
+                    if previous[1:] != (int(channel_id),msg,int(room_id),attachment_id,reply_to_id):
                         raise ValueError('Идентификатор сообщения уже использован')
                     return previous[0]
             try:
                 from ..storage.attachments import bind
             except ImportError:
                 from storage.attachments import bind
+            try:
+                from ..storage.message_content import validate_reply
+            except ImportError:
+                from storage.message_content import validate_reply
+            validate_reply(conn, dict(channel_id=int(channel_id), room_id=int(room_id)), reply_to_id)
             bind(conn, attachment_id, from_user, cid=int(channel_id), room=int(room_id))
-            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id,attachment_id) VALUES(?,?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id),attachment_id))
+            cursor = conn.execute('INSERT INTO channel_messages(channel_id,from_user,text,client_message_id,room_id,attachment_id,reply_to_id) VALUES(?,?,?,?,?,?,?)', (int(channel_id),from_user,msg,client_message_id,int(room_id),attachment_id,reply_to_id))
             return cursor.lastrowid
 
-    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0):
+    def get_message_page(self, channel_id, limit=80, before_id=None, after_id=None, room_id=0, around_id=None):
         try:
             from ..storage.pagination import page
         except ImportError:
             from storage.pagination import page
         with database_connection(self.chat_database) as conn:
-            return page(conn, 'channel_messages', 'channel_id=? AND room_id=?', (int(channel_id),int(room_id)), limit, before_id, after_id)
+            return page(conn, 'channel_messages', 'channel_id=? AND room_id=?', (int(channel_id),int(room_id)), limit, before_id, after_id, around_id)
 
     def _normalize_member_role(self, role: str) -> str:
         r = (role or "").strip().lower()

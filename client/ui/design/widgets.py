@@ -529,6 +529,7 @@ class MessageDelegate(QStyledItemDelegate):
         self.image_cache = None
         self.paint_count = 0
         self.paint_ns = []
+        self.highlight_id = None
         self.fade_row = -1
         self.fade_start = 0
         self.fade_timer = QTimer(self)
@@ -552,7 +553,7 @@ class MessageDelegate(QStyledItemDelegate):
         maxw = max(180, min(660, width - 114))
         from shared.attachments import is_image_attachment
         picture = is_image_attachment(m.attachment)
-        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited, tuple(sorted(m.reply.items())) if m.reply else None)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -590,7 +591,9 @@ class MessageDelegate(QStyledItemDelegate):
             natural = max(natural, line.naturalTextWidth())
         layout.endLayout()
         bw = min(maxw, max(210 if m.edited else 125, natural + 32))
-        bh = y + 40
+        if m.reply:
+            bw = max(bw, min(maxw, 320))
+        bh = y + 40 + (58 if m.reply else 0)
         if picture:
             bw = max(bw, min(maxw, 380))
             bh += 220
@@ -604,10 +607,18 @@ class MessageDelegate(QStyledItemDelegate):
             self.cache.popitem(last=False)
         return value
 
+    def reply_at(self, message, width, point):
+        if not message.reply:
+            return None
+        _, bw, _, head, _ = self.geometry(message, width)
+        if QRectF(70, head + 8, bw - 24, 50).contains(point):
+            return message.reply['id']
+        return None
+
     def link_at(self, message, width, point):
         from .message_links import link_spans
         layout, _, _, head, _ = self.geometry(message, width)
-        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(74, head + 11)
+        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(74, head + 11 + (58 if message.reply else 0))
         for number in range(layout.lineCount()):
             line = layout.lineAt(number)
             if line.naturalTextRect().contains(position):
@@ -713,11 +724,27 @@ class MessageDelegate(QStyledItemDelegate):
             )
         p.setBrush(QColor("#273951" if own else "#222E3D"))
         p.setPen(QPen(QColor("#3B506C" if own else "#334254"), 1))
+        if m.id == self.highlight_id:
+            p.setPen(QPen(QColor(ACC), 2))
         p.drawPath(self.shape(x, y, bw, bh, m.group))
+        if m.reply:
+            box = QRectF(x + 12, y + 8, bw - 24, 50)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor('#192B3C'))
+            p.drawRoundedRect(box, 6, 6)
+            p.setPen(QPen(QColor(ACC), 2))
+            p.drawLine(int(x+16), int(y+15), int(x+16), int(y+50))
+            author = 'Вы' if m.reply['author'] == self.me else m.reply['author']
+            p.setFont(font(12, True))
+            title = p.fontMetrics().elidedText(author or 'Исходное сообщение', Qt.ElideRight, int(bw-52))
+            draw_text(p, x+26, y+27, title, 12, ACC, True)
+            p.setFont(font(12))
+            quote = p.fontMetrics().elidedText(' '.join(m.reply['text'].split()), Qt.ElideRight, int(bw-52))
+            draw_text(p, x+26, y+46, quote, 12, MUT)
         p.setPen(QColor(FG))
         layout.draw(
             p,
-            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11),
+            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0)),
         )
         from shared.attachments import is_image_attachment
         if is_image_attachment(m.attachment):

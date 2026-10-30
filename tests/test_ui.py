@@ -32,6 +32,71 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_reply_drafts_survive_switch_and_send_does_not_clear_new_selection(self):
+        c = self.page.conversation
+        calls = []
+        c.request = lambda data, callback: calls.append((data, callback))
+        c.select((1, 0))
+        row = dict(id=1, from_user='bob', text='original', created_at='2026-10-30 12:00:00')
+        c.apply([row], 'latest', {})
+        c.editor.setPlainText('answer')
+        c.replies.begin(row)
+        c.select((2, 0))
+        self.assertNotIn((2, 0), c.replies.drafts)
+        c.select((1, 0))
+        self.assertEqual(c.editor.toPlainText(), 'answer')
+        self.assertEqual(c.replies.drafts[c.identity]['id'], 1)
+        c.send()
+        request, reply = calls[-1]
+        self.assertEqual(request['reply_to_id'], 1)
+        # The pending send cannot clear a newly chosen reply after cancellation.
+        c.replies.cancel()
+        c.pending.clear()
+        c.replies.begin(dict(row, id=2))
+        reply(dict(status='ok'))
+        self.assertEqual(c.replies.drafts[c.identity]['id'], 2)
+        c.reset()
+        self.assertFalse(c.replies.drafts)
+
+    def test_reply_jump_fetches_old_window_returns_and_fences_switch(self):
+        c = self.page.conversation
+        calls = []
+        c.request = lambda data, callback: calls.append((data, callback))
+        c.select((1, 0))
+        row = dict(id=100, from_user='bob', text='answer', created_at='2026-10-30 12:00:00')
+        c.apply([row], 'latest', {})
+        c.editor.setPlainText('keep draft')
+        c.replies.jump(1)
+        request, reply = calls[-1]
+        self.assertEqual(request['around_id'], 1)
+        reply(dict(status='ok', messages=[dict(row, id=1, text='original')], has_older=False, has_newer=True))
+        self.assertEqual(c.rows[0]['id'], 1)
+        self.assertEqual(c.delegate.highlight_id, 1)
+        self.assertEqual(c.editor.toPlainText(), 'keep draft')
+        self.assertTrue(c.newer)
+        c.replies.go_back()
+        self.assertEqual(c.rows[0]['id'], 100)
+        self.assertIsNone(c.replies.return_state)
+        c.replies.jump(1)
+        late = calls[-1][1]
+        c.select((2, 0))
+        late(dict(status='ok', messages=[dict(row, id=1)], has_newer=True))
+        self.assertEqual(c.rows, [])
+        self.assertIsNone(c.replies.return_state)
+
+    def test_reply_hitbox_does_not_overlap_text_or_links(self):
+        from PySide6.QtCore import QPointF
+        from ui.design.models import Message
+        c = self.page.conversation
+        quote = dict(id=1, author='bob', text='original', deleted=False)
+        message = Message(2, 'alice', 'Alice', 'https://example.com', reply=quote)
+        layout, width, height, head, total = c.delegate.geometry(message, 500)
+        self.assertGreaterEqual(height, 98)
+        self.assertEqual(c.delegate.reply_at(message, 500, QPointF(80, head+20)), 1)
+        self.assertIsNone(c.delegate.link_at(message, 500, QPointF(80, head+20)))
+        self.assertIsNone(c.delegate.reply_at(message, 500, QPointF(80, head+75)))
+        self.assertIsNotNone(c.delegate.link_at(message, 500, QPointF(80, head+75)))
+
     def test_message_edit_preserves_draft_and_ignores_stale_session_reply(self):
         c = self.page.conversation
         calls = []

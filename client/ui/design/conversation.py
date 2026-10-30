@@ -66,6 +66,7 @@ class Conversation(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(10)
         history = QHBoxLayout()
+        self.history_navigation = history
         self.previous = Button("Раньше", "back")
         self.previous.clicked.connect(lambda: self.load("older"))
         history.addWidget(self.previous)
@@ -195,6 +196,8 @@ class Conversation(QWidget):
             target.installEventFilter(self)
         from .message_actions import MessageActions
         self.message_actions = MessageActions(self)
+        from .message_replies import MessageReplies
+        self.replies = MessageReplies(self)
         self.update_controls()
 
     def edited(self):
@@ -241,6 +244,7 @@ class Conversation(QWidget):
             self.request(data,done)
 
     def select(self, identity, name="", can_send=True):
+        self.replies.clear_navigation()
         self.message_actions.cancel()
         self.remember_draft()
         if self.identity is not None and self.history_loaded:
@@ -301,6 +305,7 @@ class Conversation(QWidget):
             self.load("poll" if cached is not None or warmed is not None else "latest")
 
     def reset(self):
+        self.replies.reset()
         self.message_actions.reset()
         self.image_cache.reset()
         viewer = getattr(self, "image_viewer", None)
@@ -401,6 +406,9 @@ class Conversation(QWidget):
         if watched is getattr(self, "editor", None) and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape and self.message_actions.edit:
             self.message_actions.cancel()
             return True
+        if watched is getattr(self, "editor", None) and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape and self.identity in self.replies.drafts:
+            self.replies.cancel()
+            return True
         if watched in getattr(self, '_drop_targets', ()) and event.type() in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
             from .attachment_input import is_attachment
             if is_attachment(event.mimeData()):
@@ -423,6 +431,11 @@ class Conversation(QWidget):
                 index = self.view.indexAt(point)
                 if index.isValid():
                     from PySide6.QtCore import QPointF
+                    quoted = self.delegate.reply_at(index.data(Qt.UserRole), self.view.viewport().width(), QPointF(point-self.view.visualRect(index).topLeft()))
+                    if quoted:
+                        self.replies.jump(quoted)
+                        event.accept()
+                        return True
                     url = self.delegate.link_at(index.data(Qt.UserRole), self.view.viewport().width(), QPointF(point-self.view.visualRect(index).topLeft()))
                     if url is not None:
                         from PySide6.QtGui import QDesktopServices
@@ -568,6 +581,7 @@ class Conversation(QWidget):
                     row.get("attachment"),
                     row["text"],
                     bool(row.get("edited_at")) and not row.get("deleted_at"),
+                    row.get("reply") if not row.get("deleted_at") else None,
                 )
             )
             previous_author, previous_date = author, date
@@ -732,6 +746,8 @@ class Conversation(QWidget):
         transfer.start()
 
     def update_controls(self, keep_hint=False):
+        if hasattr(self, "replies"):
+            self.replies.update()
         self._update_new_messages()
         surface = self.view if self.rows else (
             self.view if self.identity is not None and not self.history_loaded and not self.history_error else
@@ -812,6 +828,7 @@ class Conversation(QWidget):
             self.message_actions.submit()
             return
         text = self.editor.toPlainText().strip()
+        reply = self.replies.drafts.get(self.identity)
         if (
             (not text and self.identity not in self.attachment_drafts)
             or self.identity is None
@@ -848,7 +865,7 @@ class Conversation(QWidget):
                 attachment.pop('progress', None)
                 if result.get('status') == 'ok':
                     attachment.update(result['attachment'])
-                    self._submit(identity, text, attachment, epoch, revision, restore_focus=False)
+                    self._submit(identity, text, attachment, epoch, revision, restore_focus=False, reply=reply)
                 else:
                     self.send_error.setText(result.get('message', 'Не удалось загрузить файл'))
                     self.update_controls()
@@ -856,15 +873,17 @@ class Conversation(QWidget):
             transfer.finished.connect(uploaded)
             transfer.start()
             return
-        self._submit(identity, text, attachment, epoch, revision)
+        self._submit(identity, text, attachment, epoch, revision, reply=reply)
 
-    def _submit(self, identity, text, attachment, epoch, revision, restore_focus=True):
-        key = (identity, text, attachment.get('id') if attachment else None)
+    def _submit(self, identity, text, attachment, epoch, revision, restore_focus=True, reply=None):
+        key = (identity, text, attachment.get('id') if attachment else None, reply['id'] if reply else None)
         message_id = self.retries.setdefault(key, str(uuid.uuid4()))
         self.send_error.clear()
         self.pending[identity] = message_id
         data = self.payload("send_channel_message" if self.channel else "send_message", identity)
         data.update(text=text, client_message_id=message_id, request_id=message_id)
+        if reply:
+            data["reply_to_id"] = reply["id"]
         if attachment:
             data["attachment_id"] = attachment["id"]
         # Disabling a focused send button lets Qt advance to an unrelated control.
@@ -880,6 +899,8 @@ class Conversation(QWidget):
             success = response.get("status") == "ok"
             if success:
                 self.retries.pop(key, None)
+                if reply is not None and self.replies.drafts.get(identity) is reply:
+                    self.replies.drafts.pop(identity, None)
                 if attachment and self.attachment_drafts.get(identity) is attachment:
                     self.discard_attachment(identity)
                 if not self.channel:
@@ -936,6 +957,8 @@ class Conversation(QWidget):
         menu.addAction(
             "Копировать текст", lambda: QApplication.clipboard().setText(text)
         )
+        if self.can_send:
+            menu.addAction('Ответить', lambda: self.replies.begin(row) if current() else None)
         if row['from_user'] == self.owner.ctx.login:
             if self.can_send:
                 menu.addAction('Редактировать', lambda: self.message_actions.begin(row) if current() else None)

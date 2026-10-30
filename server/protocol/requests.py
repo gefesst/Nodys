@@ -8,7 +8,7 @@ TEXT_LIMITS = {'visible_versions':10080,'steam_nickname':128, 'steam_game':128, 
     'role':32, 'text_min_role':32, 'voice_min_role':32,
     'text':8000, 'message':8000,
 }
-INTEGER_LIMITS = {'message_id':(1,2**63-1),'expected_revision':(0,2**63-1),'activity_sequence':(0,2**63-1),'file_size':(1,10485760),'offset':(0,10485760),'room_id':(0,2**31-1),'through_id':(1,2**63-1), 'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
+INTEGER_LIMITS = {'reply_to_id':(1,2**63-1),'around_id':(1,2**63-1),'message_id':(1,2**63-1),'expected_revision':(0,2**63-1),'activity_sequence':(0,2**63-1),'file_size':(1,10485760),'offset':(0,10485760),'room_id':(0,2**31-1),'through_id':(1,2**63-1), 'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
                   'sequence':(0,2**63-1), 'after_event_id':(0,2**63-1), 'limit':(1,500)}
 
 

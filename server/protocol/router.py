@@ -240,7 +240,7 @@ class RequestRouter:
             if not self.friends.are_friends(current_user, to_user):
                 return {"status":"error", "message":"Отправлять сообщения можно только друзьям"}
             try:
-                identity = self.messages.save_message(current_user, to_user, text, data.get('client_message_id'), data.get('attachment_id'))
+                identity = self.messages.save_message(current_user, to_user, text, data.get('client_message_id'), data.get('attachment_id'), data.get('reply_to_id'))
             except ValueError as error:
                 return {'status':'error','code':'request_conflict','message':str(error)}
             return {"status": "ok", "message_id": identity}
@@ -254,7 +254,7 @@ class RequestRouter:
                 return {"status": "error", "message": "Не указан собеседник"}
             if data.get('paged'):
                 try:
-                    return dict(status='ok', updated_messages=self._message_refresh(current_user, dict(data, to_user=other)), **self.messages.get_page(current_user, other, data.get('limit',80), data.get('before_id'), data.get('after_id')))
+                    return dict(status='ok', updated_messages=self._message_refresh(current_user, dict(data, to_user=other)), **self.messages.get_page(current_user, other, data.get('limit',80), data.get('before_id'), data.get('after_id'), around_id=data.get('around_id')))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
             msgs = self.messages.get_messages(current_user, other, limit=int(data.get("limit", 50) or 50))
@@ -345,7 +345,7 @@ class RequestRouter:
                 return dict(status="error",message="Текстовый канал не найден")
             if data.get('paged'):
                 try:
-                    return dict(status='ok', updated_messages=self._message_refresh(current_user, data), **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id))
+                    return dict(status='ok', updated_messages=self._message_refresh(current_user, data), **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id, around_id=data.get('around_id')))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
             msgs = self.channels.get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200),room_id=room_id)
@@ -367,7 +367,7 @@ class RequestRouter:
                 if not self.channels._can_send_text(conn, channel_id, current_user):
                     return {"status": "error", "message": "У вас нет прав писать в этот канал"}
             try:
-                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'),room_id=room_id, attachment_id=data.get('attachment_id'))
+                ok = self.channels.save_channel_message(channel_id, current_user, text_msg, data.get('client_message_id'),room_id=room_id, attachment_id=data.get('attachment_id'), reply_to_id=data.get('reply_to_id'))
             except ValueError as error:
                 return dict(status='error', code='request_conflict', message=str(error))
             return {"status": "ok"} if ok else {"status": "error", "message": "Не удалось отправить сообщение"}

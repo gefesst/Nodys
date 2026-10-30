@@ -217,9 +217,15 @@ def _message_actions(c):
         c.execute(f'ALTER TABLE {table} ADD COLUMN deleted_at TEXT')
 
 
+def _message_replies(c):
+    for table in ('messages', 'channel_messages'):
+        c.execute(f'ALTER TABLE {table} ADD COLUMN reply_to_id INTEGER')
+        c.execute(f'CREATE INDEX idx_{table}_reply_to ON {table}(reply_to_id)')
+
+
 MIGRATIONS = {
     'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup), ('channel_rooms', _channel_rooms), ('steam_activity', _steam_activity)],
-    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages), ('attachments', _attachments), ('message_actions', _message_actions)],
+    'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages), ('attachments', _attachments), ('message_actions', _message_actions), ('message_replies', _message_replies)],
 }
 
 

@@ -20,6 +20,7 @@ class Message:
     attachment: object = None
     link_text: str | None = None
     edited: bool = False
+    reply: object = None
 
 
 class MessageModel(QAbstractListModel):
