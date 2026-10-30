@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtSvg import QSvgRenderer
 from .motion import reduced
-from .tokens import ACC, PRIMARY, FG, SUB, MUT, EDGE, GREEN, RED
+from .tokens import ACC, PRIMARY, FG, SUB, MUT, EDGE, GREEN, RED, BUTTON_BG, BUTTON_HOVER, BUTTON_PRESSED
 
 ASSETS = Path(__file__).parent / "assets"
 COMBO_ARROW_STYLE = (
@@ -343,8 +343,8 @@ class Button(QPushButton):
         filled_primary = self.primary and not flat
         # Selected flat navigation controls keep a dark surface under their
         # accent icon. Only filled primary actions use the light blue surface.
-        a = QColor(PRIMARY if filled_primary else "#454B78" if self.primary else "#383A40")
-        b = QColor("#4752C4" if filled_primary else "#4E5058")
+        a = QColor(PRIMARY if filled_primary else "#454B78" if self.primary else BUTTON_BG)
+        b = QColor("#4752C4" if filled_primary else BUTTON_BG if flat else BUTTON_HOVER)
         if self.property("danger"):
             a, b = QColor("#492D39"), QColor("#603748")
         t = self._hover
@@ -354,16 +354,15 @@ class Button(QPushButton):
             a.blueF() * (1 - t) + b.blueF() * t,
         )
         if self.isDown():
-            bg = QColor("#3D2530" if self.property("danger") else "#3C45A5" if filled_primary else "#35363C")
+            bg = QColor("#3D2530" if self.property("danger") else "#3C45A5" if filled_primary else BUTTON_PRESSED)
         if not self.isEnabled():
             bg = QColor("#2B2D31")
         if flat and not self.primary and not self._hover and not self.isDown():
             bg.setAlpha(0)
         keyboard_focus = self.hasFocus() and self._keyboard_focus
-        # Paint one contour in every state. A second inset focus rectangle
-        # produces mismatched corners when the ordinary border is still drawn.
-        p.setPen(QPen(QColor(ACC), 2) if keyboard_focus else
-                 Qt.NoPen if self.property("flat") else QPen(QColor("#41434A"), 1))
+        # Filled controls need no decorative border; keyboard focus keeps
+        # one contour without a second inset rectangle.
+        p.setPen(QPen(QColor(ACC), 2) if keyboard_focus else Qt.NoPen)
         p.setBrush(bg)
         inset = 1.0 if keyboard_focus else 0.5
         p.drawRoundedRect(QRectF(inset, inset, self.width() - 2*inset, self.height() - 2*inset),
@@ -422,7 +421,7 @@ class RoundCallButton(Button):
         danger=bool(self.property('danger'))
         off=self.property('off')=='true'
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else '#4E5058' if self._hover else '#383A40'))
+        painter.setBrush(QColor('#704151' if danger and self._hover else '#50313F' if danger else BUTTON_HOVER if self._hover else BUTTON_BG))
         painter.drawEllipse(QRectF(0,0,52,52))
         icon(painter,self.icon_name,QRectF(15,15,22,22),RED if danger or off else FG)
         if off and not self.icon_name.endswith("-off"):

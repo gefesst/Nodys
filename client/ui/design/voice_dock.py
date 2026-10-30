@@ -13,7 +13,7 @@ class VoiceDock(QFrame):
         self.divider=QFrame(self);self.divider.setGeometry(0,0,LIST_WIDTH-26,1)
         self.divider.setStyleSheet('background:#41434A;border:0;')
         card=QFrame(self);self.card=card;card.setObjectName('VoiceDock');card.setGeometry(0,20,LIST_WIDTH-26,112)
-        card.setStyleSheet('QFrame#VoiceDock {background:#2B2D31;border:1px solid #5865A0;border-radius:12px;}')
+        card.setStyleSheet('QFrame#VoiceDock {background:#383A40;border:1px solid transparent;border-radius:12px;}')
         layout=QVBoxLayout(card);layout.setContentsMargins(14,9,14,10);layout.setSpacing(2)
         self.title=Button('Голос','wave');self.title.setProperty('flat',True);self.title.setProperty('align_left',True)
         self.title.setMinimumHeight(0);self.title.setFixedHeight(24);self.title.clicked.connect(main.open_voice_surface)
