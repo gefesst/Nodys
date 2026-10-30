@@ -162,15 +162,21 @@ class ElidedLabel(QLabel):
 
 
 def paint_selection_indicator(painter, rect):
-    """A thin coloured left edge following both rounded card corners."""
+    """Solid accent with smoothly tapered ends along the rounded left edge."""
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
-    outer = QPainterPath()
-    outer.addRoundedRect(QRectF(rect), 11, 11)
-    inner = QPainterPath()
-    inner.addRoundedRect(QRectF(rect).adjusted(3, 3, -3, -3), 8, 8)
-    edge = outer.subtracted(inner)
-    painter.setClipRect(QRectF(rect.left(), rect.top(), 11, rect.height()), Qt.IntersectClip)
+    painter.translate(rect.left(), rect.top())
+    h = rect.height()
+    edge = QPainterPath()
+    edge.moveTo(11, 0)
+    edge.cubicTo(4.925, 0, 0, 4.925, 0, 11)
+    edge.lineTo(0, h - 11)
+    edge.cubicTo(0, h - 4.925, 4.925, h, 11, h)
+    # The inner curve meets the outer curve tangentially: no flat cutoffs.
+    edge.cubicTo(6.8, h, 2.5, h - 5.5, 2.5, h - 11)
+    edge.lineTo(2.5, 11)
+    edge.cubicTo(2.5, 5.5, 6.8, 0, 11, 0)
+    edge.closeSubpath()
     painter.fillPath(edge, QColor(PRIMARY))
     painter.restore()
 
