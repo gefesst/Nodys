@@ -526,6 +526,7 @@ class MessageDelegate(QStyledItemDelegate):
         self._avatar_helper.hide()
         self._avatars = OrderedDict()
         self.cache = OrderedDict()
+        self.image_cache = None
         self.paint_count = 0
         self.paint_ns = []
         self.fade_row = -1
@@ -549,7 +550,9 @@ class MessageDelegate(QStyledItemDelegate):
 
     def geometry(self, m, width):
         maxw = max(180, min(660, width - 114))
-        key = (m.text, maxw, m.group, m.divider, m.unread_count)
+        from shared.attachments import is_image_attachment
+        picture = is_image_attachment(m.attachment)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -586,6 +589,9 @@ class MessageDelegate(QStyledItemDelegate):
         layout.endLayout()
         bw = min(maxw, max(125, natural + 32))
         bh = y + 40
+        if picture:
+            bw = max(bw, min(maxw, 380))
+            bh += 220
         head = (27 if m.divider else 41) if m.group else 0
         head += 52 if m.divider else 0
         head += 40 if m.unread_count else 0
@@ -698,6 +704,29 @@ class MessageDelegate(QStyledItemDelegate):
             p,
             __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11),
         )
+        from shared.attachments import is_image_attachment
+        if is_image_attachment(m.attachment):
+            box = QRectF(x + 12, y + bh - 246, bw - 24, 212)
+            clip = QPainterPath()
+            clip.addRoundedRect(box, 9, 9)
+            p.save()
+            p.setClipPath(clip, Qt.IntersectClip)
+            p.fillRect(box, QColor('#15212C'))
+            image = self.image_cache.get(m.attachment) if self.image_cache else None
+            if image is not None:
+                size = image.size().scaled(box.size().toSize(), Qt.KeepAspectRatio)
+                target = QRectF(box.center().x()-size.width()/2, box.center().y()-size.height()/2, size.width(), size.height())
+                p.setRenderHint(QPainter.SmoothPixmapTransform)
+                p.drawImage(target, image)
+            else:
+                p.setPen(QColor(MUT))
+                p.setFont(font(12))
+                failed = self.image_cache and m.attachment['id'] in self.image_cache.errors
+                p.drawText(box.adjusted(12, 8, -12, -8), Qt.AlignCenter | Qt.TextWordWrap,
+                           'Не удалось показать изображение. Нажмите для просмотра.' if failed else 'Изображение…')
+                if self.image_cache:
+                    self.image_cache.ensure(m.attachment)
+            p.restore()
         draw_text(p, x + bw - (67 if own else 45), y + bh - 12, m.time, 11, MUT)
         if own:
             icon(

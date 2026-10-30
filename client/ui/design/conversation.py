@@ -84,6 +84,10 @@ class Conversation(QWidget):
             self.view, owner.ctx.login, lambda: owner.ctx.nickname or owner.ctx.login
         )
         self.view.setItemDelegate(self.delegate)
+        from .image_preview import ImageCache
+        self.image_cache = ImageCache(self)
+        self.delegate.image_cache = self.image_cache
+        self.image_cache.changed.connect(lambda _: self.view.viewport().update())
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.view.setSelectionMode(QAbstractItemView.NoSelection)
@@ -153,12 +157,12 @@ class Conversation(QWidget):
         attachment_layout.addWidget(self.remove_attachment_button)
         root.addWidget(self.attachment_strip)
         self.attachment_strip.hide()
-        self.view.clicked.connect(self.download_attachment)
+        self.view.clicked.connect(self.open_attachment)
         compose_frame = QFrame()
         self.compose_frame = compose_frame
         compose_frame.setObjectName("ComposerFrame")
         compose = QHBoxLayout(compose_frame)
-        compose.setContentsMargins(4, 4, 12, 4)
+        compose.setContentsMargins(12, 4, 12, 4)
         compose.setSpacing(8)
         self.editor = Composer()
         self.editor.setObjectName("MessageComposer")
@@ -289,6 +293,13 @@ class Conversation(QWidget):
             self.load("poll" if cached is not None or warmed is not None else "latest")
 
     def reset(self):
+        self.image_cache.reset()
+        viewer = getattr(self, "image_viewer", None)
+        if viewer is not None:
+            try:
+                viewer.reject()
+            except RuntimeError:
+                pass
         self.epoch += 1
         for transfer in self.transfers:
             transfer.cancel()
@@ -543,6 +554,9 @@ class Conversation(QWidget):
         attachment = row.get('attachment')
         if not attachment:
             return row['text']
+        from shared.attachments import is_image_attachment
+        if is_image_attachment(attachment):
+            return row['text'] or attachment['name']
         label = f"📎 {attachment['name']} · {size_label(attachment['size'])}\n↓ Скачать файл"
         return (row['text'] + '\n\n' if row['text'] else '') + label
 
@@ -578,12 +592,25 @@ class Conversation(QWidget):
             self.download_transfer = None
         self.download_strip.hide()
 
-    def download_attachment(self, index):
-        if self.download_transfer is not None:
-            return
-        message = index.data(Qt.UserRole)
-        meta = getattr(message, 'attachment', None)
+    def open_attachment(self, index):
+        meta = getattr(index.data(Qt.UserRole), 'attachment', None)
         if not meta:
+            return
+        from shared.attachments import is_image_attachment
+        if is_image_attachment(meta):
+            from .image_preview import ImageViewer
+            self.image_viewer = ImageViewer(self, meta)
+            self.image_viewer.show()
+        else:
+            self.download_metadata(meta)
+
+    def download_attachment(self, index):
+        meta = getattr(index.data(Qt.UserRole), 'attachment', None)
+        if meta:
+            self.download_metadata(meta)
+
+    def download_metadata(self, meta):
+        if self.download_transfer is not None:
             return
         from pathlib import Path
         from application.attachment_transfer import AttachmentTransfer

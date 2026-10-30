@@ -16,11 +16,12 @@ class AttachmentTransfer(QObject):
     _result = Signal(dict)
     _inflight = set()
 
-    def __init__(self, token, scope, path, metadata=None, upload_id=None):
+    def __init__(self, token, scope, path, metadata=None, upload_id=None, preview=False):
         super().__init__(QCoreApplication.instance())
         from settings import get_api_endpoint
         self.host, self.port = get_api_endpoint()
-        self.token, self.scope, self.path, self.metadata = token, dict(scope), Path(path), metadata
+        self.token, self.scope, self.path, self.metadata = token, dict(scope), Path(path) if path is not None else None, metadata
+        self.preview = preview
         self.upload_id = upload_id or uuid.uuid4().hex
         self.cancelled = threading.Event()
         self._result.connect(self._deliver, Qt.QueuedConnection)
@@ -47,7 +48,7 @@ class AttachmentTransfer(QObject):
 
     def _run(self):
         try:
-            result = self.download() if self.metadata else self.upload()
+            result = self.preview_image() if self.preview else self.download() if self.metadata else self.upload()
         except Exception as error:
             result = dict(status='error', message=str(error))
         self._result.emit(result)
@@ -108,3 +109,37 @@ class AttachmentTransfer(QObject):
         finally:
             if temporary:
                 os.unlink(temporary)
+
+    def preview_image(self):
+        """Decode a bounded raster in the worker; no save dialog or disk file."""
+        from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QSize
+        from PySide6.QtGui import QImageReader
+        meta = self.metadata
+        size = meta['size']
+        if not 0 < size <= MAX_FILE_SIZE:
+            raise ValueError('Некорректный размер изображения')
+        data = bytearray()
+        while len(data) < size:
+            response = self.request(action='download_attachment_chunk', attachment_id=meta['id'], offset=len(data))
+            block = base64.b64decode(response['chunk'], validate=True)
+            if not block or len(block) > CHUNK_SIZE or len(data)+len(block) > size:
+                raise ValueError('Некорректный блок изображения')
+            data.extend(block)
+        if hashlib.sha256(data).hexdigest() != meta['sha256']:
+            raise ValueError('Изображение повреждено при передаче')
+        buffer = QBuffer()
+        buffer.setData(QByteArray(bytes(data)))
+        buffer.open(QIODevice.ReadOnly)
+        reader = QImageReader(buffer)
+        reader.setDecideFormatFromContent(True)
+        reader.setAutoTransform(True)
+        dimensions = reader.size()
+        if (bytes(reader.format()) not in (b'png', b'jpeg', b'webp', b'gif', b'bmp')
+                or not 0 < dimensions.width()*dimensions.height() <= 40000000):
+            raise ValueError('Это изображение нельзя показать. Его можно сохранить как файл.')
+        if max(dimensions.width(), dimensions.height()) > 2048:
+            reader.setScaledSize(dimensions.scaled(QSize(2048, 2048), Qt.KeepAspectRatio))
+        image = reader.read()
+        if image.isNull():
+            raise ValueError('Не удалось прочитать изображение')
+        return dict(status='ok', image=image)

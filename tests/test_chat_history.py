@@ -163,6 +163,38 @@ class ConversationTests(unittest.TestCase):
             self.chat.remove_attachment()
             self.assertTrue(self.chat.attachment_strip.isHidden())
 
+    def test_inline_image_load_preserves_geometry_and_opens_viewer_without_save_dialog(self):
+        from unittest.mock import patch
+        from PySide6.QtGui import QImage, QColor
+        self.owner.resize(1280, 800)
+        self.owner.show()
+        self.chat.resize(800, 600)
+        self.chat.show()
+        self.chat.select('bob', 'Bob')
+        response = self.response(count=1)
+        meta = dict(id='d'*32, name='photo.png', size=300, sha256='e'*64)
+        response['messages'][0]['attachment'] = meta
+        self.requests[-1][1](response)
+        message = self.chat.model.rows[0]
+        before = self.chat.delegate.geometry(message, 800)
+        image = QImage(640, 360, QImage.Format_RGB32)
+        image.fill(QColor('#89AAFF'))
+        self.chat.image_cache.images[meta['id']] = image
+        after = self.chat.delegate.geometry(message, 800)
+        self.assertEqual(before[1:], after[1:])
+        self.assertEqual(self.chat.compose_frame.layout().contentsMargins().left(),
+                         self.chat.compose_frame.layout().contentsMargins().right())
+        with patch('ui.design.conversation.QFileDialog.getSaveFileName') as save:
+            self.chat.open_attachment(self.chat.model.index(0))
+            self.app.processEvents()
+            self.assertTrue(self.chat.image_viewer.isVisible())
+            self.assertIs(self.chat.image_viewer.canvas.image, image)
+            self.owner.resize(1120, 620)
+            self.app.processEvents()
+            self.assertLessEqual(self.chat.image_viewer.width(), self.owner.width())
+            self.chat.image_viewer.reject()
+            save.assert_not_called()
+
     def test_attachment_only_send_keeps_target_and_draft_on_failure(self):
         self.select('bob')
         self.chat.attachment_drafts['bob'] = dict(id='a'*32, name='test.png', size=3)
@@ -188,7 +220,7 @@ class ConversationTests(unittest.TestCase):
         response['messages'][0]['attachment'] = dict(id='b'*32, name='image.png', size=200, sha256='c'*64)
         self.requests[-1][1](response)
         self.assertEqual(self.chat.model.rows[0].attachment['name'], 'image.png')
-        self.assertIn('Скачать файл', self.chat.model.rows[0].text)
+        self.assertEqual(self.chat.model.rows[0].text, 'image.png')
         self.chat.can_send = False
         self.chat.update_controls()
         self.assertFalse(self.chat.attach_button.isEnabled())

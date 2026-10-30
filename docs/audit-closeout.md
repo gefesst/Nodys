@@ -246,3 +246,10 @@ UI-сценарий с синтетическим аудио и реальным
 - Regressions cover unpublished/unauthorized downloads, channel leave, wrong sender, incomplete/corrupt blocks, quotas/unsafe names, retry identity, dialog switching, permission-disabled picker, metadata rendering and image selection/removal.
 - Complete suite: 271 passed before final image-preview regression/download progress strip. Final affected conversation/attachment suite: 30 passed. Undefined-name lint and diff checks passed.
 - Native macOS inspection confirmed paperclip in conversation accessibility and text-room screenshot. No user-owned files sent during testing. See docs/attachments.md.
+
+## 2026-10-30 — inline images and composer symmetry
+- Raster attachments now render inside DM/channel message bubbles with a fixed-height preview slot. Arrival repaints the viewport without rebuilding rows or changing scroll geometry.
+- Clicking opens a bounded in-window viewer with aspect-preserving resize, close/Escape and optional Save. No mandatory filesystem download or save dialog; original download remains available from the context menu.
+- Background authenticated transfer verifies bytes/hash, raster content and pixel bounds. Two concurrent requests, bounded queue and 64 MiB memory cache; reset cancels pending work and clears images. Large previews decode to at most 2048 pixels per side.
+- Composer margins are now symmetric: 12 px left/right, 4 px top/bottom; both buttons remain 38x38.
+- Validation: complete 273-test suite passed, real TCP upload/preview decode preserves expected pixels, UI regression confirms fixed row geometry, viewer resizing and no save dialog. Final focus adjustment passed the targeted viewer test. Rendered fixtures inspected in outputs/inline-images/. GIF preview is static; formats outside the raster allowlist remain downloadable files.

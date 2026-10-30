@@ -143,6 +143,18 @@ class AttachmentTransportTests(fixtures.VoiceFixture, unittest.TestCase):
             result = self.server.handle_request(dict(action='send_message', token=self.tokens['alice'], to_user='bob', text='', attachment_id=metadata['id']))
             self.assertEqual(result['status'], 'ok', result)
             run(AttachmentTransfer(self.tokens['bob'], {}, target, metadata))
+            from PySide6.QtGui import QImage, QColor
+            picture = Path(self.folder.name)/'picture.png'
+            image = QImage(640, 360, QImage.Format_RGB32)
+            image.fill(QColor('#89AAFF'))
+            self.assertTrue(image.save(str(picture)))
+            meta = run(AttachmentTransfer(self.tokens['alice'], {'to_user':'bob'}, picture))['attachment']
+            sent = self.server.handle_request(dict(action='send_message', token=self.tokens['alice'], to_user='bob', text='', attachment_id=meta['id']))
+            self.assertEqual(sent['status'], 'ok', sent)
+            preview = run(AttachmentTransfer(self.tokens['bob'], {}, None, meta, preview=True))
+            self.assertEqual(preview['image'].size(), image.size())
+            self.assertEqual(preview['image'].pixelColor(0, 0), image.pixelColor(0, 0))
+
         self.assertEqual(target.read_bytes(), data)
         self.assertTrue(ticks, 'GUI event loop should remain responsive')
         self.assertFalse(list(target.parent.glob('.noda-download-*')))
