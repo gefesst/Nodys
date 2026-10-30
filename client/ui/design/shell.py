@@ -119,7 +119,7 @@ class NavButton(Button):
             p.setPen(Qt.NoPen)
             p.setBrush(color)
             p.drawRoundedRect(QRectF(4, 0, 56, 68), 14, 14)
-        icon(p, self.icon_name, QRectF(23, 10, 18, 18), ACC if active else SUB)
+        icon(p, self.icon_name, QRectF(20, 7, 24, 24), ACC if active else SUB)
         p.setPen(QColor(FG if active else SUB))
         p.setFont(font(11, True))
         p.drawText(QRectF(0, 38, 64, 25), Qt.AlignCenter, self.text().split(" (")[0])
