@@ -9,7 +9,7 @@ except ImportError:
     from storage.database import unit_of_work
     from domain.authorization import session_valid
 
-CHAT_ACTIONS = {'send_message', 'send_channel_message'}
+CHAT_ACTIONS = {'edit_message', 'delete_message', 'send_message', 'send_channel_message'}
 USER_ACTIONS = {'create_channel_room','rename_channel_room','delete_channel','update_profile','create_channel','join_channel','send_channel_invite','respond_channel_invite',
                 'update_channel_settings','regenerate_channel_code','set_channel_member_role',
                 'remove_channel_member','leave_channel','send_friend_request',

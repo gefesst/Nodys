@@ -19,6 +19,7 @@ class Message:
     avatar: str = ""
     attachment: object = None
     link_text: str | None = None
+    edited: bool = False
 
 
 class MessageModel(QAbstractListModel):
@@ -63,7 +64,7 @@ class MessageModel(QAbstractListModel):
     def sync(self, rows):
         # Common polling response: append only; read receipts update individual rows.
         if len(rows) >= len(self.rows) and all(
-            a.id == b.id and a.text == b.text and a.group == b.group and a.unread_count == b.unread_count
+            a.id == b.id and a.group == b.group and a.unread_count == b.unread_count
             for a, b in zip(self.rows, rows)
         ):
             for i, m in enumerate(rows[: len(self.rows)]):

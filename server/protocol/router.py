@@ -31,6 +31,15 @@ class RequestRouter:
     calls: CallService
     events: EventService
 
+    def _message_refresh(self, user, data):
+        try:
+            from ..services.message_actions import refresh
+        except ImportError:
+            from services.message_actions import refresh
+        if data.get('action') == 'get_messages':
+            data = {k: v for k, v in data.items() if k not in ('channel_id', 'room_id')}
+        return refresh(self, user, data)
+
     def dispatch(self, data: Dict[str, Any]) -> Dict[str, Any]:
         try:
             validate_request(data)
@@ -212,6 +221,16 @@ class RequestRouter:
             ok = self.friends.remove_friend(current_user, friend_login)
             return {"status": "ok"} if ok else {"status": "error", "message": "Друг не найден или уже удалён"}
 
+        if action in ('edit_message', 'delete_message'):
+            try:
+                from ..services.message_actions import mutate
+            except ImportError:
+                from services.message_actions import mutate
+            try:
+                return mutate(self, current_user, data)
+            except ValueError as error:
+                return dict(status='error', message=str(error))
+
         # Chat
         if action == "send_message":
             to_user = (data.get("to_user") or "").strip()
@@ -235,7 +254,7 @@ class RequestRouter:
                 return {"status": "error", "message": "Не указан собеседник"}
             if data.get('paged'):
                 try:
-                    return dict(status='ok', **self.messages.get_page(current_user, other, data.get('limit',80), data.get('before_id'), data.get('after_id')))
+                    return dict(status='ok', updated_messages=self._message_refresh(current_user, dict(data, to_user=other)), **self.messages.get_page(current_user, other, data.get('limit',80), data.get('before_id'), data.get('after_id')))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
             msgs = self.messages.get_messages(current_user, other, limit=int(data.get("limit", 50) or 50))
@@ -326,7 +345,7 @@ class RequestRouter:
                 return dict(status="error",message="Текстовый канал не найден")
             if data.get('paged'):
                 try:
-                    return dict(status='ok', **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id))
+                    return dict(status='ok', updated_messages=self._message_refresh(current_user, data), **self.channels.get_message_page(channel_id, data.get('limit',80), data.get('before_id'), data.get('after_id'), room_id=room_id))
                 except ValueError as error:
                     return dict(status='error', message=str(error))
             msgs = self.channels.get_channel_messages(channel_id, limit=int(data.get("limit", 200) or 200),room_id=room_id)

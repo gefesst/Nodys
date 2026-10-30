@@ -552,7 +552,7 @@ class MessageDelegate(QStyledItemDelegate):
         maxw = max(180, min(660, width - 114))
         from shared.attachments import is_image_attachment
         picture = is_image_attachment(m.attachment)
-        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -589,7 +589,7 @@ class MessageDelegate(QStyledItemDelegate):
             y += max(23, line.height())
             natural = max(natural, line.naturalTextWidth())
         layout.endLayout()
-        bw = min(maxw, max(125, natural + 32))
+        bw = min(maxw, max(210 if m.edited else 125, natural + 32))
         bh = y + 40
         if picture:
             bw = max(bw, min(maxw, 380))
@@ -742,6 +742,8 @@ class MessageDelegate(QStyledItemDelegate):
                 if self.image_cache:
                     self.image_cache.ensure(m.attachment)
             p.restore()
+        if m.edited:
+            draw_text(p, x + 16, y + bh - 12, "изменено", 11, MUT)
         draw_text(p, x + bw - (67 if own else 45), y + bh - 12, m.time, 11, MUT)
         if own:
             icon(

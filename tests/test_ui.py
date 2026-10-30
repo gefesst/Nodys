@@ -32,6 +32,67 @@ class UiTests(unittest.TestCase):
         self.page = ChannelsPage()
         self.addCleanup(self.page.close)
 
+    def test_message_edit_preserves_draft_and_ignores_stale_session_reply(self):
+        c = self.page.conversation
+        calls = []
+        c.request = lambda data, callback: calls.append((data, callback))
+        c.select((1, 0))
+        row = dict(id=1, from_user='alice', text='original', revision=0, created_at='2026-10-30 12:00:00')
+        c.apply([row], 'latest', {})
+        c.editor.setPlainText('draft')
+        c.message_actions.begin(row)
+        c.editor.setPlainText('edited')
+        c.send()
+        request, reply = calls[-1]
+        self.assertEqual(request['action'], 'edit_message')
+        self.assertEqual(request['expected_revision'], 0)
+        reply(dict(status='ok', message=dict(row, text='edited', revision=1, edited_at='now')))
+        self.assertEqual(c.rows[0]['text'], 'edited')
+        self.assertEqual(c.editor.toPlainText(), 'draft')
+        self.assertTrue(c.model.rows[0].edited)
+        c.message_actions.begin(c.rows[0])
+        c.editor.setPlainText('late edit')
+        c.send()
+        stale = calls[-1][1]
+        c.reset()
+        c.select((2, 0))
+        c.apply([row], 'latest', {})
+        c.message_actions.begin(row)
+        c.editor.setPlainText('new session edit')
+        c.send()
+        stale(dict(status='ok', message=dict(row, text='late edit', revision=2)))
+        self.assertTrue(c.message_actions.pending)
+        self.assertEqual(c.editor.toPlainText(), 'new session edit')
+
+    def test_message_edit_failure_switch_and_refresh_do_not_reset_history(self):
+        c = self.page.conversation
+        calls = []
+        c.request = lambda data, callback: calls.append((data, callback))
+        c.select((1, 0))
+        row = dict(id=1, from_user='alice', text='original', revision=0, created_at='2026-10-30 12:00:00')
+        c.apply([row], 'latest', {})
+        c.editor.setPlainText('draft')
+        c.message_actions.begin(row)
+        c.editor.setPlainText('unsaved edit')
+        c.send()
+        calls[-1][1](dict(status='error', message='offline'))
+        self.assertEqual(c.editor.toPlainText(), 'unsaved edit')
+        self.assertIsNotNone(c.message_actions.edit)
+        c.select((2, 0))
+        self.assertEqual(c.drafts[(1, 0)], 'draft')
+        self.assertEqual(c.editor.toPlainText(), '')
+        c.select((1, 0))
+        c.apply([row], 'latest', {})
+        resets = []
+        c.model.modelReset.connect(lambda: resets.append(True))
+        c.refresh_rows([dict(row, text='changed', revision=1, edited_at='now')])
+        self.assertEqual(c.rows[0]['text'], 'changed')
+        c.refresh_rows([row])
+        self.assertEqual(c.rows[0]['text'], 'changed')
+        c.refresh_rows([dict(row, text='', revision=2, deleted_at='now')])
+        self.assertEqual(c.model.rows[0].text, 'Сообщение удалено')
+        self.assertFalse(resets)
+
     def test_user_controlled_labels_are_literal_text(self):
         from PySide6.QtCore import Qt
         from PySide6.QtWidgets import QLabel

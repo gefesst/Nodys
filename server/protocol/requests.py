@@ -1,6 +1,6 @@
 """Bounded flat request envelopes before DB or password work."""
-ACTIONS = frozenset({'begin_attachment','upload_attachment_chunk','download_attachment_chunk','get_channel_rooms','create_channel_room','rename_channel_room','get_messages', 'decline_call', 'heartbeat', 'set_channel_voice_presence', 'send_message', 'logout', 'register', 'get_friends', 'accept_friend_request', 'get_my_channel_invites', 'set_channel_member_role', 'voice_ticket', 'join_channel', 'send_channel_message', 'leave_channel', 'mark_chat_read', 'leave_channel_voice', 'get_channel_messages', 'accept_call', 'find_user', 'release_call_state', 'presence_offline', 'get_channel_voice_participants', 'update_channel_settings', 'login', 'status', 'end_call', 'regenerate_channel_code', 'send_friend_request', 'decline_friend_request', 'get_channel_details', 'update_profile', 'poll_events', 'get_my_channels', 'respond_channel_invite', 'send_channel_invite', 'create_channel', 'delete_channel', 'get_unread_counts', 'resume_session', 'remove_friend', 'remove_channel_member', 'call_user', 'get_friend_requests'})
-TEXT_LIMITS = {'steam_nickname':128, 'steam_game':128, 'steam_app_id':16,'attachment_id':32, 'filename':255, 'sha256':64, 'chunk':65536,
+ACTIONS = frozenset({'edit_message','delete_message','begin_attachment','upload_attachment_chunk','download_attachment_chunk','get_channel_rooms','create_channel_room','rename_channel_room','get_messages', 'decline_call', 'heartbeat', 'set_channel_voice_presence', 'send_message', 'logout', 'register', 'get_friends', 'accept_friend_request', 'get_my_channel_invites', 'set_channel_member_role', 'voice_ticket', 'join_channel', 'send_channel_message', 'leave_channel', 'mark_chat_read', 'leave_channel_voice', 'get_channel_messages', 'accept_call', 'find_user', 'release_call_state', 'presence_offline', 'get_channel_voice_participants', 'update_channel_settings', 'login', 'status', 'end_call', 'regenerate_channel_code', 'send_friend_request', 'decline_friend_request', 'get_channel_details', 'update_profile', 'poll_events', 'get_my_channels', 'respond_channel_invite', 'send_channel_invite', 'create_channel', 'delete_channel', 'get_unread_counts', 'resume_session', 'remove_friend', 'remove_channel_member', 'call_user', 'get_friend_requests'})
+TEXT_LIMITS = {'visible_versions':10080,'steam_nickname':128, 'steam_game':128, 'steam_app_id':16,'attachment_id':32, 'filename':255, 'sha256':64, 'chunk':65536,
     'kind':16, 'action':64, 'login':128, 'target_login':128, 'friend_login':128,
     'from_user':128, 'to_user':128, 'with_user':128, 'peer':128,
     'client_message_id':64, 'call_id':128, 'current_password':1024, 'request_id':64, 'password':1024, 'nickname':128, 'name':256, 'avatar':150000,
@@ -8,7 +8,7 @@ TEXT_LIMITS = {'steam_nickname':128, 'steam_game':128, 'steam_app_id':16,'attach
     'role':32, 'text_min_role':32, 'voice_min_role':32,
     'text':8000, 'message':8000,
 }
-INTEGER_LIMITS = {'activity_sequence':(0,2**63-1),'file_size':(1,10485760),'offset':(0,10485760),'room_id':(0,2**31-1),'through_id':(1,2**63-1), 'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
+INTEGER_LIMITS = {'message_id':(1,2**63-1),'expected_revision':(0,2**63-1),'activity_sequence':(0,2**63-1),'file_size':(1,10485760),'offset':(0,10485760),'room_id':(0,2**31-1),'through_id':(1,2**63-1), 'before_id':(1,2**63-1), 'after_id':(1,2**63-1), 'channel_id':(1,2**63-1), 'invite_id':(1,2**63-1),
                   'sequence':(0,2**63-1), 'after_event_id':(0,2**63-1), 'limit':(1,500)}
 
 

@@ -35,7 +35,7 @@ class MessageRepository:
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute(
-                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read, attachment_id
+                """SELECT id, from_user, to_user, text, timestamp AS created_at, is_read, attachment_id, revision, edited_at, deleted_at
                    FROM messages
                    WHERE (from_user=? AND to_user=?) OR (from_user=? AND to_user=?)
                    ORDER BY timestamp DESC, id DESC
@@ -67,7 +67,7 @@ class MessageRepository:
             cur.execute(
                 """SELECT from_user, COUNT(*)
                    FROM messages
-                   WHERE to_user=? AND is_read=0
+                   WHERE to_user=? AND is_read=0 AND deleted_at IS NULL
                    GROUP BY from_user""",
                 (current_user,),
             )
@@ -82,7 +82,7 @@ class MessageRepository:
                        UNION ALL
                        SELECT from_user AS peer, id FROM messages WHERE to_user=?
                    ), latest AS (SELECT peer, MAX(id) AS id FROM owned GROUP BY peer)
-                   SELECT latest.peer, m.from_user, CASE WHEN m.text='' AND m.attachment_id IS NOT NULL THEN '📎 ' || COALESCE((SELECT name FROM attachments WHERE id=m.attachment_id),'Файл') ELSE substr(m.text,1,160) END, m.timestamp
+                   SELECT latest.peer, m.from_user, CASE WHEN m.deleted_at IS NOT NULL THEN 'Сообщение удалено' WHEN m.text='' AND m.attachment_id IS NOT NULL THEN '📎 ' || COALESCE((SELECT name FROM attachments WHERE id=m.attachment_id),'Файл') ELSE substr(m.text,1,160) END, m.timestamp
                    FROM latest JOIN messages m ON m.id=latest.id""",
                 (current_user, current_user),
             )

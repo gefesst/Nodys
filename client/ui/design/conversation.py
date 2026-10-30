@@ -193,10 +193,12 @@ class Conversation(QWidget):
         for target in self._drop_targets:
             target.setAcceptDrops(True)
             target.installEventFilter(self)
+        from .message_actions import MessageActions
+        self.message_actions = MessageActions(self)
         self.update_controls()
 
     def edited(self):
-        if not self._restoring and self.identity is not None:
+        if not self._restoring and self.identity is not None and not self.message_actions.edit:
             self.draft_versions[self.identity] = (
                 self.draft_versions.get(self.identity, 0) + 1
             )
@@ -207,7 +209,7 @@ class Conversation(QWidget):
         sender(data, callback)
 
     def remember_draft(self):
-        if self.identity is not None:
+        if self.identity is not None and not self.message_actions.edit:
             self.drafts[self.identity] = self.editor.toPlainText()
 
     def prefetch(self, peers):
@@ -239,6 +241,7 @@ class Conversation(QWidget):
             self.request(data,done)
 
     def select(self, identity, name="", can_send=True):
+        self.message_actions.cancel()
         self.remember_draft()
         if self.identity is not None and self.history_loaded:
             self.history_cache[self.identity] = dict(
@@ -298,6 +301,7 @@ class Conversation(QWidget):
             self.load("poll" if cached is not None or warmed is not None else "latest")
 
     def reset(self):
+        self.message_actions.reset()
         self.image_cache.reset()
         viewer = getattr(self, "image_viewer", None)
         if viewer is not None:
@@ -342,6 +346,8 @@ class Conversation(QWidget):
         action = "get_channel_messages" if self.channel else "get_messages"
         data = self.payload(action)
         data.update(paged=True, limit=self.PAGE)
+        if self.rows:
+            data["visible_versions"] = ",".join(f"{row['id']}:{row.get('revision', 0)}" for row in self.rows)
         if direction == "older" and self.rows:
             data["before_id"] = self.rows[0]["id"]
         elif direction == "newer" and self.rows:
@@ -366,6 +372,7 @@ class Conversation(QWidget):
             self.mark_connected()
             self.history_loaded = True
             self.history_error = False
+            self.refresh_rows(response.get("updated_messages", []))
             incoming = response.get("messages", [])
             if direction == "poll" and not self.at_latest:
                 if incoming and (
@@ -391,10 +398,13 @@ class Conversation(QWidget):
         self.request(data, done)
 
     def eventFilter(self, watched, event):
+        if watched is getattr(self, "editor", None) and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape and self.message_actions.edit:
+            self.message_actions.cancel()
+            return True
         if watched in getattr(self, '_drop_targets', ()) and event.type() in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
             from .attachment_input import is_attachment
             if is_attachment(event.mimeData()):
-                allowed = self.identity is not None and self.can_send and self.identity not in self.pending
+                allowed = self.identity is not None and self.can_send and self.identity not in self.pending and not self.message_actions.edit
                 if allowed:
                     event.setDropAction(Qt.CopyAction)
                     event.accept()
@@ -453,6 +463,13 @@ class Conversation(QWidget):
         elif fallback is not None:
             bar.setValue(fallback)
 
+    def refresh_rows(self, updated):
+        known = {row['id']: row for row in self.rows}
+        changed = [row for row in updated if row['id'] in known and row != known[row['id']]
+                   and row.get('revision', 0) >= known[row['id']].get('revision', 0)]
+        if changed:
+            self.apply(changed, 'refresh', dict(has_newer=self.newer))
+
     def apply(self, incoming, direction, response):
         anchor = self.anchor()
         bar = self.view.verticalScrollBar()
@@ -479,7 +496,8 @@ class Conversation(QWidget):
             self.newer = response.get("has_newer", False)
         else:
             merged = {r["id"]: r for r in self.rows}
-            merged.update({r["id"]: r for r in incoming})
+            merged.update({r["id"]: r for r in incoming
+                           if r.get("revision", 0) >= merged.get(r["id"], {}).get("revision", 0)})
             rows = sorted(
                 merged.values(), key=lambda r: (r.get("created_at", ""), r["id"])
             )
@@ -499,7 +517,7 @@ class Conversation(QWidget):
         self.at_latest = not self.newer
         if direction == "latest" and not self.channel and not self.unread_initialized:
             self.unread_initialized = True
-            unread = [row for row in self.rows if row['from_user'] != self.owner.ctx.login and not row.get('is_read')]
+            unread = [row for row in self.rows if row['from_user'] != self.owner.ctx.login and not row.get('is_read') and not row.get('deleted_at')]
             self.unread_boundary = unread[0]['id'] if unread else None
             self.unread_count = len(unread)
         rendered = []
@@ -549,6 +567,7 @@ class Conversation(QWidget):
                     getattr(self.owner.ctx, "avatar", "") if own else person.get("avatar") or row.get("avatar", ""),
                     row.get("attachment"),
                     row["text"],
+                    bool(row.get("edited_at")) and not row.get("deleted_at"),
                 )
             )
             previous_author, previous_date = author, date
@@ -587,6 +606,8 @@ class Conversation(QWidget):
     @staticmethod
     def message_display_text(row):
         from shared.attachments import size_label
+        if row.get('deleted_at'):
+            return 'Сообщение удалено'
         attachment = row.get('attachment')
         if not attachment:
             return row['text']
@@ -597,7 +618,7 @@ class Conversation(QWidget):
         return (row['text'] + '\n\n' if row['text'] else '') + label
 
     def choose_attachment(self):
-        if self.identity is None or not self.can_send or self.identity in self.pending:
+        if self.identity is None or not self.can_send or self.identity in self.pending or self.message_actions.edit:
             return
         path, _ = QFileDialog.getOpenFileName(self, 'Прикрепить файл', '', 'Все файлы (*)')
         if not path:
@@ -605,7 +626,7 @@ class Conversation(QWidget):
         self.attach_file(path)
 
     def accept_attachment_input(self, mime):
-        if self.identity is None or not self.can_send or self.identity in self.pending:
+        if self.identity is None or not self.can_send or self.identity in self.pending or self.message_actions.edit:
             return
         from .attachment_input import local_files, ClipboardFiles
         files = local_files(mime)
@@ -635,7 +656,7 @@ class Conversation(QWidget):
     def attach_file(self, path, temporary=False):
         from pathlib import Path
         from shared.attachments import MAX_FILE_SIZE
-        if self.identity is None or not self.can_send or self.identity in self.pending:
+        if self.identity is None or not self.can_send or self.identity in self.pending or self.message_actions.edit:
             return False
         try:
             file = Path(path)
@@ -726,9 +747,9 @@ class Conversation(QWidget):
             self.identity is not None
             and self.can_send
         )
-        self.attach_button.setEnabled(self.identity is not None and self.can_send and self.identity not in self.pending)
+        self.attach_button.setEnabled(self.identity is not None and self.can_send and self.identity not in self.pending and not self.message_actions.edit)
         draft = self.attachment_drafts.get(self.identity)
-        self.attachment_strip.setVisible(bool(draft))
+        self.attachment_strip.setVisible(bool(draft) and not self.message_actions.edit)
         path = draft.get('path') if draft else None
         if getattr(self, '_preview_path', None) != path:
             self._preview_path = path
@@ -787,6 +808,9 @@ class Conversation(QWidget):
             self.recovery_timer.start(4000)
 
     def send(self):
+        if self.message_actions.edit:
+            self.message_actions.submit()
+            return
         text = self.editor.toPlainText().strip()
         if (
             (not text and self.identity not in self.attachment_drafts)
@@ -897,7 +921,14 @@ class Conversation(QWidget):
         index = self.view.indexAt(pos)
         if not index.isValid():
             return
-        text = index.data()
+        message = index.data(Qt.UserRole)
+        row = next((r.copy() for r in self.rows if r["id"] == message.id), None)
+        if not row or row.get("deleted_at"):
+            return
+        identity, epoch = self.identity, self.epoch
+        def current():
+            return self.identity == identity and self.epoch == epoch
+        text = row["text"]
         from .action_menu import ActionMenu
         menu = ActionMenu(self)
         if getattr(index.data(Qt.UserRole), 'attachment', None):
@@ -905,5 +936,9 @@ class Conversation(QWidget):
         menu.addAction(
             "Копировать текст", lambda: QApplication.clipboard().setText(text)
         )
+        if row['from_user'] == self.owner.ctx.login:
+            if self.can_send:
+                menu.addAction('Редактировать', lambda: self.message_actions.begin(row) if current() else None)
+            menu.addAction('Удалить', lambda: self.message_actions.ask_delete(row) if current() else None)
         menu.popup(self.view.viewport().mapToGlobal(pos))
         self._menu = menu

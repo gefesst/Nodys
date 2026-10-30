@@ -295,7 +295,7 @@ class ChannelService:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
-                SELECT id, channel_id, from_user, text, timestamp AS created_at, attachment_id
+                SELECT id, channel_id, from_user, text, timestamp AS created_at, attachment_id, revision, edited_at, deleted_at
                 FROM channel_messages
                 WHERE channel_id=? AND room_id=?
                 ORDER BY id DESC
