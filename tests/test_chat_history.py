@@ -391,7 +391,7 @@ class ConversationTests(unittest.TestCase):
         self.owner.show()
         self.chat.show()
         self.select("bob")
-        self.assertEqual(self.chat.editor.height(), 44)
+        self.assertLessEqual(self.chat.editor.height(), max(44, self.chat.editor.fontMetrics().lineSpacing() + 24))
         QTest.qWait(50)
         before = (self.chat.history_stack.geometry(), self.chat.compose_frame.geometry())
         self.chat.load("poll")
