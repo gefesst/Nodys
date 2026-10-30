@@ -168,6 +168,7 @@ class Conversation(QWidget):
         self.editor.setObjectName("MessageComposer")
         self.editor.setAccessibleName("Текст сообщения")
         self.editor.submit.connect(self.send)
+        self.editor.attachment_input.connect(self.accept_attachment_input)
         self.editor.textChanged.connect(self.edited)
         self.send_button = Button("", "send", True)
         self.send_button.setAccessibleName("Отправить сообщение")
@@ -188,6 +189,11 @@ class Conversation(QWidget):
         self.send_status.setStyleSheet("QLabel {font-size:11px;}")
         self.send_status.setWordWrap(True)
         root.addWidget(self.send_status)
+        self._drop_targets = (self, self.view.viewport(), self.editor.viewport(), self.editor,
+                              self.compose_frame, self.empty_state, self.loading_state, self.error_state)
+        for target in self._drop_targets:
+            target.setAcceptDrops(True)
+            target.installEventFilter(self)
         self.update_controls()
 
     def edited(self):
@@ -306,7 +312,8 @@ class Conversation(QWidget):
         self.transfers.clear()
         self.download_transfer = None
         self.download_strip.hide()
-        self.attachment_drafts.clear()
+        for identity in list(self.attachment_drafts):
+            self.discard_attachment(identity)
         self.drafts.clear()
         self.draft_versions.clear()
         self.pending.clear()
@@ -385,6 +392,35 @@ class Conversation(QWidget):
         self.request(data, done)
 
     def eventFilter(self, watched, event):
+        if watched in getattr(self, '_drop_targets', ()) and event.type() in (QEvent.DragEnter, QEvent.DragMove, QEvent.Drop):
+            from .attachment_input import is_attachment
+            if is_attachment(event.mimeData()):
+                allowed = self.identity is not None and self.can_send and self.identity not in self.pending
+                if allowed:
+                    event.setDropAction(Qt.CopyAction)
+                    event.accept()
+                    if event.type() == QEvent.Drop:
+                        self.accept_attachment_input(event.mimeData())
+                else:
+                    event.ignore()
+                return True
+        if watched is self.view.viewport() and event.type() == QEvent.MouseButtonPress:
+            self._link_press = event.position().toPoint() if event.button() == Qt.LeftButton else None
+        if watched is self.view.viewport() and event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            press = getattr(self, '_link_press', None)
+            self._link_press = None
+            point = event.position().toPoint()
+            if press is not None and (press-point).manhattanLength() <= QApplication.startDragDistance():
+                index = self.view.indexAt(point)
+                if index.isValid():
+                    from PySide6.QtCore import QPointF
+                    url = self.delegate.link_at(index.data(Qt.UserRole), self.view.viewport().width(), QPointF(point-self.view.visualRect(index).topLeft()))
+                    if url is not None:
+                        from PySide6.QtGui import QDesktopServices
+                        if not QDesktopServices.openUrl(url):
+                            self.send_error.setText('Не удалось открыть браузер')
+                        event.accept()
+                        return True
         if watched is self.view.viewport() and event.type()==QEvent.Resize:
             self.new_messages_button.move(max(0,watched.width()-260),max(0,watched.height()-60))
         return super().eventFilter(watched,event)
@@ -513,6 +549,7 @@ class Conversation(QWidget):
                     self.unread_count if row["id"] == self.unread_boundary else 0,
                     getattr(self.owner.ctx, "avatar", "") if own else person.get("avatar") or row.get("avatar", ""),
                     row.get("attachment"),
+                    row["text"],
                 )
             )
             previous_author, previous_date = author, date
@@ -563,25 +600,62 @@ class Conversation(QWidget):
     def choose_attachment(self):
         if self.identity is None or not self.can_send or self.identity in self.pending:
             return
-        from pathlib import Path
-        from shared.attachments import MAX_FILE_SIZE
         path, _ = QFileDialog.getOpenFileName(self, 'Прикрепить файл', '', 'Все файлы (*)')
         if not path:
             return
+        self.attach_file(path)
+
+    def accept_attachment_input(self, mime):
+        if self.identity is None or not self.can_send or self.identity in self.pending:
+            return
+        from .attachment_input import local_files, ClipboardFiles
+        files = local_files(mime)
+        if files:
+            if len(files) != 1:
+                self.send_error.setText('Прикрепляйте по одному файлу к сообщению')
+                return
+            self.attach_file(files[0])
+        elif mime.hasImage():
+            try:
+                if not hasattr(self, '_clipboard_files'):
+                    self._clipboard_files = ClipboardFiles()
+                path = self._clipboard_files.image_path(mime)
+                if not self.attach_file(path, temporary=True):
+                    self._clipboard_files.remove(path)
+            except (ValueError, OSError) as error:
+                self.send_error.setText(str(error))
+
+    def discard_attachment(self, identity):
+        draft = self.attachment_drafts.pop(identity, None)
+        if draft and draft.get('temporary'):
+            try:
+                self._clipboard_files.remove(draft['path'])
+            except OSError:
+                pass
+
+    def attach_file(self, path, temporary=False):
+        from pathlib import Path
+        from shared.attachments import MAX_FILE_SIZE
+        if self.identity is None or not self.can_send or self.identity in self.pending:
+            return False
         try:
             file = Path(path)
             size = file.stat().st_size
             if not file.is_file() or not 0 < size <= MAX_FILE_SIZE:
                 raise ValueError('Выберите файл от 1 байта до 10 МБ')
-            self.attachment_drafts[self.identity] = dict(path=path, name=file.name, size=size)
+            self.discard_attachment(self.identity)
+            self.attachment_drafts[self.identity] = dict(path=path, name=file.name, size=size, temporary=temporary)
             self.update_controls()
             self.editor.setFocus(Qt.OtherFocusReason)
+            self.send_error.clear()
+            return True
         except (OSError, ValueError) as error:
             self.send_error.setText(str(error))
+            return False
 
     def remove_attachment(self):
         if self.identity not in self.pending:
-            self.attachment_drafts.pop(self.identity, None)
+            self.discard_attachment(self.identity)
             self.update_controls()
             self.editor.setFocus(Qt.OtherFocusReason)
 
@@ -784,7 +858,7 @@ class Conversation(QWidget):
             if success:
                 self.retries.pop(key, None)
                 if attachment and self.attachment_drafts.get(identity) is attachment:
-                    self.attachment_drafts.pop(identity, None)
+                    self.discard_attachment(identity)
                 if not self.channel:
                     sent_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
                     update_summary=getattr(self.owner,"message_sent",None)

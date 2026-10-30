@@ -552,7 +552,7 @@ class MessageDelegate(QStyledItemDelegate):
         maxw = max(180, min(660, width - 114))
         from shared.attachments import is_image_attachment
         picture = is_image_attachment(m.attachment)
-        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture)
+        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -561,12 +561,14 @@ class MessageDelegate(QStyledItemDelegate):
         option.setWrapMode(QTextOption.WrapAtWordBoundaryOrAnywhere)
         layout.setTextOption(option)
         formats = []
-        for match in re.finditer(r"https?://\S+", m.text):
+        from .message_links import link_spans
+        for start, length, url in link_spans(m.link_text if m.link_text is not None else m.text):
             f = QTextLayout.FormatRange()
-            f.start = match.start()
-            f.length = match.end() - match.start()
+            f.start = start
+            f.length = length
             f.format = QTextCharFormat()
             f.format.setForeground(QColor(ACC))
+            f.format.setFontUnderline(True)
             formats.append(f)
         layout.setFormats(formats)
         layout.beginLayout()
@@ -601,6 +603,19 @@ class MessageDelegate(QStyledItemDelegate):
         if len(self.cache) > 600:
             self.cache.popitem(last=False)
         return value
+
+    def link_at(self, message, width, point):
+        from .message_links import link_spans
+        layout, _, _, head, _ = self.geometry(message, width)
+        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(74, head + 11)
+        for number in range(layout.lineCount()):
+            line = layout.lineAt(number)
+            if line.naturalTextRect().contains(position):
+                cursor = line.xToCursor(position.x())
+                for start, length, url in link_spans(message.link_text if message.link_text is not None else message.text):
+                    if start <= cursor < start + length:
+                        return url
+        return None
 
     def sizeHint(self, o, i):
         m = i.data(Qt.UserRole)
@@ -743,6 +758,7 @@ class MessageDelegate(QStyledItemDelegate):
 
 class Composer(QPlainTextEdit):
     submit = Signal()
+    attachment_input = Signal(object)
 
     @property
     def returnPressed(self):
@@ -775,6 +791,19 @@ class Composer(QPlainTextEdit):
     def adjust_height(self):
         lines = max(1, int(self.document().documentLayout().documentSize().height()))
         self.setFixedHeight(min(130, max(44, lines * self.fontMetrics().lineSpacing() + 24)))
+
+    def canInsertFromMimeData(self, source):
+        from .attachment_input import is_attachment
+        return is_attachment(source) or super().canInsertFromMimeData(source)
+
+    def insertFromMimeData(self, source):
+        if self.isReadOnly():
+            return
+        from .attachment_input import is_attachment
+        if is_attachment(source):
+            self.attachment_input.emit(source)
+        else:
+            super().insertFromMimeData(source)
 
     def keyPressEvent(self, e):
         if (

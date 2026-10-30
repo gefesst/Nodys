@@ -18,6 +18,7 @@ class Message:
     unread_count: int = 0
     avatar: str = ""
     attachment: object = None
+    link_text: str | None = None
 
 
 class MessageModel(QAbstractListModel):

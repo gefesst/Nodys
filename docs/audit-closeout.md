@@ -253,3 +253,10 @@ UI-сценарий с синтетическим аудио и реальным
 - Background authenticated transfer verifies bytes/hash, raster content and pixel bounds. Two concurrent requests, bounded queue and 64 MiB memory cache; reset cancels pending work and clears images. Large previews decode to at most 2048 pixels per side.
 - Composer margins are now symmetric: 12 px left/right, 4 px top/bottom; both buttons remain 38x38.
 - Validation: complete 273-test suite passed, real TCP upload/preview decode preserves expected pixels, UI regression confirms fixed row geometry, viewer resizing and no save dialog. Final focus adjustment passed the targeted viewer test. Rendered fixtures inspected in outputs/inline-images/. GIF preview is static; formats outside the raster allowlist remain downloadable files.
+
+## 2026-10-30 — clipboard, drag/drop and web links
+- Composer uses Qt's native paste pipeline (Ctrl+V/Cmd+V and Paste menu). Clipboard images and local-file MIME data enter the attachment draft flow; normal text remains text. No auto-send.
+- File drops are accepted on history, composer and empty/error/loading conversation surfaces only when the current conversation permits sending. Multiple files are explicitly rejected under the existing one-attachment limit.
+- Clipboard PNGs use a private temporary directory and are removed on replace/remove/success/session reset. User source files are never removed.
+- Link painting and hit-testing share a parser for HTTP/HTTPS/www, punctuation trimming and UTF-16 offsets. Only the clicked link opens via the default browser; file/javascript schemes and attachment filenames are not launched as links. Permanent arrow preference unchanged.
+- Validation: 278 tests passed. New tests exercise the platform Paste key binding with image MIME, preservation of caption/no request sent, plain-text URL paste, actual Qt drag-enter/drop events over history and editor, source-file preservation, permissions/multiple-file rejection, and URL clicks after emoji/newlines with browser launch mocked. Undefined-name lint and diff checks passed. Native Windows was not available.
