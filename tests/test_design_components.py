@@ -1009,6 +1009,37 @@ class DesignGeometryTests(unittest.TestCase):
             page.close()
             self.app.setStyleSheet(previous)
 
+    def test_voice_room_settings_use_context_click_and_fill_row(self):
+        from ui.channels_page import ChannelsPage
+        from ui.design.widgets import Button
+        from PySide6.QtCore import QPoint, Qt
+        from unittest.mock import Mock
+        page=ChannelsPage();self.addCleanup(page.close)
+        page.ctx=SimpleNamespace(login='me',nickname='Me',avatar='',session_token='token')
+        page.active_channel={'id':1,'name':'Space'}
+        page.start_request=lambda *args,**kwargs:None
+        page._rooms=[dict(id=1,kind='voice',name='Voice',participants=[dict(login='other',nickname='Other')]),
+                     dict(id=2,kind='text',name='Text',participants=[])]
+        page._rooms_manage=True;page.voice_room_id=1
+        page._voice_participants=[dict(login='other',nickname='Other')]
+        page.render_rooms();page.rooms_panel.show();self.app.processEvents()
+        buttons=page.rooms_panel.findChildren(Button)
+        voice=next(b for b in buttons if b.accessibleName()=='Голосовой Voice')
+        self.assertFalse(any(b.accessibleName()=='Переименовать Voice' for b in buttons))
+        self.assertTrue(any(b.accessibleName()=='Переименовать Text' for b in buttons))
+        self.assertEqual(voice.contextMenuPolicy(),Qt.CustomContextMenu)
+        page.edit_room_dialog=Mock();page.select_room=Mock()
+        voice.customContextMenuRequested.emit(QPoint(8,8))
+        self.assertEqual(page.edit_room_dialog.call_args.kwargs['room']['id'],1)
+        page.select_room.assert_not_called()
+        self.assertEqual(voice.parentWidget().parentWidget().layout().count(),1)
+        member=page._room_avatars[(1,'other')]
+        self.assertEqual(member.parentWidget().layout().contentsMargins().left()+member.width()/2,21)
+        page._rooms_manage=False;page.render_rooms()
+        voice=next(b for b in page.rooms_panel.findChildren(Button)
+                   if b.accessibleName()=='Голосовой Voice' and b.isVisibleTo(page.rooms_panel))
+        self.assertNotEqual(voice.contextMenuPolicy(),Qt.CustomContextMenu)
+
     def test_leave_and_room_selection_do_not_restore_stale_self_presence(self):
         from ui.channels_page import ChannelsPage
         from ui.design.channel_rooms import OccupiedRoom

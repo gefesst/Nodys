@@ -136,13 +136,17 @@ class RoomNavigationMixin:
                 group_layout=QVBoxLayout(group);group_layout.setContentsMargins(0,0,0,6 if room.get('participants') else 0);group_layout.setSpacing(3)
                 group_layout.addWidget(button)
                 line.addWidget(group,1)
-                if self._rooms_manage:
+                if kind == 'voice' and self._rooms_manage:
+                    button.setContextMenuPolicy(Qt.CustomContextMenu)
+                    button.customContextMenuRequested.connect(
+                        lambda position, r=dict(room): self.edit_room_dialog(room=r))
+                if self._rooms_manage and kind == 'text':
                     edit=Button('⋯');edit.setMinimumWidth(0);edit.setFixedSize(22,34);edit.setProperty('flat',True);edit.setAccessibleName('Переименовать '+room['name'])
                     edit.clicked.connect(lambda _,r=dict(room):self.edit_room_dialog(room=r));line.addWidget(edit,0,Qt.AlignTop)
                 self.rooms_layout.addWidget(container)
                 for person in room.get('participants',[]):
                     from ui.avatar_widget import AvatarLabel
-                    member=QWidget();member_row=QHBoxLayout(member);member_row.setContentsMargins(20,2,0,2);member_row.setSpacing(6)
+                    member=QWidget();member_row=QHBoxLayout(member);member_row.setContentsMargins(9,2,6,2);member_row.setSpacing(6)
                     avatar=AvatarLabel(24);avatar.setProperty("voice_ring",True);avatar.set_avatar(person.get('avatar',''),login=person['login'],nickname=person.get('nickname',person['login']))
                     avatar.setProperty('speaking',bool(person.get('speaking')))
                     self._room_avatars[(room['id'],person['login'])]=avatar
