@@ -22,6 +22,7 @@ class Message:
     edited: bool = False
     reply: object = None
     reactions: tuple = ()
+    reaction_people: tuple = ()
 
 
 class MessageModel(QAbstractListModel):

@@ -29,6 +29,14 @@ def enrich(c, rows, viewer=None):
                 f'SELECT message_id,emoji,COUNT(*),MAX(login=?) FROM message_reactions WHERE kind=? AND message_id IN ({slots}) GROUP BY message_id,emoji ORDER BY emoji',  # nosec B608: placeholders only.
                 (viewer or '', kind, *ids)):
             reactions.setdefault((kind, r[0]), []).append(dict(emoji=r[1], count=r[2], mine=bool(r[3])))
+        people = {}
+        for identity, emoji, login in c.execute(
+                f'SELECT message_id,emoji,login FROM (SELECT message_id,emoji,login,ROW_NUMBER() OVER (PARTITION BY message_id,emoji ORDER BY login) AS n FROM message_reactions WHERE kind=? AND message_id IN ({slots})) WHERE n<=3',  # nosec B608: placeholders only.
+                (kind, *ids)):
+            people.setdefault((identity, emoji), []).append(login)
+        for identity in ids:
+            for reaction in reactions.get((kind, identity), []):
+                reaction['users'] = people.get((identity, reaction['emoji']), [])
     for row in rows:
         kind = 'channel_messages' if 'channel_id' in row else 'messages'
         row['reactions'] = reactions.get((kind, row['id']), [])

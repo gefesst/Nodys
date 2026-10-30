@@ -205,6 +205,30 @@ class UiTests(unittest.TestCase):
         callback(dict(status='ok', message=dict(row, revision=2, reactions=[])))
         self.assertEqual(c.rows, [])
 
+    def test_media_geometry_follows_aspect_ratio_and_group_headers_are_consistent(self):
+        from dataclasses import replace
+        from PySide6.QtGui import QImage
+        from ui.design.models import Message
+        c = self.page.conversation
+        image = QImage(1200, 400, QImage.Format_RGB32)
+        c.image_cache.images['wide'] = image
+        m = Message(1, c.owner.ctx.login, 'Me', '', attachment={'id':'wide', 'name':'wide.png'})
+        for width in (350, 600, 1100):
+            iw, ih = c.delegate.image_size(m, width)
+            self.assertAlmostEqual(iw / ih, 3)
+            self.assertLess(c.delegate.geometry(m, width)[2] - ih, 30)
+            caption = replace(m, text='Caption')
+            self.assertGreater(c.delegate.geometry(caption, width)[2], c.delegate.geometry(m, width)[2])
+        other = Message(2, 'other', 'Other', 'Hello')
+        normal = c.delegate.geometry(other, 600)[3]
+        dated = c.delegate.geometry(replace(other, divider=True, date='Today'), 600)[3]
+        self.assertEqual(dated - normal, 52)
+        reacted = replace(other, reactions=(('❤️', 1, True),))
+        rect = c.delegate.reaction_rects(reacted, 600)[0][1]
+        bubble = c.delegate.bubble_rect(reacted, 600)
+        self.assertTrue(bubble.contains(rect))
+        self.assertLess(rect.right(), bubble.right()-76)
+
     def test_bubble_border_has_padding_and_outgoing_alignment(self):
         from ui.design.models import Message
         c = self.page.conversation

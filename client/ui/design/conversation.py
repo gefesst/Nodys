@@ -86,7 +86,7 @@ class Conversation(QWidget):
         from .image_preview import ImageCache
         self.image_cache = ImageCache(self)
         self.delegate.image_cache = self.image_cache
-        self.image_cache.changed.connect(lambda _: self.view.viewport().update())
+        self.image_cache.changed.connect(self.image_ready)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.view.setSelectionMode(QAbstractItemView.NoSelection)
@@ -465,6 +465,16 @@ class Conversation(QWidget):
         self.new_messages_button.setVisible(bool(self.newer or count))
         self.new_messages_button.raise_()
 
+    def image_ready(self, identity):
+        if not any((m.attachment or {}).get('id') == identity for m in self.model.rows):
+            return
+        anchor = self.anchor()
+        bar = self.view.verticalScrollBar()
+        bottom = bar.maximum() - bar.value() < 24
+        self.view.doItemsLayout()
+        self.restore_position(anchor, bottom)
+        self.view.viewport().update()
+
     def anchor(self):
         index = self.view.indexAt(QPoint(80, 12))
         if index.isValid() and index.row() < len(self.model.rows):
@@ -600,6 +610,10 @@ class Conversation(QWidget):
                     bool(row.get("edited_at")) and not row.get("deleted_at"),
                     row.get("reply") if not row.get("deleted_at") else None,
                     tuple((r["emoji"], r["count"], r["mine"]) for r in row.get("reactions", [])),
+                    tuple((r['emoji'], tuple((login,
+                        'Вы' if login == self.owner.ctx.login else participants.get(login, {}).get('nickname', login),
+                        getattr(self.owner.ctx, 'avatar', '') if login == self.owner.ctx.login else participants.get(login, {}).get('avatar', ''))
+                        for login in r.get('users', []))) for r in row.get('reactions', [])),
                 )
             )
             previous_author, previous_date = author, date

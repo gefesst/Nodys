@@ -18,6 +18,7 @@ from PySide6.QtGui import (
     QPainter,
     QPainterPath,
     QFont,
+    QFontMetricsF,
     QPen,
     QTextLayout,
     QTextOption,
@@ -549,11 +550,34 @@ class MessageDelegate(QStyledItemDelegate):
         self.fade_start = time.perf_counter()
         self.fade_timer.start()
 
+    def footer(self, m):
+        text = ('изменено · ' if m.edited else '') + m.time
+        width = QFontMetricsF(font(11)).horizontalAdvance(text)
+        return text, width + (24 if m.author == self.me else 0)
+
+    def image_size(self, m, width):
+        from shared.attachments import is_image_attachment
+        if not is_image_attachment(m.attachment):
+            return (0, 0)
+        image = self.image_cache.get(m.attachment) if self.image_cache else None
+        available = max(126, min(420, width - 114))
+        if image is None:
+            return (available, available * .6)
+        ratio = image.width() / max(1, image.height())
+        w = min(available, 320 * ratio)
+        return (w, w / ratio)
+
+    def media_offset(self, m, width):
+        height = self.image_size(m, width)[1]
+        return height + 2 if height else 0
+
     def geometry(self, m, width):
         maxw = max(150, min(660, width - 90))
         from shared.attachments import is_image_attachment
         picture = is_image_attachment(m.attachment)
-        key = (m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited, m.author == self.me, tuple(sorted(m.reply.items())) if m.reply else None, m.reactions)
+        if picture:
+            maxw = max(100, min(maxw, self.image_size(m, width)[0]))
+        key = (self.image_size(m, width), m.text, maxw, m.group, m.divider, m.unread_count, picture, m.link_text, m.edited, m.author == self.me, tuple(sorted(m.reply.items())) if m.reply else None, m.reactions)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
@@ -590,27 +614,33 @@ class MessageDelegate(QStyledItemDelegate):
             y += max(23, line.height())
             natural = max(natural, line.naturalTextWidth())
         layout.endLayout()
-        bw = min(maxw, max(210 if m.edited else 125, natural + 32))
+        if not m.text:
+            y = 0
+        bw = min(maxw, max(160 if m.edited else 100, natural + 32))
         if m.reply:
             bw = max(bw, min(maxw, 320))
         inline_time = layout.lineCount() == 1 and not (m.reply or m.edited or picture or m.reactions) and natural + 110 <= maxw
         if inline_time:
             bw = max(bw, natural + 110)
-        bh = y + (20 if inline_time else 40) + (58 if m.reply else 0)
         if picture:
-            bw = max(bw, min(maxw, 380))
-            bh += 220
-        head = (27 if m.divider else 32) if m.group and m.author != self.me else 0
+            bw = max(bw, self.image_size(m, width)[0])
+        bh = y + (20 if inline_time else 36) + (58 if m.reply else 0) + self.media_offset(m, width)
+        head = 42 if m.group and m.author != self.me else (12 if m.group else 0)
         head += 52 if m.divider else 0
         head += 40 if m.unread_count else 0
         # Leave room for the antialiased stroke even in consecutive bubbles.
         head += 2
         if m.reactions:
-            bw = max(bw, min(maxw, 220))
-        columns = max(1, int((bw - 24) // 66))
-        reaction_height = ((len(m.reactions) + columns - 1) // columns) * 34 if m.reactions else 0
-        bh += reaction_height
-        height = head + bh + 8
+            bw = max(bw, min(maxw, 270 if m.edited else 220))
+        columns = max(1, int((bw - 24) // 76))
+        reaction_height = ((len(m.reactions) + columns - 1) // columns) * 30 if m.reactions else 0
+        # Reactions share the footer with the time whenever the last row leaves room.
+        last_count = (len(m.reactions) - 1) % columns + 1 if m.reactions else 0
+        shared_footer = m.reactions and last_count * 76 + (self.footer(m)[1] + 12) <= bw - 24
+        bh += reaction_height - (9 if shared_footer else 0)
+        if picture and not m.text and not m.reactions and not m.edited:
+            bh = self.image_size(m, width)[1] + (58 if m.reply else 0)
+        height = head + bh + 10
         value = (layout, bw, bh, head, height)
         self.cache[key] = value
         if len(self.cache) > 600:
@@ -627,9 +657,12 @@ class MessageDelegate(QStyledItemDelegate):
 
     def reaction_rects(self, message, width):
         _, bw, bh, head, _ = self.geometry(message, width)
-        columns = max(1, int((bw - 24) // 66))
-        height = ((len(message.reactions)+columns-1)//columns)*34
-        return [(reaction, QRectF(self.bubble_x(message, width) + 12 + (i % columns)*66, head + bh - height - 22 + (i//columns)*34, 60, 28))
+        columns = max(1, int((bw - 24) // 76))
+        height = ((len(message.reactions)+columns-1)//columns)*30
+        last_count = (len(message.reactions)-1)%columns+1 if message.reactions else 0
+        shared = last_count*76 + (self.footer(message)[1] + 12) <= bw-24
+        return [(reaction, QRectF(self.bubble_x(message, width) + 12 + (i % columns)*76,
+                                 head + bh - height - (4 if shared else 17) + (i//columns)*30, 70, 26))
                 for i, reaction in enumerate(message.reactions)]
 
     def reaction_at(self, message, width, point):
@@ -646,7 +679,7 @@ class MessageDelegate(QStyledItemDelegate):
     def link_at(self, message, width, point):
         from .message_links import link_spans
         layout, _, _, head, _ = self.geometry(message, width)
-        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(self.bubble_x(message, width) + 16, head + 11 + (58 if message.reply else 0) + (220 if __import__('shared.attachments', fromlist=['is_image_attachment']).is_image_attachment(message.attachment) else 0))
+        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(self.bubble_x(message, width) + 16, head + 11 + (58 if message.reply else 0) + self.media_offset(message, width))
         for number in range(layout.lineCount()):
             line = layout.lineAt(number)
             if line.naturalTextRect().contains(position):
@@ -663,27 +696,24 @@ class MessageDelegate(QStyledItemDelegate):
         )
 
     @staticmethod
-    def shape(x, y, w, h, tail):
-        r = 12
-        p = QPainterPath()
-        p.moveTo(x + r, y)
-        p.lineTo(x + w - r, y)
-        p.quadTo(x + w, y, x + w, y + r)
-        p.lineTo(x + w, y + h - r)
-        p.quadTo(x + w, y + h, x + w - r, y + h)
-        p.lineTo(x + r, y + h)
-        p.quadTo(x, y + h, x, y + h - r)
+    def shape(x, y, w, h, tail, own=False):
+        path = QPainterPath()
+        path.addRoundedRect(QRectF(x, y, w, h), 14, 14)
         if tail:
-            p.lineTo(x, y + 26)
-            p.quadTo(x, y + 22, x - 7, y + 17)
-            p.quadTo(x - 9, y + 15, x - 5, y + 15)
-            p.quadTo(x, y + 15, x, y + 10)
-            p.quadTo(x, y, x + r, y)
-        else:
-            p.lineTo(x, y + r)
-            p.quadTo(x, y, x + r, y)
-        p.closeSubpath()
-        return p
+            fin = QPainterPath()
+            if own:
+                fin.moveTo(x+w-13, y+h)
+                fin.quadTo(x+w, y+h+1, x+w+7, y+h)
+                fin.quadTo(x+w, y+h-4, x+w, y+h-15)
+                fin.lineTo(x+w-13, y+h-15)
+            else:
+                fin.moveTo(x+13, y+h)
+                fin.quadTo(x, y+h+1, x-7, y+h)
+                fin.quadTo(x, y+h-4, x, y+h-15)
+                fin.lineTo(x+13, y+h-15)
+            fin.closeSubpath()
+            path = path.united(fin)
+        return path
 
     def paint(self, p, o, index):
         started = time.perf_counter_ns()
@@ -698,7 +728,7 @@ class MessageDelegate(QStyledItemDelegate):
         x = o.rect.x() + self.bubble_x(m, self.view.viewport().width())
         y = o.rect.y() + head
         unread_offset = 40 if m.unread_count else 0
-        date_offset = unread_offset + (52 if m.divider else (14 if m.group else 0))
+        date_offset = head - 34
         if m.unread_count:
             count=m.unread_count
             noun='непрочитанное сообщение' if count%10==1 and count%100!=11 else 'непрочитанных сообщения' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'непрочитанных сообщений'
@@ -750,10 +780,12 @@ class MessageDelegate(QStyledItemDelegate):
                 p, x, o.rect.y() + 14 + date_offset, name, 13, ACC if own else FG, True
             )
         p.setBrush(QColor("#304C70" if own else "#222E3D"))
-        p.setPen(QPen(QColor("#3B506C" if own else "#334254"), 1))
+        p.setPen(Qt.NoPen)
         if m.id == self.highlight_id:
             p.setPen(QPen(QColor(ACC), 2))
-        p.drawRoundedRect(QRectF(x, y, bw, bh), 14, 14)
+        following = index.model().index(index.row()+1).data(Qt.UserRole)
+        tail = following is None or following.group or following.author != m.author
+        p.drawPath(self.shape(x, y, bw, bh, tail, own))
         if m.reply:
             box = QRectF(x + 12, y + 8, bw - 24, 50)
             p.setPen(Qt.NoPen)
@@ -771,13 +803,12 @@ class MessageDelegate(QStyledItemDelegate):
         p.setPen(QColor(FG))
         layout.draw(
             p,
-            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0) + (220 if __import__('shared.attachments', fromlist=['is_image_attachment']).is_image_attachment(m.attachment) else 0)),
+            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0) + self.media_offset(m, self.view.viewport().width())),
         )
         from shared.attachments import is_image_attachment
         if is_image_attachment(m.attachment):
-            box = QRectF(x + 12, y + 10 + (58 if m.reply else 0), bw - 24, 212)
-            clip = QPainterPath()
-            clip.addRoundedRect(box, 9, 9)
+            box = QRectF(x, y + (58 if m.reply else 0), bw, self.image_size(m, self.view.viewport().width())[1])
+            clip = self.shape(x, y, bw, bh, tail, own)
             p.save()
             p.setClipPath(clip, Qt.IntersectClip)
             p.fillRect(box, QColor('#15212C'))
@@ -796,9 +827,12 @@ class MessageDelegate(QStyledItemDelegate):
                 if self.image_cache:
                     self.image_cache.ensure(m.attachment)
             p.restore()
-        if m.edited:
-            draw_text(p, x + 16, y + bh - 12, "изменено", 11, MUT)
-        draw_text(p, x + bw - (67 if own else 45), y + bh - 12, m.time, 11, MUT)
+        if is_image_attachment(m.attachment) and not m.text and not m.reactions and not m.edited:
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(16, 27, 38, 180))
+            p.drawRoundedRect(QRectF(x+bw-(78 if own else 57), y+bh-28, 70 if own else 49, 22), 11, 11)
+        footer_text, footer_width = self.footer(m)
+        draw_text(p, x + bw - 12 - footer_width, y + bh - 12, footer_text, 11, MUT)
         if own:
             icon(
                 p,
@@ -809,12 +843,30 @@ class MessageDelegate(QStyledItemDelegate):
         for reaction, box in self.reaction_rects(m, self.view.viewport().width()):
             emoji, count, mine = reaction
             box.translate(o.rect.topLeft())
-            p.setPen(QPen(QColor(ACC if mine else '#35495F'), 1))
-            p.setBrush(QColor('#304967' if mine else '#203144'))
-            p.drawRoundedRect(box, 10, 10)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor('#527EAD' if mine else '#38516B'))
+            p.drawRoundedRect(box, 13, 13)
             p.setPen(QColor(FG))
-            p.setFont(font(12, mine))
-            p.drawText(box, Qt.AlignCenter, f'{emoji} {count if count < 1000 else "999+"}')
+            p.setFont(font(15))
+            p.drawText(box.adjusted(5, 0, -39, 0), Qt.AlignCenter, emoji)
+            people = dict(m.reaction_people).get(emoji, ())
+            if people and count <= 3:
+                for number, (login, name, photo) in enumerate(people[:3]):
+                    ax = box.x()+36+number*8
+                    avatar(p, ax, box.y()+3, self._avatar_helper._initials(name or login), 20, False, False)
+                    if photo:
+                        key = (photo, login, name, 'reaction')
+                        if key not in self._avatars:
+                            self._avatar_helper.set_avatar(photo, login, name or login)
+                            self._avatars[key] = self._avatar_helper.pixmap()
+                            if len(self._avatars) > 128:
+                                self._avatars.popitem(last=False)
+                        pixmap = self._avatars[key]
+                        if pixmap:
+                            p.drawPixmap(QRectF(ax, box.y()+3, 20, 20).toRect(), pixmap)
+            else:
+                p.setFont(font(11, True))
+                p.drawText(box.adjusted(32, 0, -4, 0), Qt.AlignCenter, str(count) if count < 1000 else '999+')
         p.restore()
         self.paint_count += 1
         if len(self.paint_ns) < 50000:

@@ -162,7 +162,7 @@ class ConversationTests(unittest.TestCase):
             self.chat.remove_attachment()
             self.assertTrue(self.chat.attachment_strip.isHidden())
 
-    def test_inline_image_load_preserves_geometry_and_opens_viewer_without_save_dialog(self):
+    def test_inline_image_load_adapts_geometry_and_opens_viewer_without_save_dialog(self):
         from PySide6.QtGui import QImage, QColor
         self.owner.resize(1280, 800)
         self.owner.show()
@@ -179,7 +179,11 @@ class ConversationTests(unittest.TestCase):
         image.fill(QColor('#89AAFF'))
         self.chat.image_cache.images[meta['id']] = image
         after = self.chat.delegate.geometry(message, 800)
-        self.assertEqual(before[1:], after[1:])
+        self.assertEqual(before[1], after[1])
+        self.assertLess(after[2], before[2])
+        iw, ih = self.chat.delegate.image_size(message, 800)
+        self.assertAlmostEqual(iw / ih, 640 / 360)
+        self.chat.image_cache.changed.emit(meta['id'])
         self.assertEqual(self.chat.compose_frame.layout().contentsMargins().left(),
                          self.chat.compose_frame.layout().contentsMargins().right())
         with patch('ui.design.conversation.QFileDialog.getSaveFileName') as save:
