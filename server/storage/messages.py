@@ -49,10 +49,16 @@ class MessageRepository:
 
     def mark_chat_read(self, current_user: str, friend: str, through_id=None) -> None:
         with database_connection(self.database) as conn:
-            conn.execute(
-                "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0" + (" AND id<=?" if through_id is not None else ""),
-                (friend, current_user, through_id) if through_id is not None else (friend, current_user),
-            )
+            if through_id is None:
+                conn.execute(
+                    "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0",
+                    (friend, current_user),
+                )
+            else:
+                conn.execute(
+                    "UPDATE messages SET is_read=1 WHERE from_user=? AND to_user=? AND is_read=0 AND id<=?",
+                    (friend, current_user, through_id),
+                )
             conn.commit()
 
     def get_unread_counts(self, current_user: str) -> Dict[str, int]:

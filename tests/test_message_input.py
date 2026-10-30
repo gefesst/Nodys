@@ -83,7 +83,7 @@ class MessageInputTests(unittest.TestCase):
                 drop = QDropEvent(QPointF(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
                 QApplication.sendEvent(target, drop)
                 self.assertTrue(drop.isAccepted())
-                self.assertEqual(self.chat.attachment_drafts['bob']['path'], str(file))
+                self.assertTrue(Path(self.chat.attachment_drafts['bob']['path']).samefile(file))
                 self.assertEqual(len(self.requests), before)
                 self.chat.remove_attachment()
                 self.assertTrue(file.exists())

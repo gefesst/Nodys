@@ -458,7 +458,7 @@ class DesignGeometryTests(unittest.TestCase):
 
     def test_labeled_buttons_center_the_whole_group_or_keep_left_alignment(self):
         from unittest.mock import patch
-        from PySide6.QtCore import QRectF
+        from PySide6.QtCore import QRectF, Qt
         from ui.design.widgets import Button
         for label, symbol in (('Позвонить','phone'), ('Написать','chat'),
                               ('Копировать диагностику','copy'), ('Голос','wave')):
@@ -473,7 +473,10 @@ class DesignGeometryTests(unittest.TestCase):
                 if left_aligned:
                     self.assertEqual(rect.left(),12)
                 else:
-                    right = rect.right()+8+button.fontMetrics().horizontalAdvance(label)
+                    # Native font metrics can elide the long label on Windows.
+                    # Verify the visible group, not the unpainted full string.
+                    visible = button.fontMetrics().elidedText(label, Qt.ElideRight, button.width()-50)
+                    right = rect.right()+8+button.fontMetrics().horizontalAdvance(visible)
                     self.assertAlmostEqual((rect.left()+right)/2,button.width()/2,delta=0.5)
                 self.assertEqual(rect.center().y(),20)
                 button.close()
