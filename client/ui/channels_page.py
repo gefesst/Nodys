@@ -18,7 +18,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QApplication,
 )
-from PySide6.QtCore import Qt, QTimer, QSignalBlocker, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QTimer, QSignalBlocker, QPropertyAnimation, QEasingCurve, QRectF
+from PySide6.QtGui import QPainter, QColor, QLinearGradient
 
 from user_context import UserContext
 from utils.thread_safe_mixin import ThreadSafeMixin
@@ -92,6 +93,28 @@ class ChannelListItem(QFrame):
         text_col.addWidget(sub)
 
         lay.addLayout(text_col, 1)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self.property("active"):
+            return
+        # Inset, antialiased light strip: never follows the card's corner or
+        # changes layout. No restartable fade on polling-driven row rebuilds.
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        top, bottom = 12.0, self.height() - 12.0
+        halo = QLinearGradient(2, 0, 13, 0)
+        halo.setColorAt(0, QColor(182, 188, 255, 38))
+        halo.setColorAt(1, QColor(182, 188, 255, 0))
+        painter.setBrush(halo)
+        painter.drawRoundedRect(QRectF(2, top - 3, 11, bottom - top + 6), 5, 5)
+        light = QLinearGradient(0, top, 0, bottom)
+        light.setColorAt(0, QColor("#8993ED"))
+        light.setColorAt(0.5, QColor("#CDD1FF"))
+        light.setColorAt(1, QColor("#8993ED"))
+        painter.setBrush(light)
+        painter.drawRoundedRect(QRectF(2, top, 3, bottom - top), 1.5, 1.5)
 
     def mousePressEvent(self, event):
         if callable(self._on_click):
