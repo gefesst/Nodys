@@ -92,7 +92,7 @@ class MainWindow(QWidget):
         menu_layout.addSpacing(10)
         self.btn_friends = NavButton('Друзья','users')
         self.btn_chats = NavButton('Чаты','chat')
-        self.btn_channels = NavButton('Каналы','hash')
+        self.btn_channels = NavButton('Каналы','megaphone')
         for button, action in ((self.btn_friends,self.show_friends),(self.btn_chats,self.show_chats),(self.btn_channels,self.show_channels)):
             button.clicked.connect(action);menu_layout.addWidget(button)
             if button is not self.btn_channels:

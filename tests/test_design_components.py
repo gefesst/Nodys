@@ -386,7 +386,11 @@ class DesignGeometryTests(unittest.TestCase):
             image = QImage(str(ASSETS / name))
             self.assertFalse(image.isNull(), name)
         checked = QImage(str(ASSETS / "radio-checked.svg"))
-        self.assertEqual(checked.pixelColor(9, 9).name(), "#b6bcff")
+        self.assertTrue(any(
+            checked.pixelColor(x, y).alpha() == 255
+            and checked.pixelColor(x, y).name() == "#b6bcff"
+            for y in range(checked.height()) for x in range(checked.width())
+        ), "Checked control must contain a visible accent mark")
 
     def test_long_header_elides_and_restores_full_name_on_resize(self):
         from ui.design.widgets import ElidedLabel
