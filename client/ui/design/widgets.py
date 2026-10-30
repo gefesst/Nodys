@@ -15,7 +15,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QColor,
-    QLinearGradient,
     QPainter,
     QPainterPath,
     QFont,
@@ -163,17 +162,21 @@ class ElidedLabel(QLabel):
 
 
 def paint_selection_indicator(painter, rect):
-    """Shared inset selection light, with no rectangular halo behind it."""
+    """Solid primary-colour marker flush with the card's left edge."""
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
     painter.setPen(Qt.NoPen)
-    x, top, height = rect.left() + 2, rect.top() + 12, rect.height() - 24
-    light = QLinearGradient(0, top, 0, top + height)
-    light.setColorAt(0, QColor("#8993ED"))
-    light.setColorAt(0.5, QColor("#CDD1FF"))
-    light.setColorAt(1, QColor("#8993ED"))
-    painter.setBrush(light)
-    painter.drawRoundedRect(QRectF(x, top, 3, height), 1.5, 1.5)
+    x, top, height = rect.left(), rect.top() + 12, rect.height() - 24
+    painter.setBrush(QColor(PRIMARY))
+    path = QPainterPath()
+    path.moveTo(x, top)
+    path.lineTo(x + 1.5, top)
+    path.quadTo(x + 3, top, x + 3, top + 1.5)
+    path.lineTo(x + 3, top + height - 1.5)
+    path.quadTo(x + 3, top + height, x + 1.5, top + height)
+    path.lineTo(x, top + height)
+    path.closeSubpath()
+    painter.drawPath(path)
     painter.restore()
 
 
