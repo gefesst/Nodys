@@ -1,3 +1,4 @@
+from shared.steam_activity import activity_text
 import time
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -27,8 +28,10 @@ class FriendItem(QFrame):
         on_decline=None,
         on_call=None,
         on_manage=None,
+        steam_activity=None,
     ):
         super().__init__()
+        self.login = login
         self.setObjectName("FriendItem")
         self.setProperty("request", request_from is not None)
         self.setFixedHeight(88)
@@ -59,6 +62,13 @@ class FriendItem(QFrame):
         sub.setFixedHeight(20)
         text_col.addWidget(sub)
 
+        from ui.design.widgets import ElidedLabel
+        self.activity_label = ElidedLabel(activity_text(steam_activity))
+        self.activity_label.setTextFormat(Qt.PlainText)
+        self.activity_label.setFixedHeight(16)
+        self.activity_label.setStyleSheet('font-size:11px;color:#67D5AD;')
+        text_col.setSpacing(2)
+        text_col.addWidget(self.activity_label)
         layout.addLayout(text_col,1)
 
         if request_from is None:
@@ -459,7 +469,14 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             return
         error=getattr(self,"_requests_error",False) if self.view_mode=="requests" else getattr(self,"_friends_error",False)
         key=(self._state_key(),self.view_mode,self.filter_input.text(),error)
-        if not force and key==self._render_key:return
+        if not force and key==self._render_key:
+            activities = {f['login']: f.get('steam_activity') for f in self._friends_data}
+            for index in range(self.list_layout.count()):
+                item = self.list_layout.itemAt(index).widget()
+                if not isinstance(item, FriendItem):
+                    continue
+                item.activity_label.setText(activity_text(activities.get(item.login)))
+            return
         self._render_key=key;self._skeleton_visible=False
         self.scroll.setUpdatesEnabled(False)
         self.clear_list()
@@ -474,7 +491,7 @@ class FriendsPage(QWidget, ThreadSafeMixin):
             for friend in sorted(self._friends_data,key=lambda f:(not f.get('online'),f.get('nickname','').casefold())):
                 if self.view_mode=='online' and not friend.get('online'):continue
                 if query not in (friend.get('nickname','')+' '+friend['login']).casefold():continue
-                item=FriendItem(friend['login'],friend.get('nickname',friend['login']),friend.get('avatar',''),friend.get('online',False),on_call=self.call_friend,on_manage=self.show_friend_actions_menu)
+                item=FriendItem(friend['login'],friend.get('nickname',friend['login']),friend.get('avatar',''),friend.get('online',False),on_call=self.call_friend,on_manage=self.show_friend_actions_menu,steam_activity=friend.get('steam_activity'))
                 self.list_layout.insertWidget(self.list_layout.count()-1,item);count+=1
         if error:
             empty=self._make_empty_state('Не удалось загрузить друзей' if self.view_mode!='requests' else 'Не удалось загрузить заявки',
@@ -701,7 +718,11 @@ class FriendsPage(QWidget, ThreadSafeMixin):
         status=QLabel('@'+login+' · '+('В сети' if friend.get('online') else 'Не в сети'))
         status.setAlignment(Qt.AlignCenter);status.setFixedHeight(17)
         status.setStyleSheet('font-size:13px;color:#67D5AD;' if friend.get('online') else 'font-size:13px;color:#ACB9CC;')
-        layout.addWidget(status);layout.addSpacing(37)
+        layout.addWidget(status)
+        activity = QLabel(activity_text(friend.get('steam_activity')))
+        activity.setWordWrap(True);activity.setTextFormat(Qt.PlainText)
+        activity.setStyleSheet('font-size:12px;color:#67D5AD;')
+        layout.addWidget(activity);layout.addSpacing(24)
         for text,icon,action in [('Написать',None,lambda:self.open_friend_chat(login)),('Позвонить',None,lambda:self.call_friend(login))]:
             button=Button(text,icon,primary=text=='Написать');button.setFixedHeight(40)
             button.clicked.connect(lambda checked=False,action=action:(dialog.close(),action()));layout.addWidget(button)

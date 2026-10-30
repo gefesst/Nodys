@@ -1,3 +1,4 @@
+from shared.steam_activity import activity_text
 """Room navigation and editing. Space membership remains owned by ChannelsPage."""
 from PySide6.QtCore import Qt,QTimer,QVariantAnimation
 from PySide6.QtGui import QPainter,QPen,QColor
@@ -99,6 +100,9 @@ class RoomNavigationMixin:
             room['participants']=sorted(room.get('participants',[]),key=lambda p:p.get('login',''))
         for room in rooms:
             for person in room.get('participants',[]):
+                activity_label = getattr(self, '_room_activity_labels', {}).get((room['id'],person['login']))
+                if activity_label is not None:
+                    activity_label.setText(activity_text(person.get('steam_activity')))
                 avatar=self._room_avatars.get((room['id'],person['login']))
                 if avatar:
                     avatar.setProperty('speaking',bool(person.get('speaking')));avatar.update()
@@ -106,6 +110,7 @@ class RoomNavigationMixin:
         if signature==self._rooms_signature:return
         self._rooms_signature=signature
         self._room_avatars={}
+        self._room_activity_labels={}
         occupied={(r["id"]) for r in rooms if r.get("participants")}
         newly_occupied=occupied-self._occupied_rooms
         self._occupied_rooms=occupied
@@ -144,7 +149,15 @@ class RoomNavigationMixin:
                     member_row.addWidget(avatar)
                     name=ElidedLabel(person.get('nickname',person['login']))
                     name.setStyleSheet('font-size:11px;color:#A9B8CD;')
-                    member_row.addWidget(name,1);group_layout.addWidget(member)
+                    info=QVBoxLayout();info.setContentsMargins(0,0,0,0);info.setSpacing(1)
+                    info.addWidget(name)
+                    activity_label=ElidedLabel(activity_text(person.get('steam_activity')))
+                    activity_label.setTextFormat(Qt.PlainText)
+                    activity_label.setStyleSheet('font-size:10px;color:#67D5AD;')
+                    activity_label.setFixedHeight(14)
+                    info.addWidget(activity_label)
+                    self._room_activity_labels[(room['id'],person['login'])]=activity_label
+                    member_row.addLayout(info,1);group_layout.addWidget(member)
         self.rooms_layout.addStretch()
         self.rooms_layout.activate()
         self.rooms_scroll.verticalScrollBar().setValue(scroll_position)

@@ -1,3 +1,4 @@
+from shared.steam_activity import activity_text
 from application.avatars import encode_avatar
 from application.request_scope import RequestScope
 from application.sequence import clock as voice_sequence
@@ -292,6 +293,13 @@ class VoiceParticipantItem(QFrame):
         layout.addSpacing(12)
         state=QLabel('Говорит' if speaking else 'Микрофон выключен' if self.participant.get('muted') else 'Слушает');state.setObjectName('ChannelVoiceMemberMeta')
         state.setAlignment(Qt.AlignCenter);layout.addWidget(state)
+        from ui.design.widgets import ElidedLabel
+        self.activity_label=ElidedLabel(activity_text(self.participant.get('steam_activity')))
+        self.activity_label.setTextFormat(Qt.PlainText)
+        self.activity_label.setAlignment(Qt.AlignCenter)
+        self.activity_label.setFixedHeight(16)
+        self.activity_label.setStyleSheet('font-size:10px;color:#67D5AD;')
+        layout.addWidget(self.activity_label)
         self.avatar=avatar;self.state=state
         layout.addStretch()
 
@@ -1237,7 +1245,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
         rows = []
         for p in participants or []:
             rows.append(
-                f"{p.get('login','')}|{p.get('role','')}|{int(bool(p.get('online', False)))}|{int(bool(p.get('speaking', False)))}"
+                f"{p.get('login','')}|{p.get('role','')}|{int(bool(p.get('online', False)))}|{int(bool(p.get('speaking', False)))}|{activity_text(p.get('steam_activity'))}"
             )
         rows.sort()
         return "\n".join(rows)
@@ -1811,6 +1819,7 @@ class ChannelsPage(RoomNavigationMixin, QWidget, ThreadSafeMixin):
                 row=self.voice_members_layout.itemAt(i).widget()
                 speaking=bool(part.get('speaking')) and not (part.get('login')==self.ctx.login and self._voice_muted)
                 muted=part.get('login')==self.ctx.login and self._voice_muted
+                row.activity_label.setText(activity_text(part.get('steam_activity')))
                 row.avatar.setProperty('speaking',speaking);row.avatar.update()
                 row.state.setText('Говорит' if speaking else 'Микрофон выключен' if muted else 'Слушает')
             return

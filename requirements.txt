@@ -13,3 +13,6 @@ pycparser==3.12
 # Native macOS backdrop; other platforms do not install Cocoa.
 pyobjc-core==12.2.2; sys_platform == "darwin"
 pyobjc-framework-Cocoa==12.2.2; sys_platform == "darwin"
+
+# Read-only Steam activity detection.
+psutil==7.2.2

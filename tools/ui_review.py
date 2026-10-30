@@ -57,6 +57,7 @@ def main():
             self.source_tree_sha256=digest.hexdigest()
             self.log = []
             self.visual_fixtures = []
+            self.workflow_checks = []
             if args.section == 'messages':
                 self.visual_fixtures.append('Reference dialog seed: six named contacts, distinct previews and read states; dates relative to current local day in disposable database')
             self.error = None
@@ -629,6 +630,29 @@ def main():
             self.wait()
             yield
             self.shot("22-settings")
+            m.settings_page.select_section("Активность")
+            for width, height in ((1080, 620), (1440, 900)):
+                w.resize(width, height)
+                self.wait();yield
+                self.shot(f"22-steam-settings-{width}")
+            if not args.visual_only:
+                peer = lab.people[0][0]
+                assert lab.request(peer, "heartbeat", activity_sequence=1,
+                    steam_nickname="Steam Player", steam_game="Counter-Strike 2", steam_app_id="730")["status"] == "ok"
+                m.show_friends();m.friends_page.set_view('all');m.friends_page.load_friends()
+                self.wait(predicate=lambda: any(f.get('steam_activity') for f in m.friends_page._friends_data));yield
+                from ui.friends_page import FriendItem
+                activity_card = next(item for item in m.friends_page.findChildren(FriendItem) if item.login == peer and item.isVisible())
+                assert 'Counter-Strike 2' in activity_card.activity_label.full_text
+                self.shot("22-steam-friend-activity")
+                assert lab.request(peer, "heartbeat", activity_sequence=2,
+                    steam_nickname="", steam_game="", steam_app_id="")["status"] == "ok"
+                m.friends_page.load_friends()
+                self.wait(predicate=lambda: not any(f.get('steam_activity') for f in m.friends_page._friends_data));yield
+                assert activity_card.activity_label.full_text == ''
+                self.workflow_checks.append('steam_activity_visible_to_friend_and_cleared')
+            m.show_settings();m.settings_page.select_section("Внешний вид")
+
             if args.visual_only:
                 return
             m.settings_page.check_microphone();self.wait();yield
@@ -868,7 +892,7 @@ def main():
             ch.save_channel_settings()
             self.wait(predicate=lambda: not ch._saving_channel_settings)
             yield
-            self.workflow_checks = [
+            self.workflow_checks += [
                 "registration",
                 "friend_request_accept",
                 "create_channel",

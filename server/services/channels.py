@@ -364,8 +364,8 @@ class ChannelService:
         owner = row[0]
         if owner == login:
             return "owner"
-        role = row[1] if len(row) > 1 else "member"
-        return self._normalize_member_role(role)
+        role = row[1] if len(row) > 1 else None
+        return self._normalize_member_role(role) if role is not None else None
 
     def _role_permissions(self, role: str, text_min_role: str = "member", voice_min_role: str = "member") -> Dict[str, bool]:
         rr = (role or "member").strip().lower()

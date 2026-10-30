@@ -64,7 +64,8 @@ class MigrationTests(unittest.TestCase):
 
     def test_room_upgrade_preserves_existing_history_and_presence(self):
         chat=Path(self.folder.name)/'chat.db'
-        steps={kind:items[:-1] for kind,items in migrations.MIGRATIONS.items()}
+        steps={kind:items[:next(i for i,(name,_) in enumerate(items) if name == ('channel_rooms' if kind == 'users' else 'room_messages'))]
+               for kind,items in migrations.MIGRATIONS.items()}
         with patch.dict(migrations.MIGRATIONS,steps):
             migrations.migrate(self.database,'users')
             migrations.migrate(chat,'chat')

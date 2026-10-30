@@ -200,13 +200,18 @@ def _room_messages(c):
     c.execute('CREATE INDEX idx_room_history ON channel_messages(channel_id,room_id,timestamp,id)')
 
 
+def _steam_activity(c):
+    from .steam_activity import initialize
+    initialize(c)
+
+
 def _attachments(c):
     from .attachments import initialize
     initialize(c)
 
 
 MIGRATIONS = {
-    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup), ('channel_rooms', _channel_rooms)],
+    'users': [('baseline', _users_baseline), ('call_heartbeats', _call_heartbeats), ('mutation_receipts', _receipts), ('channel_cleanup', _channel_cleanup), ('channel_rooms', _channel_rooms), ('steam_activity', _steam_activity)],
     'chat': [('baseline', _chat_baseline), ('mutation_receipts', _receipts), ('message_history', _message_history), ('room_messages', _room_messages), ('attachments', _attachments)],
 }
 

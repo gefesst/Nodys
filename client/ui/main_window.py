@@ -181,6 +181,8 @@ class MainWindow(QWidget):
         self.call_events_timer.start(1000)
 
         # Heartbeat для корректного online/presence на сервере
+        from application.steam_presence import SteamPresence
+        self.steam_presence = SteamPresence(self)
         self.heartbeat_timer = QTimer(self)
         self.heartbeat_timer.timeout.connect(self._heartbeat)
         self.heartbeat_timer.start(10000)
@@ -976,6 +978,7 @@ class MainWindow(QWidget):
         """
         from user_context import UserContext
         self.ctx = self._snapshot_context(UserContext())
+        self.steam_presence.timer.start()
         self.ui_sounds.reset()
         self.calls.reset()
         self.is_logging_out = False
@@ -1106,6 +1109,7 @@ class MainWindow(QWidget):
 
     def _stop_background_work(self):
         """One nonblocking cleanup path for logout and application close."""
+        self.steam_presence.stop()
         self.ui_sounds.shutdown()
         self._clear_pending_call()
         self.calls.reset()

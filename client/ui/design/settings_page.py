@@ -46,7 +46,7 @@ class SettingsPage(QWidget):
         side.addSpacing(18)
         self.panels = QStackedWidget()
         self.section_buttons={}
-        for text in ("Внешний вид", "Звук", "Подключение"):
+        for text in ("Внешний вид", "Звук", "Подключение", "Активность"):
             button = Button(text)
             self.section_buttons[text]=button
             button.primary=text=="Внешний вид"
@@ -186,6 +186,30 @@ class SettingsPage(QWidget):
         self.copy_status=QLabel();self.copy_status.setObjectName("Muted")
         details.addWidget(self.copy_status)
         details.addStretch()
+        activity_scroll = QScrollArea()
+        activity_scroll.setWidgetResizable(True)
+        activity_page = QWidget()
+        activity_scroll.setWidget(activity_page)
+        activity_layout = QVBoxLayout(activity_page)
+        activity_layout.setContentsMargins(40,32,40,30)
+        activity_layout.setSpacing(20)
+        activity_title = QLabel("Активность Steam")
+        activity_title.setObjectName("FriendsTitle")
+        activity_layout.addWidget(activity_title)
+        self.steam_activity_toggle = QCheckBox("Показывать мою активность Steam")
+        self.steam_activity_toggle.setChecked(self.main.steam_presence.enabled)
+        self.steam_activity_toggle.toggled.connect(self.main.steam_presence.set_enabled)
+        activity_layout.addWidget(self.steam_activity_toggle)
+        explanation = QLabel("noda автоматически определяет локальный Steam-ник и запущенную игру. "
+            "Активность видна друзьям и участникам вашего голосового канала. "
+            "Привязка аккаунта не требуется.\n\n"
+            "Определение работает на этом компьютере и может показывать игры, скрытые в Steam. "
+            "Статусы Steam «В сети» и «Невидимый» не определяются. "
+            "При отключении показ прекращается; настройка сохраняется автоматически.")
+        explanation.setWordWrap(True);explanation.setObjectName("Muted")
+        activity_layout.addWidget(explanation)
+        activity_layout.addStretch()
+        self.panels.addWidget(activity_scroll)
         self.device_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix="nodus-device-list"
         )
@@ -208,7 +232,7 @@ class SettingsPage(QWidget):
         for name,button in self.section_buttons.items():
             button.primary=name==section
             button.update()
-        self.panels.setCurrentIndex(1 if section == "Подключение" else 0)
+        self.panels.setCurrentIndex(2 if section == "Активность" else 1 if section == "Подключение" else 0)
         if section == "Звук":
             self.scroll.verticalScrollBar().setValue(max(0,self.sound_heading.mapTo(self.scroll.widget(),self.sound_heading.rect().topLeft()).y()-24))
         elif section == "Внешний вид":

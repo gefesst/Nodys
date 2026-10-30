@@ -14,12 +14,12 @@ try:
     from .requests import validate as validate_request
     from ..domain.avatars import normalize_avatar
     from ..storage.database import connect as database_connection, unit_of_work
-    from ..storage import voice_tickets, events as event_store
+    from ..storage import voice_tickets, steam_activity, events as event_store
 except ImportError:
     from protocol.requests import validate as validate_request
     from domain.avatars import normalize_avatar
     from storage.database import connect as database_connection, unit_of_work
-    from storage import voice_tickets, events as event_store
+    from storage import voice_tickets, steam_activity, events as event_store
 
 @dataclass
 class RequestRouter:
@@ -127,6 +127,7 @@ class RequestRouter:
             return {"status": "ok", **info}
 
         if action == "heartbeat":
+            steam_activity.publish(self.database, token, data)
             self.calls.touch(current_user)
             return {"status": "ok"}
 
@@ -149,6 +150,7 @@ class RequestRouter:
 
         if action == "presence_offline":
             # Fast presence convergence on app close while keeping session token.
+            steam_activity.clear(self.database, token)
             self.accounts.set_session_offline(token)
             return {"status": "ok"}
 
@@ -201,7 +203,7 @@ class RequestRouter:
                     "avatar": info.get("avatar") or "",
                     "online": self.accounts.is_online(f),
                 })
-            return {"status": "ok", "friends": friends_info}
+            return {"status": "ok", "friends": steam_activity.enrich(self.database, friends_info)}
 
         if action == "remove_friend":
             friend_login = (data.get("friend_login") or "").strip()
@@ -304,7 +306,10 @@ class RequestRouter:
         if action in ('get_channel_rooms','create_channel_room','rename_channel_room'):
             cid=int(data.get('channel_id') or 0)
             try:
-                if action=='get_channel_rooms':return dict(status='ok',**self.channels.list_rooms(current_user,cid))
+                if action=='get_channel_rooms':
+                    result = self.channels.list_rooms(current_user,cid)
+                    steam_activity.enrich(self.database, [p for r in result.get('rooms',[]) for p in r.get('participants',[])])
+                    return dict(status='ok', **result)
                 if action=='rename_channel_room' and 'room_id' not in data:raise ValueError('Не указан канал')
                 rid=self.channels.edit_room(current_user,cid,data.get('name'),data.get('kind'),data.get('room_id') if action=='rename_channel_room' else None)
                 return dict(status='ok',room_id=rid)
@@ -423,7 +428,7 @@ class RequestRouter:
             ok, msg, participants = self.channels.get_channel_voice_participants(channel_id, current_user,room_id=data.get("room_id",1))
             if not ok:
                 return {"status": "error", "message": msg}
-            return {"status": "ok", "participants": participants}
+            return {"status": "ok", "participants": steam_activity.enrich(self.database, participants)}
 
         # Calls
         if action == "call_user":
