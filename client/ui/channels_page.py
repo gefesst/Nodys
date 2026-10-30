@@ -49,7 +49,7 @@ class ChannelListItem(QFrame):
         self.setFixedHeight(70)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setContentsMargins(18 if active else 15, 15, 15, 15)
         lay.setSpacing(12)
 
         avatar = AvatarLabel(size=40)

@@ -162,21 +162,15 @@ class ElidedLabel(QLabel):
 
 
 def paint_selection_indicator(painter, rect):
-    """Solid primary-colour marker flush with the card's left edge."""
+    """Colour a segment of the card itself, not an overlaid rounded marker."""
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
-    painter.setPen(Qt.NoPen)
-    x, top, height = rect.left(), rect.top() + 12, rect.height() - 24
-    painter.setBrush(QColor(PRIMARY))
-    path = QPainterPath()
-    path.moveTo(x, top)
-    path.lineTo(x + 1.5, top)
-    path.quadTo(x + 3, top, x + 3, top + 1.5)
-    path.lineTo(x + 3, top + height - 1.5)
-    path.quadTo(x + 3, top + height, x + 1.5, top + height)
-    path.lineTo(x, top + height)
-    path.closeSubpath()
-    painter.drawPath(path)
+    card = QPainterPath()
+    card.addRoundedRect(QRectF(rect), 11, 11)
+    painter.setClipPath(card, Qt.IntersectClip)
+    # Flat ends and a wider flush fill make this part of the card's edge.
+    painter.fillRect(QRectF(rect.left(), rect.top() + 12, 6, rect.height() - 24),
+                     QColor(PRIMARY))
     painter.restore()
 
 

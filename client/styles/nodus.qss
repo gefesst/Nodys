@@ -24,7 +24,7 @@ QLabel#FriendItemName {font-size:15px;font-weight:600;}
 QLabel#FieldTitle {color:@SUB@;font-size:12px;font-weight:600;}
 QFrame#ChannelListItem {border:0;border-radius:12px;background:transparent;}
 QFrame#ChannelListItem:hover {background:#35373C;}
-QFrame#ChannelListItem[active="true"] {background:#404249;border-left:3px solid transparent;}
+QFrame#ChannelListItem[active="true"] {background:#404249;}
 QLabel#ChannelListItemName {font-weight:600;}
 QLabel#InlineToast {background:#404249;border:1px solid #62656E;border-radius:10px;padding:13px 18px;}
 QScrollArea,QListView,QStackedWidget {border:0;background:transparent;outline:0;}
