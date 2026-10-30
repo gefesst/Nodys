@@ -624,7 +624,7 @@ class MessageDelegate(QStyledItemDelegate):
             bw = max(bw, natural + 110)
         if picture:
             bw = max(bw, self.image_size(m, width)[0])
-        bh = y + (20 if inline_time else 36) + (58 if m.reply else 0) + self.media_offset(m, width)
+        bh = y + (20 if inline_time else 30) + (50 if m.reply else 0) + self.media_offset(m, width)
         head = 42 if m.group and m.author != self.me else (12 if m.group else 0)
         head += 52 if m.divider else 0
         head += 40 if m.unread_count else 0
@@ -639,7 +639,7 @@ class MessageDelegate(QStyledItemDelegate):
         shared_footer = m.reactions and last_count * 76 + (self.footer(m)[1] + 12) <= bw - 24
         bh += reaction_height - (9 if shared_footer else 0)
         if picture and not m.text and not m.reactions and not m.edited:
-            bh = self.image_size(m, width)[1] + (58 if m.reply else 0)
+            bh = self.image_size(m, width)[1] + (50 if m.reply else 0)
         height = head + bh + 10
         value = (layout, bw, bh, head, height)
         self.cache[key] = value
@@ -672,14 +672,14 @@ class MessageDelegate(QStyledItemDelegate):
         if not message.reply or message.reply.get('deleted'):
             return None
         _, bw, _, head, _ = self.geometry(message, width)
-        if QRectF(self.bubble_x(message, width) + 12, head + 8, bw - 24, 50).contains(point):
+        if QRectF(self.bubble_x(message, width) + 12, head + 8, bw - 24, 44).contains(point):
             return message.reply['id']
         return None
 
     def link_at(self, message, width, point):
         from .message_links import link_spans
         layout, _, _, head, _ = self.geometry(message, width)
-        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(self.bubble_x(message, width) + 16, head + 11 + (58 if message.reply else 0) + self.media_offset(message, width))
+        position = point - __import__('PySide6.QtCore', fromlist=['QPointF']).QPointF(self.bubble_x(message, width) + 16, head + 11 + (50 if message.reply else 0) + self.media_offset(message, width))
         for number in range(layout.lineCount()):
             line = layout.lineAt(number)
             if line.naturalTextRect().contains(position):
@@ -789,27 +789,27 @@ class MessageDelegate(QStyledItemDelegate):
         tail = following is None or following.group or following.author != m.author
         p.drawPath(self.shape(x, y, bw, bh, tail, own))
         if m.reply:
-            box = QRectF(x + 12, y + 8, bw - 24, 50)
+            box = QRectF(x + 12, y + 8, bw - 24, 44)
             p.setPen(Qt.NoPen)
             p.setBrush(QColor('#192B3C'))
             p.drawRoundedRect(box, 6, 6)
             p.setPen(QPen(QColor(ACC), 2))
-            p.drawLine(int(x+16), int(y+15), int(x+16), int(y+50))
+            p.drawLine(int(x+16), int(y+15), int(x+16), int(y+46))
             author = 'Вы' if m.reply['author'] == self.me else m.reply['author']
             p.setFont(font(12, True))
             title = p.fontMetrics().elidedText(author or 'Исходное сообщение', Qt.ElideRight, int(bw-52))
-            draw_text(p, x+26, y+27, title, 12, ACC, True)
+            draw_text(p, x+26, y+25, title, 12, ACC, True)
             p.setFont(font(12))
             quote = p.fontMetrics().elidedText(' '.join(m.reply['text'].split()), Qt.ElideRight, int(bw-52))
-            draw_text(p, x+26, y+46, quote, 12, MUT)
+            draw_text(p, x+26, y+42, quote, 12, MUT)
         p.setPen(QColor(FG))
         layout.draw(
             p,
-            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (58 if m.reply else 0) + self.media_offset(m, self.view.viewport().width())),
+            __import__("PySide6.QtCore", fromlist=["QPointF"]).QPointF(x + 16, y + 11 + (50 if m.reply else 0) + self.media_offset(m, self.view.viewport().width())),
         )
         from shared.attachments import is_image_attachment
         if is_image_attachment(m.attachment):
-            box = QRectF(x, y + (58 if m.reply else 0), bw, self.image_size(m, self.view.viewport().width())[1])
+            box = QRectF(x, y + (50 if m.reply else 0), bw, self.image_size(m, self.view.viewport().width())[1])
             clip = self.shape(x, y, bw, bh, tail, own)
             p.save()
             p.setClipPath(clip, Qt.IntersectClip)
