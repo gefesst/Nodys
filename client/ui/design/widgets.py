@@ -162,15 +162,16 @@ class ElidedLabel(QLabel):
 
 
 def paint_selection_indicator(painter, rect):
-    """Colour a segment of the card itself, not an overlaid rounded marker."""
+    """A thin coloured left edge following both rounded card corners."""
     painter.save()
     painter.setRenderHint(QPainter.Antialiasing)
-    card = QPainterPath()
-    card.addRoundedRect(QRectF(rect), 11, 11)
-    painter.setClipPath(card, Qt.IntersectClip)
-    # Flat ends and a wider flush fill make this part of the card's edge.
-    painter.fillRect(QRectF(rect.left(), rect.top() + 12, 6, rect.height() - 24),
-                     QColor(PRIMARY))
+    outer = QPainterPath()
+    outer.addRoundedRect(QRectF(rect), 11, 11)
+    inner = QPainterPath()
+    inner.addRoundedRect(QRectF(rect).adjusted(3, 3, -3, -3), 8, 8)
+    edge = outer.subtracted(inner)
+    painter.setClipRect(QRectF(rect.left(), rect.top(), 11, rect.height()), Qt.IntersectClip)
+    painter.fillPath(edge, QColor(PRIMARY))
     painter.restore()
 
 
